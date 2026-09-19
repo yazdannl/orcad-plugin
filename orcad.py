@@ -233,7 +233,8 @@ gridfinity_baseplate_TEMPLATE = r"""
 # Parameter variables carry `# spec:` comments; packaging/bundle.py extracts
 # the UI spec from them. Run standalone with build123d installed, or use
 # through the orcad tab.
-from build123d import *
+# pi-lens-ignore: no-star-imports
+from build123d import *  # noqa: F403, F405, I001  # pyright: ignore[reportWildcardImportFromLibrary]
 import math
 
 GX = 4  # spec: int label=Grid X unit=u min=1 max=6 step=1
@@ -277,7 +278,7 @@ for _ix in range(GX):
             # (_BASEPLATE_PROFILE [[0,0],[0.7,0.7],[0.7,2.5],[2.85,4.65]],
             # gridfinity-baseplate.scad:38-43; bottom opening ~36.3 wide)
             _sockD = _PT - 1.2
-            _sock = loft(Sketch() + [Pos(_cx, _cy, _PT - _sockD) * (Plane.XY * RectangleRounded(36.3, 36.3, 1.15)), Pos(_cx, _cy, 0) * (Plane.XY.offset(_PT + 0.5) * RectangleRounded(40.5, 40.5, 2.5))], ruled=True)
+            _sock = loft(Sketch() + [Pos(_cx, _cy, _PT - _sockD) * (Plane.XY * RectangleRounded(36.3, 36.3, 1.15)), Pos(_cx, _cy, 0) * (Plane.XY.offset(_PT + 0.5) * RectangleRounded(40.5, 40.5, 2.5))], ruled=True)  # pyright: ignore[reportArgumentType] -- build123d accepts this runtime profile compound
             result -= _sock
         if STYLE == 1:
             # weighted style: four underside weight pockets per grid cell
