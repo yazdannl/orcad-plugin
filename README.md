@@ -1,12 +1,18 @@
-# orcad — build123d CAD tab for OrcaSlicer (v0.6)
+# orcad — build123d CAD tab for OrcaSlicer (v0.7)
 
 Real Plugin-Hub plugin (Nightly / >2.4.2). Adds a top-level **orcad** tab
 next to Prepare/Preview/Device/Project via `orca.pages.PagesPluginCapabilityBase`
 — same mechanism as a FilamentHub-style tab. Searchable parametric objects
-(incl. spec-based **Gridfinity bins + baseplates**) with **live preview**,
-Monaco code editor, persistent 3D preview, and **Send to plate**;
-build123d runs in Orca's embedded Python, exports STL/STEP/3MF to the
-plugin's `exports/` folder.
+with **live preview**, Monaco code editor, persistent 3D preview, and
+**Send to plate**; build123d runs in Orca's embedded Python, exports
+STL/STEP/3MF to the plugin's `exports/` folder.
+
+The Gridfinity Bin is a complete port of
+kennetek/gridfinity-rebuilt-openscad: compartments, label tabs (all styles),
+scoop, cylindrical compartments, depth/fill/height-mode controls, refined /
+magnet / screw holes with crush ribs, chamfers and supportless tops,
+corner-only holes, thumbscrew holes, stacking lip — verified feature by
+feature against OpenSCAD-rendered reference STLs (see `verify/`).
 
 All styling is inline (no CSS framework CDN — Orca's WebView does not
 reliably load external stylesheets); only Monaco loads from CDN, with an
@@ -32,7 +38,7 @@ automatic textarea fallback, so the tab works with or without network.
 1. Use latest OrcaSlicer **Nightly** (Pages API = `main` branch; Stable 2.4.2 has no `orca.pages`).
 2. Copy `orcad.py` to `<Orca data dir>/orca_plugins/orcad/orcad.py`
    (create the `orcad` folder). Or Plugins dialog → Install local plugin → pick the file.
-3. Restart OrcaSlicer. Plugins dialog should list **orcad 0.6.0** with capability **orcad** (type Pages). Enable it.
+3. Restart OrcaSlicer. Plugins dialog should list **orcad 0.7.0** with capability **orcad** (type Pages). Enable it.
 4. An **orcad** tab appears in the top tab bar. Open it: left side switches between
    **Objects** (searchable dropdown, Gridfinity Bin preselected, live preview as
    you drag sliders — the Code Editor mirrors the generated code live) and **Code Editor**
@@ -56,17 +62,32 @@ OrcaCloud → Plugin Hub → Create listing → upload `orcad.py`,
 thumbnail screenshot of CAD tab, tags (`cad`, `build123d`, `parametric`),
 OS = all, compatible Orca = Nightly/>2.4.2, description + changelog from CHANGELOG.md.
 
-## Limits (v0.6, honest)
+## Limits (v0.7, honest)
 
 - HTML tab only; preview is a decimated mesh render (max 3000 tris), not full CAD.
-- Gridfinity Bin is a faithful port of kennetek/gridfinity-rebuilt-openscad
-  (verified: OpenSCAD STL vs build123d STL numeric compare — footprint, foot
-  taper and magnet holes match within 0.3mm; known deltas: nominal 4.4 lip
-  vs filleted ~3.55, ~6% volume from lip + omitted interior fillets).
-  Label tabs / screw holes are roadmap, not in v0.5.x.
+- Gridfinity Bin mirrors the original CSG tree and matches reference STLs
+  (bbox/z-profiles within 0.3mm, volume within 4%, hole positions exact).
+  Known approximations: thumbscrew threads → plain hole (shape differs,
+  position exact); bin corner fillets r_f2 are exact on cutters; M3 threads
+  in screw holes are not modeled (clearance holes only).
+- Not ported (roadmap): half-grid bins, lite (hollow) bases, baseplate styles
+  beyond thin+magnet (weighted/skeletonized/screw-together/fit-to-drawer),
+  label-tab geometry on the baseplate, `cut_lip` for tall cylinders.
 - `orca.host` exposes no plate-mutation API (verified on `main`: Plater has only
   `model` + dirty flags), so Send to plate works via OS file-open → OrcaSlicer's
   single-instance handling. Depends on file association; drag-and-drop fallback kept.
 - Algebra mode only; assign final solid to `result`.
 - Heavy models run in a daemon worker thread; no cancel button yet.
 - License recommendation for Hub: AGPL-3.0 (Orca is AGPL-3.0).
+
+## Verification (reproduce it)
+
+- `verify/` holds the harness: `w_scad.py` (OpenSCAD drivers from the entry
+  files), `w_b123d.py` (orcad end-to-end STL export), `w_compare.py` (STL
+  metrics: bbox/volume/z-profiles/hole loops), `batch_ref.py` + `matrix.py`
+  (feature matrix, 27 cases).
+- Reference renders need OpenSCAD (dev snapshot ≥2023; 2021.01 cannot evaluate
+  the library's `$`-scoped grid machinery) + the sources at
+  `/tmp/opencode/gridfinity-rebuilt-openscad` (see Matrix paths).
+- build123d runs in `.venv` (not committed). STLs land in `.verify-cache/`
+  (not committed); comparison JSON is printed to stdout.

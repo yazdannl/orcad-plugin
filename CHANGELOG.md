@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.7.0 — Complete Rebuilt port, STL-verified feature by feature
+
+- Gridfinity Bin now ports the whole entry-file feature set: grid divisions
+  (0 = solid), compartment depth + solid-fill overrides, height modes 0-3
+  with z-snap, label tabs (Full/Auto/Left/Center/Right/None + top-left-only),
+  scoop weight, cylindrical compartments with top chamfer, refined / magnet /
+  screw holes with crush ribs, chamfers, supportless tops, corner-only and
+  thumbscrew holes, stacking lip.
+- Verified against OpenSCAD-snapshot renders of the original sources across
+  a 27-case matrix (bbox/z-profiles within 0.3mm, volume within 4%, hole
+  positions exact). Harness in `verify/`. Defaults now match the entry file
+  (refined holes, scoop, auto tabs); outer wall default is spec 0.95mm.
+- DX/DY now mean compartment counts like the original (DX=0 → solid bin).
+
 ## 0.6.0 — Object files are build123d programs
 
 - Each `objects/<name>.py` is now a real runnable build123d program; the UI

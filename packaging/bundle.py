@@ -62,11 +62,17 @@ def parse_object(path):
     if '"""' in source:
         raise ValueError(f"{path}: triple-double-quotes break TEMPLATE embedding")
     tree = ast.parse(source, filename=str(path))
-    imports = [n for n in ast.walk(tree) if isinstance(n, (ast.Import, ast.ImportFrom))]
-    if len(imports) != 1 or not (
-            isinstance(imports[0], ast.ImportFrom) and imports[0].module == "build123d"
-            and any(a.name == "*" for a in imports[0].names)):
-        raise ValueError(f"{path}: exactly `from build123d import *` required")
+    stars = 0
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "build123d" \
+                and any(a.name == "*" for a in node.names):
+            stars += 1
+        elif isinstance(node, ast.Import) and [a.name for a in node.names] == ["math"]:
+            pass  # stdlib, always available (e.g. crush-rib wave polygon)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            raise ValueError(f"{path}: only `from build123d import *` + `import math` allowed")
+    if stars != 1:
+        raise ValueError(f"{path}: exactly one `from build123d import *` required")
     stores = {n.id for n in ast.walk(tree)
               if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
     if "result" not in stores:

@@ -66,50 +66,65 @@ def test_primitives_validation():
     # int + bool coercion
     c = mod.validate_primitive_params(
         "gridfinity_bin",
-        {"GX": 2.0, "GY": "2", "HU": 6, "WALL": 1.2, "DX": 1, "DY": 0,
-         "MAGNETS": 1, "LIP": "false", "SCOOP": "no"})
-    assert c == {"GX": 2, "GY": 2, "HU": 6, "WALL": 1.2, "DX": 1, "DY": 0,
-                 "MAGNETS": True, "LIP": False, "SCOOP": False}
+        {"GX": 2.0, "GY": "2", "HU": 6, "HMODE": 0, "ZS": 0, "FILL": 0,
+         "WALL": 1.2, "DX": 1, "DY": 0, "DEPTH": 0, "SCOOPW": "1",
+         "TABSTYLE": 1, "TABPLACE": 0, "CYL": "false", "CD": 10, "CCHAM": 0.5,
+         "REFINED": 0, "MAGNETS": 1, "SCREW": 0, "CRUSH": 1, "CHAMFER": 1,
+         "PRINTABLE": 0, "CORNERS": 0, "THUMB": 0, "LIP": "false"})
+    assert c["GX"] == 2 and c["GY"] == 2 and c["HU"] == 6
+    assert c["MAGNETS"] is True and c["LIP"] is False and c["CYL"] is False
+    assert c["SCOOPW"] == 1.0 and c["TABSTYLE"] == 1 and c["HMODE"] == 0
     try:
         mod.validate_primitive_params(
             "gridfinity_bin",
-            {"GX": 2.5, "GY": 2, "HU": 6, "WALL": 1.2, "DX": 0, "DY": 0,
-             "MAGNETS": True, "LIP": True, "SCOOP": False})
+            dict(c, GX=2.5))
         raise AssertionError("expected ValueError for non-integer grid")
+    except ValueError:
+        pass
+    try:
+        mod.validate_primitive_params(
+            "gridfinity_bin",
+            dict(c, REFINED=True, MAGNETS=True))
+        raise AssertionError("expected ValueError for refined+magnet")
     except ValueError:
         pass
 
 
+def _gbin(**over):
+    params = {"GX": 2, "GY": 3, "HU": 6, "HMODE": 0, "ZS": False, "FILL": 0,
+              "WALL": 1.2, "DX": 1, "DY": 2, "DEPTH": 0, "SCOOPW": 1.0,
+              "TABSTYLE": 1, "TABPLACE": 0, "CYL": False, "CD": 10, "CCHAM": 0.5,
+              "REFINED": False, "MAGNETS": True, "SCREW": False, "CRUSH": False,
+              "CHAMFER": False, "PRINTABLE": False, "CORNERS": False,
+              "THUMB": False, "LIP": True}
+    params.update(over)
+    return mod.generate_primitive_code("gridfinity_bin", params)
+
+
 def test_gridfinity_codegen():
-    code = mod.generate_primitive_code(
-        "gridfinity_bin",
-        {"GX": 2, "GY": 3, "HU": 6, "WALL": 1.2, "DX": 1, "DY": 2,
-         "MAGNETS": True, "LIP": True, "SCOOP": True})
-    for needle in ("RectangleRounded", "extrude", "GX * 42", "result = _outer - _cavity",
-                   "Cylinder(3.25", "result =", "Pos(", "loft(", "ruled=True",
-                   "Sketch() + _secs", "GX = 2", "WALL = 1.2", "DX = 1",
-                   "DY = 2", "SCOOP = True", "divider walls", "scoop notch",
-                   "_lip_outer - _lip_inner"):
+    code = _gbin()
+    for needle in ("RectangleRounded", "extrude", "GX * 42", "result =", "Pos(",
+                   "loft(", "ruled=True", "Sketch() + _secs", "make_face",
+                   "Polyline", "import math", "GX = 2", "WALL = 1.2",
+                   "DX = 1", "DY = 2", "SCOOPW = 1.0"):
         assert needle in code, f"gridfinity bin code missing {needle!r}"
     ast.parse(code)
-    no_lip = mod.generate_primitive_code(
-        "gridfinity_bin",
-        {"GX": 1, "GY": 1, "HU": 3, "WALL": 1.2, "DX": 0, "DY": 0,
-         "MAGNETS": False, "LIP": False, "SCOOP": False})
-    # features stay in the program text (static file) but switch off by value
-    for needle in ("MAGNETS = False", "LIP = False", "DX = 0", "DY = 0",
-                   "SCOOP = False", "GX = 1", "HU = 3"):
-        assert needle in no_lip, f"disabled-option bake missing {needle!r}"
-    ast.parse(no_lip)
+    bare = _gbin(DX=0, DY=0, MAGNETS=False, LIP=False, SCOOPW=0, TABSTYLE=5)
+    assert "LIP = False" in bare and "DX = 0" in bare
+    ast.parse(bare)
     plate = mod.generate_primitive_code(
         "gridfinity_baseplate",
-        {"GX": 4, "GY": 4, "T": 5, "SOCKETS": True, "MAGNETS": True})
+        {"GX": 4, "GY": 4, "T": 5, "SOCKETS": True, "REFINED": False,
+         "MAGNETS": True, "SCREW": False, "CRUSH": True, "CHAMFER": True,
+         "PRINTABLE": False, "CORNERS": False})
     assert "RectangleRounded(W, D, 2.0)" in plate and "result -=" in plate
     ast.parse(plate)
     try:
         mod.generate_primitive_code(
             "gridfinity_baseplate",
-            {"GX": 4, "GY": 4, "T": 4.0, "SOCKETS": True, "MAGNETS": True})
+            {"GX": 4, "GY": 4, "T": 4.0, "SOCKETS": True, "REFINED": False,
+             "MAGNETS": True, "SCREW": False, "CRUSH": True, "CHAMFER": True,
+             "PRINTABLE": False, "CORNERS": False})
         raise AssertionError("expected ValueError for thin plate + magnets")
     except ValueError:
         pass

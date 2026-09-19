@@ -127,9 +127,11 @@ def validate_primitive_params(primitive, params):
         if cleaned["D"] >= min(cleaned["L"] / 2, cleaned["W"]):
             raise ValueError("Hole diameter D too large for plate size")
     if primitive == "gridfinity_bin":
-        if 2 * cleaned["WALL"] >= min(cleaned["GX"], cleaned["GY"]) * GF_PITCH - GF_TOL - 4:
-            raise ValueError("WALL too thick for this grid size")
+        if cleaned["REFINED"] and cleaned["MAGNETS"]:
+            raise ValueError("refined holes exclude magnet holes (original rule)")
     if primitive == "gridfinity_baseplate":
+        if cleaned["REFINED"] and cleaned["MAGNETS"]:
+            raise ValueError("refined holes exclude magnet holes (original rule)")
         if cleaned["MAGNETS"] and cleaned["T"] < 4.6:
             raise ValueError("Thickness >= 4.6mm needed for magnet holes")
     return cleaned
@@ -210,20 +212,35 @@ result = Cylinder(R, H)
 """
 
 
-gridfinity_baseplate_SPEC = {'label': 'Gridfinity Baseplate', 'blurb': 'Grid the bins snap into, with sockets + magnet holes.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'default': 4, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'default': 4, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'T', 'label': 'Thickness', 'unit': 'mm', 'ptype': 'number', 'default': 5, 'min': 4.6, 'max': 8.0, 'step': 0.2}, {'key': 'SOCKETS', 'label': 'Bin sockets', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'unit': '', 'ptype': 'bool', 'default': True}]}
+gridfinity_baseplate_SPEC = {'label': 'Gridfinity Baseplate', 'blurb': 'Grid the bins snap into, with sockets + magnet holes.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'default': 4, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'default': 4, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'T', 'label': 'Thickness', 'unit': 'mm', 'ptype': 'number', 'default': 5, 'min': 4.6, 'max': 8.0, 'step': 0.2}, {'key': 'SOCKETS', 'label': 'Bin sockets', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'REFINED', 'label': 'Refined holes', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'SCREW', 'label': 'Screw holes (M3)', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'CRUSH', 'label': 'Crush ribs', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'CHAMFER', 'label': 'Hole chamfer', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'PRINTABLE', 'label': 'Supportless hole tops', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'CORNERS', 'label': 'Holes only at corners', 'unit': '', 'ptype': 'bool', 'default': False}]}
 
 
 gridfinity_baseplate_TEMPLATE = r"""
 # object: Gridfinity Baseplate
 # blurb: Grid the bins snap into, with sockets + magnet holes.
-# Gridfinity Baseplate for orcad — runnable build123d program (see header above).
+# Thin-style slab port of kennetek/gridfinity-rebuilt-openscad
+# gridfinity-rebuilt-baseplate.scad: slab GX*42 x GY*42, one tapered socket
+# per cell, four 6x2 magnet holes per cell. Hole shapes mirror the bin
+# builder (block_base_hole), flipped to open at the top surface.
+# Full plate styles (weighted/skeletonized/screw-together/fit-to-drawer)
+# are roadmap, not here.
+# Parameter variables carry `# spec:` comments; packaging/bundle.py extracts
+# the UI spec from them. Run standalone with build123d installed, or use
+# through the orcad tab.
 from build123d import *
+import math
 
 GX = 4  # spec: int label=Grid X unit=u min=1 max=6 step=1
 GY = 4  # spec: int label=Grid Y unit=u min=1 max=6 step=1
 T = 5  # spec: number label=Thickness unit=mm min=4.6 max=8 step=0.2
 SOCKETS = True  # spec: bool label=Bin sockets
+REFINED = False  # spec: bool label=Refined holes
 MAGNETS = True  # spec: bool label=Magnet holes (6x2)
+SCREW = False  # spec: bool label=Screw holes (M3)
+CRUSH = True  # spec: bool label=Crush ribs
+CHAMFER = True  # spec: bool label=Hole chamfer
+PRINTABLE = False  # spec: bool label=Supportless hole tops
+CORNERS = False  # spec: bool label=Holes only at corners
 
 # Slab footprint: cells tile at the 42mm pitch (BASEPLATE_DIMENSIONS, gridfinity-baseplate.scad:19).
 W = GX * 42.0
@@ -240,104 +257,271 @@ for _ix in range(GX):
             _sockD = T - 1.2
             _sock = loft(Sketch() + [Pos(_cx, _cy, T - _sockD) * (Plane.XY * RectangleRounded(36.3, 36.3, 1.15)), Pos(_cx, _cy, 0) * (Plane.XY.offset(T + 0.5) * RectangleRounded(40.5, 40.5, 2.5))], ruled=True)
             result -= _sock
-        if MAGNETS:
-            # magnet holes: r 3.25, depth 2.4 open at the top (MAGNET_HOLE_DEPTH,
-            # standard.scad:29), four per cell at 21-8 = 13.0 from center
-            # (hole_pattern, gridfinity-rebuilt-baseplate.scad:250-256)
-            for _dx in (-13.0, 13.0):
-                for _dy in (-13.0, 13.0):
-                    result -= Pos(_cx + _dx, _cy + _dy, T - 2.4) * Cylinder(3.25, 2.9, align=(Align.CENTER, Align.CENTER, Align.MIN))
-"""
-
-
-gridfinity_bin_SPEC = {'label': 'Gridfinity Bin', 'blurb': 'Rebuilt-style bin: lofted foot, tapered lip, dividers, scoop, magnets.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'default': 2, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'default': 2, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'HU', 'label': 'Height', 'unit': 'u', 'ptype': 'int', 'default': 6, 'min': 1.0, 'max': 12.0, 'step': 1.0}, {'key': 'WALL', 'label': 'Wall', 'unit': 'mm', 'ptype': 'number', 'default': 1.2, 'min': 0.8, 'max': 2.4, 'step': 0.2}, {'key': 'DX', 'label': 'Dividers X', 'unit': '', 'ptype': 'int', 'default': 0, 'min': 0.0, 'max': 4.0, 'step': 1.0}, {'key': 'DY', 'label': 'Dividers Y', 'unit': '', 'ptype': 'int', 'default': 0, 'min': 0.0, 'max': 4.0, 'step': 1.0}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'LIP', 'label': 'Stacking lip', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'SCOOP', 'label': 'Scoop notch (front)', 'unit': '', 'ptype': 'bool', 'default': False}]}
-
-
-gridfinity_bin_TEMPLATE = r"""
-# object: Gridfinity Bin
-# blurb: Rebuilt-style bin: lofted foot, tapered lip, dividers, scoop, magnets.
-# Gridfinity Bin for orcad — runnable build123d program (see header above).
-from build123d import *
-
-GX = 2  # spec: int label=Grid X unit=u min=1 max=6 step=1
-GY = 2  # spec: int label=Grid Y unit=u min=1 max=6 step=1
-HU = 6  # spec: int label=Height unit=u min=1 max=12 step=1
-WALL = 1.2  # spec: number label=Wall unit=mm min=0.8 max=2.4 step=0.2
-DX = 0  # spec: int label=Dividers X min=0 max=4 step=1
-DY = 0  # spec: int label=Dividers Y min=0 max=4 step=1
-MAGNETS = True  # spec: bool label=Magnet holes (6x2)
-LIP = True  # spec: bool label=Stacking lip
-SCOOP = False  # spec: bool label=Scoop notch (front)
-
-# spec constants (src/core/standard.scad): pitch 42.0 (:16), gap 0.5 (:205),
-# base 7.0 (:217), profile 4.75 (:211), top radius 3.75 (:190)
-BASE_H = 7.0
-PROF_H = 4.75
-W = GX * 42.0 - 0.5  # grid_size_mm, base.scad:36-41
-D = GY * 42.0 - 0.5
-H = HU * 7.0  # fromGridfinityUnits, utility:24 (incl base, excl lip)
-# body: rounded walls 4.75..H fused onto the feet below; open-top cavity
-# from the infill floor at 7.0 (bin_render_infill, bin.scad:160)
-_outer = Pos(0, 0, PROF_H) * extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=H - PROF_H)
-_cw = W - 2 * WALL
-_cd = D - 2 * WALL
-_cavity = Pos(0, 0, BASE_H) * extrude(Plane.XY * RectangleRounded(_cw, _cd, max(0.5, 3.75 - WALL)), amount=H - BASE_H + 1)
-result = _outer - _cavity
-# stacking feet: BASE_PROFILE [[0,0],[0.8,0.8],[0.8,2.6],[2.95,4.75]]
-# (standard.scad:175) -> (z, width, corner): bottom 35.6 = 41.5-2*2.95
-# (base_bottom_dimensions, :236), mid 37.2 = 35.6+2*0.8, top 41.5;
-# bottom corner 0.8 = BASE_BOTTOM_RADIUS (:229), top 3.75; mid transitions
-# are sharp miters in spec, 0.8 keeps the ruled loft stable
-_prof = [(0.0, 35.6, 0.8), (0.8, 37.2, 0.8), (2.6, 37.2, 0.8), (4.75, 41.5, 3.75)]
-for _ix in range(GX):
-    for _iy in range(GY):
-        _cx = (_ix - (GX - 1) / 2) * 42.0  # cells centered on the bin
-        _cy = (_iy - (GY - 1) / 2) * 42.0
-        _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]
-        result += loft(Sketch() + _secs, ruled=True)
-# magnet holes: r 3.25, depth 2.4 (standard.scad:28-29), at
-# base_bottom/2 - 4.8 = 17.8-4.8 = 13.0 from cell center (:35, base.scad:272)
-if MAGNETS:
+# ---- holes open at the top surface (mirrored block_base_hole) ----
+def _plate_hole_xy():
+    if CORNERS:
+        _hx = (W - 5.9) / 2 - 4.8
+        _hy = (D - 5.9) / 2 - 4.8
+        return [(-_hx, -_hy), (-_hx, _hy), (_hx, -_hy), (_hx, _hy)]
+    _pos = []
     for _ix in range(GX):
         for _iy in range(GY):
             _cx = (_ix - (GX - 1) / 2) * 42.0
             _cy = (_iy - (GY - 1) / 2) * 42.0
             for _dx in (-13.0, 13.0):
                 for _dy in (-13.0, 13.0):
-                    result -= Pos(_cx + _dx, _cy + _dy, -0.5) * Cylinder(3.25, 2.9, align=(Align.CENTER, Align.CENTER, Align.MIN))
-# Stacking lip: STACKING_LIP_LINE [[0,0],[0.7,0.7],[0.7,2.5],[2.6,4.4]]
-# (standard.scad:124), nominal height 4.4 (:144, actual ~3.55 with 0.6
-# fillet); outer face flush with the walls, inner funnel from W-5.2
-# (2x2.6) at the 1.2 support up to W at the rim (wall.scad:25-46)
+                    _pos.append((_cx + _dx, _cy + _dy))
+    return _pos
+def _plate_printable(_inner, _outer):
+    # stepped bridging ceiling just under the top surface (mirrored
+    # make_hole_printable); local frame spans the top 0.84 of the hole
+    _od = 2 * (_outer + 0.02)
+    _id = 2 * (_inner + 0.02)
+    _per = (_od - _id) / 2
+    _solid = Pos(-(_od + 0.02) / 2, -(_od + 0.02) / 2, 1.68) * Box(_od + 0.02, _od + 0.02, 0.84, align=(Align.MIN, Align.MIN, Align.MIN))
+    for _w1, _w2, _zz, _rt in ((_od, _od - _per, 1.66, False), (_od - _per, _od - 2 * _per, 1.86, True), (_od - 2 * _per, _od - 2 * _per, 2.06, False)):
+        _a, _b = (_w2, _w1) if _rt else (_w1, _w2)
+        _solid -= Pos(-_a / 2, -_b / 2, _zz) * Box(_a, _b, 0.24, align=(Align.MIN, Align.MIN, Align.MIN))
+    return _solid
+if REFINED or MAGNETS or SCREW:
+    for (_hx, _hy) in _plate_hole_xy():
+        if REFINED:
+            # refined hole, single orientation (hole_pattern has no rotation)
+            _ref = Pos(0, -2.93, -1.9) * Box(11, 5.86, 1.9, align=(Align.MIN, Align.MIN, Align.MIN))
+            _ref += Pos(0, 0, -1.9) * Cylinder(2.93, 1.9, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            _ref += Pos(-6.93, -1.25, -2.5) * Box(4.4, 2.5, 2.5, align=(Align.MIN, Align.MIN, Align.MIN))
+            _ref += Pos(-6.93, 0, -2.5) * Cylinder(1.25, 2.5, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            result -= Pos(_hx, _hy, T) * _ref
+        if MAGNETS:
+            if CRUSH:
+                _pts = []
+                for _i in range(64):
+                    _a = _i * 360.0 / 64
+                    _r = 3.1 + 0.15 * math.sin(math.radians(_a * 8))
+                    _pts.append((_r * math.sin(math.radians(_a)), _r * math.cos(math.radians(_a))))
+                _pts.append(_pts[0])
+                _mhole = extrude(Plane.XY * make_face(Polyline(*_pts)), amount=2.4)
+            else:
+                _mhole = Cylinder(3.25, 2.4, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            if PRINTABLE:
+                _mhole -= _plate_printable(1.5 if SCREW else 1.0, 3.25)
+            if CHAMFER:
+                _mhole += Cone(1.65, 4.05, 2.4, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            result -= Pos(_hx, _hy, T - 2.4) * _mhole
+        if SCREW:
+            _shole = Pos(0, 0, -0.25) * Cylinder(1.5, T + 0.5, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            if PRINTABLE:
+                _shole -= Pos(0, 0, T - 2.4) * _plate_printable(0.5, 1.5)
+            if CHAMFER:
+                _shole += Pos(0, 0, T - 0.8) * Cone(1.5, 2.3, 0.8, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            result -= Pos(_hx, _hy, 0) * _shole
+"""
+
+
+gridfinity_bin_SPEC = {'label': 'Gridfinity Bin', 'blurb': 'Full Rebuilt port: compartments, tabs, scoop, holes, lip, height modes.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'default': 2, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'default': 2, 'min': 1.0, 'max': 6.0, 'step': 1.0}, {'key': 'HU', 'label': 'Height value', 'unit': '', 'ptype': 'int', 'default': 6, 'min': 0.0, 'max': 200.0, 'step': 1.0}, {'key': 'HMODE', 'label': 'Height mode 0U 1in 2ex 3exlip', 'unit': '', 'ptype': 'int', 'default': 0, 'min': 0.0, 'max': 3.0, 'step': 1.0}, {'key': 'ZS', 'label': 'Snap height to 7mm', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'FILL', 'label': 'Solid fill mm (0=auto)', 'unit': 'mm', 'ptype': 'number', 'default': 0, 'min': 0.0, 'max': 200.0, 'step': 1.0}, {'key': 'WALL', 'label': 'Outer wall', 'unit': 'mm', 'ptype': 'number', 'default': 0.95, 'min': 0.95, 'max': 2.4, 'step': 0.05}, {'key': 'DX', 'label': 'Divisions X (0=solid)', 'unit': '', 'ptype': 'int', 'default': 1, 'min': 0.0, 'max': 6.0, 'step': 1.0}, {'key': 'DY', 'label': 'Divisions Y (0=solid)', 'unit': '', 'ptype': 'int', 'default': 1, 'min': 0.0, 'max': 6.0, 'step': 1.0}, {'key': 'DEPTH', 'label': 'Compartment depth mm (0=full)', 'unit': 'mm', 'ptype': 'number', 'default': 0, 'min': 0.0, 'max': 200.0, 'step': 1.0}, {'key': 'SCOOPW', 'label': 'Scoop amount', 'unit': '', 'ptype': 'number', 'default': 1.0, 'min': 0.0, 'max': 1.0, 'step': 0.1}, {'key': 'TABSTYLE', 'label': 'Tab 0Full 1Auto 2Left 3Center 4Right 5None', 'unit': '', 'ptype': 'int', 'default': 1, 'min': 0.0, 'max': 5.0, 'step': 1.0}, {'key': 'TABPLACE', 'label': 'Tabs only top-left', 'unit': '', 'ptype': 'int', 'default': 0, 'min': 0.0, 'max': 1.0, 'step': 1.0}, {'key': 'CYL', 'label': 'Cylindrical compartments', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'CD', 'label': 'Cylinder dia', 'unit': 'mm', 'ptype': 'number', 'default': 10, 'min': 1.0, 'max': 60.0, 'step': 0.5}, {'key': 'CCHAM', 'label': 'Cylinder top chamfer', 'unit': 'mm', 'ptype': 'number', 'default': 0.5, 'min': 0.0, 'max': 5.0, 'step': 0.1}, {'key': 'REFINED', 'label': 'Refined holes', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'SCREW', 'label': 'Screw holes (M3)', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'CRUSH', 'label': 'Crush ribs', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'CHAMFER', 'label': 'Hole chamfer', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'PRINTABLE', 'label': 'Supportless hole tops', 'unit': '', 'ptype': 'bool', 'default': True}, {'key': 'CORNERS', 'label': 'Holes only at corners', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'THUMB', 'label': 'Thumbscrew holes', 'unit': '', 'ptype': 'bool', 'default': False}, {'key': 'LIP', 'label': 'Stacking lip', 'unit': '', 'ptype': 'bool', 'default': True}]}
+
+
+gridfinity_bin_TEMPLATE = r"""
+# object: Gridfinity Bin
+# blurb: Full Rebuilt port: compartments, tabs, scoop, holes, lip, height modes.
+# Faithful port of kennetek/gridfinity-rebuilt-openscad
+# (gridfinity-rebuilt-bins.scad). Construction mirrors the original CSG tree:
+# tapered feet + bridge + base holes, wall ring, infill solid, per-compartment
+# rounded cutters (minus scoop/tab solids) or cylinders, stacking lip ring.
+# Parameter variables carry `# spec:` comments; packaging/bundle.py extracts
+# the UI spec from them. Run standalone with build123d installed, or use
+# through the orcad tab.
+from build123d import *
+import math
+
+GX = 2  # spec: int label=Grid X unit=u min=1 max=6 step=1
+GY = 2  # spec: int label=Grid Y unit=u min=1 max=6 step=1
+HU = 6  # spec: int label=Height value min=0 max=200 step=1
+HMODE = 0  # spec: int label=Height mode 0U 1in 2ex 3exlip min=0 max=3 step=1
+ZS = False  # spec: bool label=Snap height to 7mm
+FILL = 0  # spec: number label=Solid fill mm (0=auto) unit=mm min=0 max=200 step=1
+WALL = 0.95  # spec: number label=Outer wall unit=mm min=0.95 max=2.4 step=0.05
+DX = 1  # spec: int label=Divisions X (0=solid) min=0 max=6 step=1
+DY = 1  # spec: int label=Divisions Y (0=solid) min=0 max=6 step=1
+DEPTH = 0  # spec: number label=Compartment depth mm (0=full) unit=mm min=0 max=200 step=1
+SCOOPW = 1.0  # spec: number label=Scoop amount min=0 max=1 step=0.1
+TABSTYLE = 1  # spec: int label=Tab 0Full 1Auto 2Left 3Center 4Right 5None min=0 max=5 step=1
+TABPLACE = 0  # spec: int label=Tabs only top-left min=0 max=1 step=1
+CYL = False  # spec: bool label=Cylindrical compartments
+CD = 10  # spec: number label=Cylinder dia unit=mm min=1 max=60 step=0.5
+CCHAM = 0.5  # spec: number label=Cylinder top chamfer unit=mm min=0 max=5 step=0.1
+REFINED = True  # spec: bool label=Refined holes
+MAGNETS = False  # spec: bool label=Magnet holes (6x2)
+SCREW = False  # spec: bool label=Screw holes (M3)
+CRUSH = True  # spec: bool label=Crush ribs
+CHAMFER = True  # spec: bool label=Hole chamfer
+PRINTABLE = True  # spec: bool label=Supportless hole tops
+CORNERS = False  # spec: bool label=Holes only at corners
+THUMB = False  # spec: bool label=Thumbscrew holes
+LIP = True  # spec: bool label=Stacking lip
+
+# ---- height (gridfinity-rebuilt-utility.scad: height() + z_snap) ----
+_Hraw = HU * 7.0 if HMODE == 0 else (HU + 7.0 if HMODE == 1 else (HU if HMODE == 2 else HU - 4.4))
+if ZS:
+    _Hraw = _Hraw if _Hraw % 7 == 0 else _Hraw + 7 - _Hraw % 7
+H = max(_Hraw, 7.0)
+assert H >= 7.0, "height below 7mm base"
+assert not LIP or FILL <= 0 or FILL <= H - 1.2, "fill too tall for lipped bin"
+W = GX * 42.0 - 0.5
+D = GY * 42.0 - 0.5
+_EW = max(WALL, 0.95)
+_lip_sup = 1.2 if LIP else 0.0
+_fill = FILL if FILL > 0 else H - 7.0 - _lip_sup
+_infill_top = 7.0 + _fill
+# ---- tapered stacking feet, one per cell (lofted spec profile) ----
+_feet = None
+_prof = [(0.0, 35.6, 0.8), (0.8, 37.2, 0.8), (2.6, 37.2, 0.8), (4.75, 41.5, 3.75)]
+for _ix in range(GX):
+    for _iy in range(GY):
+        _cx = (_ix - (GX - 1) / 2) * 42.0
+        _cy = (_iy - (GY - 1) / 2) * 42.0
+        _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]
+        _foot = loft(Sketch() + _secs, ruled=True)
+        _feet = _foot if _feet is None else _feet + _foot
+result = _feet
+# ---- bridge slab tying the feet together ----
+result += Pos(0, 0, 4.75) * extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=2.25)
+# ---- base holes (magnet/screw/refined options per cell or outer corners) ----
+def _hole_positions():
+    if CORNERS:
+        _hx = (W - 5.9) / 2 - 4.8
+        _hy = (D - 5.9) / 2 - 4.8
+        return [(-_hx, -_hy), (-_hx, _hy), (_hx, -_hy), (_hx, _hy)]
+    _pos = []
+    for _ix in range(GX):
+        for _iy in range(GY):
+            _cx = (_ix - (GX - 1) / 2) * 42.0
+            _cy = (_iy - (GY - 1) / 2) * 42.0
+            for _dx in (-13.0, 13.0):
+                for _dy in (-13.0, 13.0):
+                    _pos.append((_cx + _dx, _cy + _dy))
+    return _pos
+def _printable_steps(_inner, _outer, _h):
+    # stepped bridging ceiling, literal port of make_hole_printable (3 layers)
+    _od = 2 * (_outer + 0.02)
+    _id = 2 * (_inner + 0.02)
+    _per = (_od - _id) / 2
+    _adj = _h - 0.6
+    _solid = Pos(-(_od + 0.02) / 2, -(_od + 0.02) / 2, _adj) * Box(_od + 0.02, _od + 0.02, 0.72, align=(Align.MIN, Align.MIN, Align.MIN))
+    for _k, _w1, _w2, _zz, _rt in ((1, _od, _od - _per, _adj - 0.02, False), (2, _od - _per, _od - 2 * _per, _adj + 0.18, True), (3, _od - 2 * _per, _od - 2 * _per, _adj + 0.38, False)):
+        _a, _b = (_w2, _w1) if _rt else (_w1, _w2)
+        _solid -= Pos(-_a / 2, -_b / 2, _zz) * Box(_a, _b, 0.24, align=(Align.MIN, Align.MIN, Align.MIN))
+    return _solid
+if REFINED or MAGNETS or SCREW or THUMB:
+    _positions = _hole_positions()
+    if REFINED:
+        # refined hole: side-entry slot + poke hole, rotated per quadrant
+        _ref = Pos(0, -2.93, 0.4) * Box(11, 5.86, 1.9, align=(Align.MIN, Align.MIN, Align.MIN))
+        _ref += Pos(0, 0, 0.4) * Cylinder(2.93, 1.9, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        _ref += Pos(-6.93, -1.25, -0.2) * Box(4.4, 2.5, 2.5, align=(Align.MIN, Align.MIN, Align.MIN))
+        _ref += Pos(-6.93, 0, -0.2) * Cylinder(1.25, 2.5, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        for (_qx, _qy, _rot) in ((1, 1, 0), (-1, 1, 90), (-1, -1, 180), (1, -1, 270)):
+            for (_hx, _hy) in _positions:
+                if (_hx > 0) == (_qx > 0) and (_hy > 0) == (_qy > 0):
+                    result -= Pos(_hx, _hy, 0) * Rot(0, 0, _rot) * _ref
+    if MAGNETS:
+        _mdepth = 2.4 + (0.6 if PRINTABLE else 0.0)
+        if CRUSH:
+            _pts = []
+            for _i in range(64):
+                _a = _i * 360.0 / 64
+                _r = 3.1 + 0.15 * math.sin(math.radians(_a * 8))
+                _pts.append((_r * math.sin(math.radians(_a)), _r * math.cos(math.radians(_a))))
+            _pts.append(_pts[0])
+            _mhole = extrude(Plane.XY * make_face(Polyline(*_pts)), amount=_mdepth)
+        else:
+            _mhole = Cylinder(3.25, _mdepth, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        if PRINTABLE:
+            _mhole -= _printable_steps(1.5 if SCREW else 1.0, 3.25, _mdepth)
+        if CHAMFER:
+            _mhole += Cone(4.05, max(0.05, 4.05 - 2.4), 2.4, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        for (_hx, _hy) in _positions:
+            result -= Pos(_hx, _hy, 0) * _mhole
+    if SCREW:
+        _shole = Cylinder(1.5, 7.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        if PRINTABLE:
+            _shole -= _printable_steps(0.5, 1.5, 7.0)
+        if CHAMFER:
+            _shole += Cone(2.3, 0, 2.3, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        for (_hx, _hy) in _positions:
+            result -= Pos(_hx, _hy, 0) * _shole
+    if THUMB:
+        for (_tx, _ty) in ([((_ix - (GX - 1) / 2) * 42.0, (_iy - (GY - 1) / 2) * 42.0) for _ix in range(GX) for _iy in range(GY)] if not CORNERS else [(_hx / 2, _hy / 2) for _hx in (-(W - 41.5) / 2, (W - 41.5) / 2) for _hy in (-(D - 41.5) / 2, (D - 41.5) / 2)]):
+            result -= Pos(_tx, _ty, 0) * Cylinder(7.8, 4.75, align=(Align.CENTER, Align.CENTER, Align.MIN))
+# ---- walls: thin ring + infill solid ----
+if H > 7.0:
+    _wall = extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=H - 7.0) - Pos(0, 0, -0.5) * extrude(Plane.XY * RectangleRounded(W - 2 * _EW, D - 2 * _EW, 3.75), amount=H - 7.0 + 1)
+    result += Pos(0, 0, 7.0) * _wall
+if _fill > 0:
+    result += Pos(0, 0, 7.0) * extrude(Plane.XY * RectangleRounded(W - 0.5, D - 0.5, 3.75), amount=_fill)
+# ---- compartments: per-division rounded cutters (element minus 0.6 total),
+# minus scoop/tab solids; cylinders replace cutters when CYL ----
+if DX > 0 and DY > 0 and _fill > 0:
+    # compartment grid spans the spec infill (total minus 2x0.95 walls),
+    # independent of our outer-wall setting; cutters inset 0.3 per side
+    _rx = (W - 1.9) / DX
+    _ry = (D - 1.9) / DY
+    _ztop = _infill_top + 0.02
+    _dep = DEPTH if DEPTH > 0 else _fill
+    for _ix in range(DX):
+        for _iy in range(DY):
+            _cx = -(W - 1.9) / 2 + (_ix + 0.5) * _rx
+            _cy = -(D - 1.9) / 2 + (_iy + 0.5) * _ry
+            if CYL:
+                _ccut = Cylinder(CD / 2, _dep + 0.02, align=(Align.CENTER, Align.CENTER, Align.MIN))
+                if CCHAM > 0:
+                    _ccut += Pos(0, 0, _dep + 0.02 - CCHAM) * Cone(CD / 2, CD / 2 + CCHAM, CCHAM, align=(Align.CENTER, Align.CENTER, Align.MIN))
+                result -= Pos(_cx, _cy, _ztop - _dep) * _ccut
+                continue
+            _cw = _rx - 0.6
+            _cd = _ry - 0.6
+            _ch = _dep + 0.02
+            _cr = min(2.8, _cw / 2 - 0.01, _cd / 2 - 0.01, _ch / 2 - 0.01)
+            _cut = Box(_cw, _cd, _ch)
+            if _cr > 0.5:
+                _cut = fillet(_cut.edges(), _cr)
+            _cut = Pos(0, 0, -_ch / 2) * _cut
+            if SCOOPW > 0:
+                # finger ramp at the -y wall: box minus x-axis cylinder
+                _s = SCOOPW * _dep / 2
+                if _s > 0.1:
+                    _scoop = Pos(-_cw / 2, -_cd / 2, -_ch) * Box(_cw, _s, _s, align=(Align.MIN, Align.MIN, Align.MIN)) - Pos(0, -_cd / 2 + _s, -_ch + _s) * Rot(0, 90, 0) * Cylinder(_s, _cw + 2)
+                    _cut -= _scoop
+            # NOTE: the original only documents tab auto-disable below 3U but does
+            # not enforce it; tabs render at any height exactly like here.
+            _tabbed = TABSTYLE != 5 and (not TABPLACE or (_ix == 0 and _iy == DY - 1))
+            if _tabbed:
+                # label wedge on the +y wall: exact TAB_POLYGON profile
+                _tw = max(_cw, _cd, _dep) if TABSTYLE == 0 else 42.0
+                if TABSTYLE == 2:
+                    _tx0 = -_cw / 2
+                elif TABSTYLE == 4:
+                    _tx0 = _cw / 2 - _tw
+                elif TABSTYLE == 1:
+                    _tx0 = -_cw / 2 if _ix == 0 else (_cw / 2 - _tw if _ix == DX - 1 else -_tw / 2)
+                else:
+                    _tx0 = -_tw / 2
+                _th = 0.7265 * 15.85 + 1.2
+                _tpts = [(_cd / 2, -_th), (_cd / 2, 0), (_cd / 2 - 15.85, 0), (_cd / 2 - 15.85, -1.2), (_cd / 2, -_th)]
+                _tab = extrude(Plane.YZ * make_face(Polyline(*_tpts)), amount=_tw)
+                _cut -= Pos(_tx0, 0, 0) * _tab
+            result -= Pos(_cx, _cy, _ztop) * _cut
+# ---- stacking lip: measured ring profile (outer flush with the walls,
+# funnel void, rounded tip; total height H + 3.55) ----
 if LIP:
-    _lo0 = W - WALL
-    _lo1 = W + WALL + 0.6
-    _li0 = _cw - 0.2
-    _li1 = _cw + 2 * WALL + 0.4
-    _lip_outer = loft(Sketch() + [Plane.XY.offset(H) * RectangleRounded(_lo0, _lo0, 3.0), Plane.XY.offset(H + 4.4) * RectangleRounded(_lo1, _lo1, 3.5)], ruled=True)
-    _lip_inner = loft(Sketch() + [Plane.XY.offset(H - 0.5) * RectangleRounded(_li0, _li0, 2.5), Plane.XY.offset(H + 4.5) * RectangleRounded(_li1, _li1, 3.0)], ruled=True)
+    _lip_prof = [(-1.2, 0.0, 3.75, 2.6, 2.5), (0.0, 0.0, 3.75, 2.6, 2.5), (2.4, 0.04, 3.75, 1.9, 2.5), (3.0, 0.05, 3.75, 1.4, 2.5), (3.3, 0.13, 3.5, 1.1, 2.5), (3.5, 0.37, 3.2, 0.84, 2.0)]
+    _ob0 = max(H - 3.0, 6.5)
+    _ib0 = max(H - 3.5, 6.5)
+    _lo = [Plane.XY.offset(_ob0) * RectangleRounded(W, D, 3.75)] + [Plane.XY.offset(H + _dz) * RectangleRounded(W - 2 * _oi, D - 2 * _oi, _or) for _dz, _oi, _or, _vi, _vr in _lip_prof]
+    _li = [Plane.XY.offset(_ib0) * RectangleRounded(W - 2 * 1.25, D - 2 * 1.25, 2.5)] + [Plane.XY.offset(H + _dz) * RectangleRounded(W - 2 * _vi, D - 2 * _vi, _vr) for _dz, _oi, _or, _vi, _vr in _lip_prof]
+    _lip_outer = loft(Sketch() + _lo + [Plane.XY.offset(H + 3.55) * RectangleRounded(W - 1.1, D - 1.1, 3.0)], ruled=True)
+    _lip_inner = loft(Sketch() + _li, ruled=True)
     result += _lip_outer - _lip_inner
-# divider walls (compartment count DX+1 x DY+1; nominal d_div 1.2, standard.scad:10)
-if DX or DY:
-    # Divider walls top out below the lip support when lipped
-    # (STACKING_LIP_SUPPORT_HEIGHT=1.2, standard.scad:118; else infill runs to H).
-    _div0 = BASE_H
-    _div1 = H - 1.2 if LIP else H
-    if _div1 > _div0:  # 1U bins have no infill, so no dividers (bin.scad:256)
-        if DX:
-            for _i in range(1, DX + 1):
-                _x = -_cw / 2 + _i * _cw / (DX + 1)
-                result += Pos(_x, 0, _div0) * Box(WALL, _cd, _div1 - _div0, align=(Align.CENTER, Align.CENTER, Align.MIN))
-        if DY:
-            for _j in range(1, DY + 1):
-                _y = -_cd / 2 + _j * _cd / (DY + 1)
-                result += Pos(0, _y, _div0) * Box(_cw, WALL, _div1 - _div0, align=(Align.CENTER, Align.CENTER, Align.MIN))
-# scoop notch in the front wall (simplified finger pull; .scad scoops the compartment instead, cutouts.scad:141)
-if SCOOP:
-    _nw = min(_cw * 0.6, _cw - 2 * WALL)
-    _nh = (H - BASE_H) * 0.45 + 1
-    _notch = Pos(-_nw / 2, D / 2 - WALL - 1, H + 1 - _nh) * Box(_nw, WALL + 2, _nh, align=(Align.MIN, Align.MIN, Align.MIN))
-    result -= _notch
 """
 
 
@@ -842,8 +1026,8 @@ var PRIMS={
  box:{label:'Box',blurb:'Simple centered block.',params:[['L','Length','mm','number',20,1.0,300.0,0.5],['W','Width','mm','number',20,1.0,300.0,0.5],['H','Height','mm','number',20,1.0,300.0,0.5]]},
  bracket:{label:'Bracket plate',blurb:'Flat plate with two holes.',params:[['L','Length','mm','number',60,10.0,300.0,0.5],['W','Width','mm','number',30,10.0,200.0,0.5],['T','Thickness','mm','number',5,1.0,50.0,0.5],['D','Hole dia','mm','number',5,1.0,50.0,0.5]]},
  cylinder:{label:'Cylinder',blurb:'Round post or puck.',params:[['R','Radius','mm','number',10,0.5,150.0,0.5],['H','Height','mm','number',20,1.0,300.0,0.5]]},
- gridfinity_baseplate:{label:'Gridfinity Baseplate',blurb:'Grid the bins snap into, with sockets + magnet holes.',params:[['GX','Grid X','u','int',4,1.0,6.0,1.0],['GY','Grid Y','u','int',4,1.0,6.0,1.0],['T','Thickness','mm','number',5,4.6,8.0,0.2],['SOCKETS','Bin sockets','','bool',1],['MAGNETS','Magnet holes (6x2)','','bool',1]]},
- gridfinity_bin:{label:'Gridfinity Bin',blurb:'Rebuilt-style bin: lofted foot, tapered lip, dividers, scoop, magnets.',params:[['GX','Grid X','u','int',2,1.0,6.0,1.0],['GY','Grid Y','u','int',2,1.0,6.0,1.0],['HU','Height','u','int',6,1.0,12.0,1.0],['WALL','Wall','mm','number',1.2,0.8,2.4,0.2],['DX','Dividers X','','int',0,0.0,4.0,1.0],['DY','Dividers Y','','int',0,0.0,4.0,1.0],['MAGNETS','Magnet holes (6x2)','','bool',1],['LIP','Stacking lip','','bool',1],['SCOOP','Scoop notch (front)','','bool',0]]},
+ gridfinity_baseplate:{label:'Gridfinity Baseplate',blurb:'Grid the bins snap into, with sockets + magnet holes.',params:[['GX','Grid X','u','int',4,1.0,6.0,1.0],['GY','Grid Y','u','int',4,1.0,6.0,1.0],['T','Thickness','mm','number',5,4.6,8.0,0.2],['SOCKETS','Bin sockets','','bool',1],['REFINED','Refined holes','','bool',0],['MAGNETS','Magnet holes (6x2)','','bool',1],['SCREW','Screw holes (M3)','','bool',0],['CRUSH','Crush ribs','','bool',1],['CHAMFER','Hole chamfer','','bool',1],['PRINTABLE','Supportless hole tops','','bool',0],['CORNERS','Holes only at corners','','bool',0]]},
+ gridfinity_bin:{label:'Gridfinity Bin',blurb:'Full Rebuilt port: compartments, tabs, scoop, holes, lip, height modes.',params:[['GX','Grid X','u','int',2,1.0,6.0,1.0],['GY','Grid Y','u','int',2,1.0,6.0,1.0],['HU','Height value','','int',6,0.0,200.0,1.0],['HMODE','Height mode 0U 1in 2ex 3exlip','','int',0,0.0,3.0,1.0],['ZS','Snap height to 7mm','','bool',0],['FILL','Solid fill mm (0=auto)','mm','number',0,0.0,200.0,1.0],['WALL','Outer wall','mm','number',0.95,0.95,2.4,0.05],['DX','Divisions X (0=solid)','','int',1,0.0,6.0,1.0],['DY','Divisions Y (0=solid)','','int',1,0.0,6.0,1.0],['DEPTH','Compartment depth mm (0=full)','mm','number',0,0.0,200.0,1.0],['SCOOPW','Scoop amount','','number',1.0,0.0,1.0,0.1],['TABSTYLE','Tab 0Full 1Auto 2Left 3Center 4Right 5None','','int',1,0.0,5.0,1.0],['TABPLACE','Tabs only top-left','','int',0,0.0,1.0,1.0],['CYL','Cylindrical compartments','','bool',0],['CD','Cylinder dia','mm','number',10,1.0,60.0,0.5],['CCHAM','Cylinder top chamfer','mm','number',0.5,0.0,5.0,0.1],['REFINED','Refined holes','','bool',1],['MAGNETS','Magnet holes (6x2)','','bool',0],['SCREW','Screw holes (M3)','','bool',0],['CRUSH','Crush ribs','','bool',1],['CHAMFER','Hole chamfer','','bool',1],['PRINTABLE','Supportless hole tops','','bool',1],['CORNERS','Holes only at corners','','bool',0],['THUMB','Thumbscrew holes','','bool',0],['LIP','Stacking lip','','bool',1]]},
  tube:{label:'Tube',blurb:'Hollow cylinder.',params:[['R_OUT','Outer radius','mm','number',12,1.0,150.0,0.5],['R_IN','Inner radius','mm','number',8,0.5,149.0,0.5],['H','Height','mm','number',25,1.0,300.0,0.5]]}
 };
 /* END OBJECTS SPEC */
