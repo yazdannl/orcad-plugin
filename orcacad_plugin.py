@@ -4,26 +4,32 @@
 #
 # [tool.orcaslicer.plugin]
 # name = "OrcaCAD"
-# description = "build123d CAD tab for OrcaSlicer: parametric primitives + Monaco code editor + live 3D preview, export STL/STEP/3MF."
+# description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, Monaco editor, live 3D preview, STL/STEP/3MF export."
 # author = "OrcaCadPlugin"
-# version = "0.2.0"
+# version = "0.3.0"
 # ///
 """OrcaCAD — build123d CAD tab (Pages capability).
 
 Top-level "CAD" tab next to Prepare/Preview/Device/Project (same mechanism
 as a FilamentHub-style tab): implemented as orca.pages.PagesPluginCapabilityBase.
 
-Layout (v0.2):
-- Left: tabbed panel switching between "Primitives" and "Code Editor" (Monaco,
-  textarea fallback when the CDN is unreachable).
+Layout (v0.3):
+- Left: tabbed panel switching between "Objects" (searchable predefined-object
+  dropdown + styled parameter sliders) and "Code Editor" (Monaco, textarea
+  fallback when the CDN is unreachable).
 - Right: persistent 3D preview (always visible) + result + log.
+- Predefined objects: Box, Cylinder, Tube, Bracket, Gridfinity Bin,
+  Gridfinity Baseplate. Gridfinity geometry follows the public spec
+  (42mm grid, 7mm height units, 0.5 tolerance, stacking foot + optional lip
+  and magnet holes) with a simplified stepped foot/lip profile.
 - Exports go to <plugin_dir>/exports (inside Orca data_dir, no audit prompt).
-  Manual import into plater for v0.2 (orca.host is read-only): drag the
-  exported file onto the plater.
+  Manual import into plater (orca.host is read-only): drag the exported file
+  onto the plater.
 
-UI stack: Bootstrap 5 + Monaco + a dependency-free canvas 3D renderer via CDN
-(jsdelivr), with offline fallbacks (unstyled-but-usable layout, textarea
-editor, stats-only preview) so the tab never breaks without network.
+Styling is 100% inline (no CSS framework CDN): Orca's WebView does not
+reliably load external stylesheets, so the modern dark/light adaptive theme
+ships in the page. Only the Monaco editor loads from CDN, with an automatic
+plain-textarea fallback.
 
 Tested target: OrcaSlicer Nightly / >2.4.2 with `orca.pages` (main branch).
 On older builds without orca.pages, falls back to a Script capability that
@@ -42,49 +48,263 @@ try:
 except ImportError:  # pragma: no cover - allows unit tests without Orca
     orca = None
 
-PLUGIN_VERSION = "0.2.0"
+PLUGIN_VERSION = "0.3.0"
 EXPORT_FORMATS = ("stl", "step", "3mf")
 DEFAULT_TOLERANCE = 0.001
 PREVIEW_MAX_TRIS = 3000  # cap on triangles sent to the page for preview
 
+# Gridfinity spec constants (public spec: 42mm grid, 7mm height units).
+GF_PITCH = 42.0
+GF_TOL = 0.5          # total clearance -> bin outer = units*42 - 0.5
+GF_HU = 7.0           # height unit
+GF_CORNER = 3.75      # bin corner radius
+GF_BASE_H = 4.75      # foot height (part of total height)
+GF_MAG_R = 3.25       # magnet hole radius (6.5 dia for 6x2 magnets)
+GF_MAG_D = 13.0       # magnet hole offset from cell center (26mm square)
+
 # ---------------------------------------------------------------------------
 # Pure logic (no orca / build123d import required — unit-testable)
+# Param spec: {"key","label","ptype" ("number"|"int"|"bool"),
+#              "min","max","step","default","hint"}
 # ---------------------------------------------------------------------------
 
 PRIMITIVES = {
     "box": {
         "label": "Box",
+        "blurb": "Simple centered block.",
         "params": [
-            {"key": "L", "label": "Length (mm)", "min": 1, "max": 300, "step": 0.5, "default": 20},
-            {"key": "W", "label": "Width (mm)", "min": 1, "max": 300, "step": 0.5, "default": 20},
-            {"key": "H", "label": "Height (mm)", "min": 1, "max": 300, "step": 0.5, "default": 20},
+            {"key": "L", "label": "Length", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
+            {"key": "W", "label": "Width", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
+            {"key": "H", "label": "Height", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
         ],
     },
     "cylinder": {
         "label": "Cylinder",
+        "blurb": "Round post or puck.",
         "params": [
-            {"key": "R", "label": "Radius (mm)", "min": 0.5, "max": 150, "step": 0.5, "default": 10},
-            {"key": "H", "label": "Height (mm)", "min": 1, "max": 300, "step": 0.5, "default": 20},
+            {"key": "R", "label": "Radius", "unit": "mm", "ptype": "number", "min": 0.5, "max": 150, "step": 0.5, "default": 10},
+            {"key": "H", "label": "Height", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
         ],
     },
     "tube": {
         "label": "Tube",
+        "blurb": "Hollow cylinder.",
         "params": [
-            {"key": "R_OUT", "label": "Outer radius (mm)", "min": 1, "max": 150, "step": 0.5, "default": 12},
-            {"key": "R_IN", "label": "Inner radius (mm)", "min": 0.5, "max": 149, "step": 0.5, "default": 8},
-            {"key": "H", "label": "Height (mm)", "min": 1, "max": 300, "step": 0.5, "default": 25},
+            {"key": "R_OUT", "label": "Outer radius", "unit": "mm", "ptype": "number", "min": 1, "max": 150, "step": 0.5, "default": 12},
+            {"key": "R_IN", "label": "Inner radius", "unit": "mm", "ptype": "number", "min": 0.5, "max": 149, "step": 0.5, "default": 8},
+            {"key": "H", "label": "Height", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 25},
         ],
     },
     "bracket": {
-        "label": "Bracket plate + 2 holes",
+        "label": "Bracket plate",
+        "blurb": "Flat plate with two holes.",
         "params": [
-            {"key": "L", "label": "Length (mm)", "min": 10, "max": 300, "step": 0.5, "default": 60},
-            {"key": "W", "label": "Width (mm)", "min": 10, "max": 200, "step": 0.5, "default": 30},
-            {"key": "T", "label": "Thickness (mm)", "min": 1, "max": 50, "step": 0.5, "default": 5},
-            {"key": "D", "label": "Hole dia (mm)", "min": 1, "max": 50, "step": 0.5, "default": 5},
+            {"key": "L", "label": "Length", "unit": "mm", "ptype": "number", "min": 10, "max": 300, "step": 0.5, "default": 60},
+            {"key": "W", "label": "Width", "unit": "mm", "ptype": "number", "min": 10, "max": 200, "step": 0.5, "default": 30},
+            {"key": "T", "label": "Thickness", "unit": "mm", "ptype": "number", "min": 1, "max": 50, "step": 0.5, "default": 5},
+            {"key": "D", "label": "Hole dia", "unit": "mm", "ptype": "number", "min": 1, "max": 50, "step": 0.5, "default": 5},
+        ],
+    },
+    "gridfinity_bin": {
+        "label": "Gridfinity Bin",
+        "blurb": "Spec-based storage bin: 42mm grid, stacking foot, lip + magnets optional.",
+        "params": [
+            {"key": "GX", "label": "Grid X", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 2},
+            {"key": "GY", "label": "Grid Y", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 2},
+            {"key": "HU", "label": "Height", "unit": "u", "ptype": "int", "min": 1, "max": 12, "step": 1, "default": 6},
+            {"key": "WALL", "label": "Wall", "unit": "mm", "ptype": "number", "min": 0.8, "max": 2.4, "step": 0.2, "default": 1.2},
+            {"key": "MAGNETS", "label": "Magnet holes (6x2)", "ptype": "bool", "default": True},
+            {"key": "LIP", "label": "Stacking lip", "ptype": "bool", "default": True},
+        ],
+    },
+    "gridfinity_baseplate": {
+        "label": "Gridfinity Baseplate",
+        "blurb": "Grid the bins snap into, with sockets + magnet holes.",
+        "params": [
+            {"key": "GX", "label": "Grid X", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 4},
+            {"key": "GY", "label": "Grid Y", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 4},
+            {"key": "T", "label": "Thickness", "unit": "mm", "ptype": "number", "min": 4.6, "max": 8, "step": 0.2, "default": 5},
+            {"key": "SOCKETS", "label": "Bin sockets", "ptype": "bool", "default": True},
+            {"key": "MAGNETS", "label": "Magnet holes (6x2)", "ptype": "bool", "default": True},
         ],
     },
 }
+
+
+def _num(v, name):
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"{name} must be a number, got {v!r}")
+    if not (f == f and abs(f) != float("inf")):
+        raise ValueError(f"{name} must be finite")
+    return f
+
+
+def _bool(v, name):
+    if isinstance(v, bool):
+        return v
+    if isinstance(v, (int, float)) and v in (0, 1):
+        return bool(v)
+    if isinstance(v, str) and v.strip().lower() in ("true", "1", "on", "yes"):
+        return True
+    if isinstance(v, str) and v.strip().lower() in ("false", "0", "off", "no"):
+        return False
+    raise ValueError(f"{name} must be true/false, got {v!r}")
+
+
+def validate_primitive_params(primitive, params):
+    """Raise ValueError on bad params; return cleaned dict."""
+    if primitive not in PRIMITIVES:
+        raise ValueError(f"unknown object {primitive!r}")
+    cleaned = {}
+    for p in PRIMITIVES[primitive]["params"]:
+        key = p["key"]
+        ptype = p.get("ptype", "number")
+        if key not in params:
+            raise ValueError(f"missing param {key}")
+        raw = params[key]
+        if ptype == "bool":
+            cleaned[key] = _bool(raw, key)
+            continue
+        v = _num(raw, key)
+        if v < p["min"] or v > p["max"]:
+            raise ValueError(f"{key}={v} out of range [{p['min']}, {p['max']}]")
+        if ptype == "int":
+            if not v.is_integer():
+                raise ValueError(f"{key} must be a whole number")
+            cleaned[key] = int(v)
+        else:
+            cleaned[key] = v
+    if primitive == "tube" and not cleaned["R_IN"] < cleaned["R_OUT"]:
+        raise ValueError("R_IN must be smaller than R_OUT")
+    if primitive == "bracket":
+        if cleaned["D"] >= min(cleaned["L"] / 2, cleaned["W"]):
+            raise ValueError("Hole diameter D too large for plate size")
+    if primitive == "gridfinity_bin":
+        if 2 * cleaned["WALL"] >= min(cleaned["GX"], cleaned["GY"]) * GF_PITCH - GF_TOL - 4:
+            raise ValueError("WALL too thick for this grid size")
+    if primitive == "gridfinity_baseplate":
+        if cleaned["MAGNETS"] and cleaned["T"] < 4.6:
+            raise ValueError("Thickness >= 4.6mm needed for magnet holes")
+    return cleaned
+
+
+def _gridfinity_bin_code(c):
+    gx, gy, hu = c["GX"], c["GY"], c["HU"]
+    lines = [
+        "from build123d import *",
+        f"GX, GY, HU = {gx}, {gy}, {hu}",
+        f"WALL = {c['WALL']}",
+        f"BASE_H = {GF_BASE_H}",
+        f"W = GX * {GF_PITCH} - {GF_TOL}",
+        f"D = GY * {GF_PITCH} - {GF_TOL}",
+        f"H = HU * {GF_HU}",
+        f"_outer = extrude(Plane.XY * RectangleRounded(W, D, {GF_CORNER}), amount=H)",
+        "_cw = W - 2 * WALL",
+        "_cd = D - 2 * WALL",
+        f"_cavity = Pos(0, 0, BASE_H) * extrude(Plane.XY * RectangleRounded(_cw, _cd, max(0.5, {GF_CORNER} - WALL)), amount=H - BASE_H + 1)",
+        "result = _outer - _cavity",
+        "# stacking feet, one per cell (simplified stepped spec profile)",
+        "_widths = (35.6, 37.2, 41.5)",
+        "_heights = (0.8, 1.8, 2.15)",
+        "_z = 0.0",
+        "_parts = []",
+        "for _w, _h in zip(_widths, _heights):",
+        "    for _ix in range(GX):",
+        "        for _iy in range(GY):",
+        f"            _cx = -(GX * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
+        f"            _cy = -(GY * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
+        "            _parts.append(Pos(_cx, _cy, _z) * Box(_w, _w, _h, align=(Align.CENTER, Align.CENTER, Align.MIN)))",
+        "    _z += _h",
+        "_feet = _parts[0]",
+        "for _p in _parts[1:]:",
+        "    _feet += _p",
+        "result += _feet",
+    ]
+    if c["MAGNETS"]:
+        lines += [
+            f"# magnet holes (6x2mm magnets, 26mm grid per cell)",
+            "for _ix in range(GX):",
+            "    for _iy in range(GY):",
+            f"        _cx = -(GX * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
+            f"        _cy = -(GY * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
+            f"        for _dx in (-{GF_MAG_D}, {GF_MAG_D}):",
+            f"            for _dy in (-{GF_MAG_D}, {GF_MAG_D}):",
+            f"                result -= Pos(_cx + _dx, _cy + _dy, -0.5) * Cylinder({GF_MAG_R}, 3.1, align=(Align.CENTER, Align.CENTER, Align.MIN))",
+        ]
+    if c["LIP"]:
+        lines += [
+            "# stacking lip: rim frame above the walls",
+            "_lw = W - 2.0",
+            "_ld = D - 2.0",
+            "_lip = extrude(Plane.XY * RectangleRounded(_lw, _ld, 3.0), amount=4.4) - extrude(Plane.XY * RectangleRounded(_lw - 2 * WALL, _ld - 2 * WALL, 2.0), amount=5.4)",
+            "result += Pos(0, 0, H) * _lip",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def _gridfinity_baseplate_code(c):
+    gx, gy = c["GX"], c["GY"]
+    lines = [
+        "from build123d import *",
+        f"GX, GY = {gx}, {gy}",
+        f"T = {c['T']}",
+        f"W = GX * {GF_PITCH}",
+        f"D = GY * {GF_PITCH}",
+        "result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=T)",
+        "for _ix in range(GX):",
+        "    for _iy in range(GY):",
+        f"        _cx = -W / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
+        f"        _cy = -D / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
+    ]
+    if c["SOCKETS"]:
+        lines += [
+            "        _sock = Pos(_cx, _cy, T - 2.0) * extrude(Plane.XY * RectangleRounded(40.0, 40.0, 3.0), amount=3.0)",
+            "        result -= _sock",
+        ]
+    if c["MAGNETS"]:
+        lines += [
+            f"        result -= Pos(_cx, _cy, T - 4.6) * Cylinder({GF_MAG_R}, 2.8, align=(Align.CENTER, Align.CENTER, Align.MIN))",
+        ]
+    return "\n".join(lines) + "\n"
+
+
+def generate_primitive_code(primitive, params):
+    """Return build123d algebra-mode code string assigning `result`."""
+    c = validate_primitive_params(primitive, params)
+    if primitive == "box":
+        return f"from build123d import *\nresult = Box({c['L']}, {c['W']}, {c['H']})\n"
+    if primitive == "cylinder":
+        return f"from build123d import *\nresult = Cylinder({c['R']}, {c['H']})\n"
+    if primitive == "tube":
+        return (
+            "from build123d import *\n"
+            f"result = Cylinder({c['R_OUT']}, {c['H']}) - Cylinder({c['R_IN']}, {c['H']} + 2)\n"
+        )
+    if primitive == "bracket":
+        return (
+            "from build123d import *\n"
+            f"L, W, T, D = {c['L']}, {c['W']}, {c['T']}, {c['D']}\n"
+            "plate = Box(L, W, T)\n"
+            "hole = Cylinder(D / 2, T + 2)\n"
+            "h1 = Pos(-L / 4, 0, -1) * hole\n"
+            "h2 = Pos(L / 4, 0, -1) * hole\n"
+            "result = plate - h1 - h2\n"
+        )
+    if primitive == "gridfinity_bin":
+        return _gridfinity_bin_code(c)
+    if primitive == "gridfinity_baseplate":
+        return _gridfinity_baseplate_code(c)
+    raise ValueError(f"unknown object {primitive!r}")
+
+
+def _defaults(primitive):
+    out = {}
+    for p in PRIMITIVES[primitive]["params"]:
+        out[p["key"]] = p["default"]
+    return out
+
 
 EXAMPLES = {
     "calibration_cube": {
@@ -117,64 +337,15 @@ EXAMPLES = {
             "result = tube + ring\n"
         ),
     },
+    # Generated from the same codegen as the objects dropdown (no drift).
+    "gridfinity_bin_2x2x6": {
+        "label": "Gridfinity bin 2x2x6u",
+        "code": None,  # filled below
+    },
 }
 
-
-def _num(v, name):
-    try:
-        f = float(v)
-    except (TypeError, ValueError):
-        raise ValueError(f"{name} must be a number, got {v!r}")
-    if not (f == f and abs(f) != float("inf")):
-        raise ValueError(f"{name} must be finite")
-    return f
-
-
-def validate_primitive_params(primitive, params):
-    """Raise ValueError on bad params; return cleaned dict of floats."""
-    if primitive not in PRIMITIVES:
-        raise ValueError(f"unknown primitive {primitive!r}")
-    spec = PRIMITIVES[primitive]["params"]
-    cleaned = {}
-    for p in spec:
-        key = p["key"]
-        if key not in params:
-            raise ValueError(f"missing param {key}")
-        v = _num(params[key], key)
-        if v < p["min"] or v > p["max"]:
-            raise ValueError(f"{key}={v} out of range [{p['min']}, {p['max']}]")
-        cleaned[key] = v
-    if primitive == "tube" and not cleaned["R_IN"] < cleaned["R_OUT"]:
-        raise ValueError("R_IN must be smaller than R_OUT")
-    if primitive == "bracket":
-        if cleaned["D"] >= min(cleaned["L"] / 2, cleaned["W"]):
-            raise ValueError("Hole diameter D too large for plate size")
-    return cleaned
-
-
-def generate_primitive_code(primitive, params):
-    """Return build123d algebra-mode code string assigning `result`."""
-    c = validate_primitive_params(primitive, params)
-    if primitive == "box":
-        return f"from build123d import *\nresult = Box({c['L']}, {c['W']}, {c['H']})\n"
-    if primitive == "cylinder":
-        return f"from build123d import *\nresult = Cylinder({c['R']}, {c['H']})\n"
-    if primitive == "tube":
-        return (
-            "from build123d import *\n"
-            f"result = Cylinder({c['R_OUT']}, {c['H']}) - Cylinder({c['R_IN']}, {c['H']} + 2)\n"
-        )
-    if primitive == "bracket":
-        return (
-            "from build123d import *\n"
-            f"L, W, T, D = {c['L']}, {c['W']}, {c['T']}, {c['D']}\n"
-            "plate = Box(L, W, T)\n"
-            "hole = Cylinder(D / 2, T + 2)\n"
-            "h1 = Pos(-L / 4, 0, -1) * hole\n"
-            "h2 = Pos(L / 4, 0, -1) * hole\n"
-            "result = plate - h1 - h2\n"
-        )
-    raise ValueError(f"unknown primitive {primitive!r}")
+EXAMPLES["gridfinity_bin_2x2x6"]["code"] = generate_primitive_code(
+    "gridfinity_bin", _defaults("gridfinity_bin"))
 
 
 def sanitize_stem(name):
@@ -355,11 +526,10 @@ def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
 
 
 # ---------------------------------------------------------------------------
-# Self-contained page UI.
-# Bootstrap 5 + Monaco + dependency-free canvas 3D renderer via CDN
-# (jsdelivr), with offline fallbacks so the tab never breaks: unstyled-but-
-# usable layout, plain textarea editor, stats-only preview.
-# Orca theme is mapped onto Bootstrap vars (--orca-*) where available.
+# Page UI — fully self-contained (inline CSS, no framework CDN).
+# Orca's WebView does not reliably load external stylesheets, so the modern
+# theme ships in the page and adapts via --orca-* vars (dark-first fallback).
+# Only Monaco loads from CDN, with an automatic textarea fallback.
 # ---------------------------------------------------------------------------
 
 PAGE_HTML = r"""<!DOCTYPE html>
@@ -368,119 +538,180 @@ PAGE_HTML = r"""<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OrcaCAD</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 <style>
 :root{
-  --bg:var(--orca-bg,#f8f9fa); --fg:var(--orca-fg,#212529);
-  --muted:var(--orca-muted,#6c757d); --border:var(--orca-border,#dee2e6);
-  --accent:var(--orca-accent,#0d6efd); --accent-fg:var(--orca-accent-fg,#fff);
-  --ui:var(--orca-font,system-ui,-apple-system,'Segoe UI',Roboto,sans-serif);
+  color-scheme:light dark;
+  --bg:var(--orca-bg,#14161b); --bg2:var(--orca-bg,#1b1e25);
+  --fg:var(--orca-fg,#e9ebef); --muted:var(--orca-muted,#9aa1ad);
+  --border:var(--orca-border,#2c313b); --accent:var(--orca-accent,#22b8a8);
+  --accent-fg:var(--orca-accent-fg,#062a27); --danger:#e5484d;
+  --ui:var(--orca-font,system-ui,-apple-system,'Segoe UI',Roboto,Inter,sans-serif);
   --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --bs-body-bg:var(--bg); --bs-body-color:var(--fg);
-  --bs-border-color:var(--border); --bs-primary:var(--accent);
-  --bs-link-color:var(--accent);
+  --r:10px;
 }
-body{background:var(--bg);color:var(--fg);font-family:var(--ui)}
-.mono{font-family:var(--mono)}
-.topbar{border-bottom:1px solid var(--border)}
-.nav-tabs .nav-link{color:var(--muted)}
-.nav-tabs .nav-link.active{color:var(--fg);font-weight:600}
-.btn-primary{--bs-btn-bg:var(--accent);--bs-btn-border-color:var(--accent);--bs-btn-color:var(--accent-fg)}
-.card{background:var(--bg);border-color:var(--border)}
-.text-muted{color:var(--muted)!important}
-#editor{height:340px;border:1px solid var(--border);border-radius:.375rem;overflow:hidden}
+@media (prefers-color-scheme:light){
+  :root{--bg:var(--orca-bg,#f6f7f9);--bg2:var(--orca-bg,#ffffff);
+    --fg:var(--orca-fg,#1c2026);--muted:var(--orca-muted,#66707d);
+    --border:var(--orca-border,#e0e4ea);--accent:var(--orca-accent,#0b8067);--accent-fg:var(--orca-accent-fg,#fff)}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:13.5px/1.55 var(--ui);-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--mono)} .muted{color:var(--muted)} .small{font-size:12px}
+/* header */
+.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border)}
+.brand{font-size:15px;font-weight:700;letter-spacing:.01em}
+.brand small{color:var(--muted);font-weight:400}
+.spacer{flex:1}
+select,input[type=number],input[type=text],textarea{background:var(--bg);color:var(--fg);
+  border:1px solid var(--border);border-radius:8px;padding:6px 10px;font:inherit}
+select:focus-visible,input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn{font:inherit;font-weight:600;border-radius:8px;padding:7px 14px;cursor:pointer;border:1px solid transparent}
+.btn-p{background:var(--accent);color:var(--accent-fg)}
+.btn-p:hover{filter:brightness(1.08)} .btn-p:disabled{opacity:.55;cursor:default}
+.btn-g{background:transparent;color:var(--fg);border-color:var(--border)}
+.btn-g:hover{border-color:var(--accent)} .btn-s{padding:4px 10px;font-size:12px;border-radius:7px}
+/* layout */
+.wrap{padding:14px 16px 24px;max-width:1500px;margin:0 auto}
+.grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;align-items:start}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px}
+.card h5{margin:0 0 4px;font-size:13px} .card h3{margin:0 0 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.sec-t{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
+/* tabs */
+.tabs{display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:12px}
+.tabs button{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;
+  padding:8px;border-radius:7px;cursor:pointer}
+.tabs button.on{background:var(--accent);color:var(--accent-fg)}
+/* dropdown */
+.dd{position:relative}
+.dd-btn{width:100%;display:flex;align-items:center;gap:8px;text-align:left;background:var(--bg);
+  border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--fg);font:inherit;cursor:pointer}
+.dd-btn:hover{border-color:var(--accent)}
+.dd-btn .caret{margin-left:auto;color:var(--muted)}
+.dd-list{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--bg2);
+  border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.35)}
+.dd-list input{width:100%;border:0;border-bottom:1px solid var(--border);border-radius:0}
+.dd-opts{max-height:240px;overflow:auto;padding:4px}
+.dd-opts button{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--fg);
+  font:inherit;padding:8px 10px;border-radius:7px;cursor:pointer}
+.dd-opts button small{display:block;color:var(--muted);font-size:11.5px}
+.dd-opts button:hover,.dd-opts button.hot{background:var(--accent);color:var(--accent-fg)}
+.dd-opts button:hover small,.dd-opts button.hot small{color:inherit;opacity:.8}
+.obj-blurb{font-size:12px;color:var(--muted);margin:8px 2px 0}
+/* params */
+.prow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;
+  padding:9px 2px;border-bottom:1px dashed var(--border)}
+.prow:last-of-type{border-bottom:0}
+.prow label{font-size:12.5px} .prow label b{font-weight:650}
+.prow .u{color:var(--muted);font-size:11px;margin-left:4px}
+.prow input[type=number]{width:84px;text-align:right;padding:5px 8px}
+.prow input[type=range]{grid-column:1/-1;width:100%;margin:2px 0 0}
+.prow input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);justify-self:end}
+input[type=range]{-webkit-appearance:none;appearance:none;height:22px;background:transparent;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--border)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-5px;
+  border-radius:50%;background:var(--accent);border:2px solid var(--bg2)}
+input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--border)}
+input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--bg2)}
+/* preview / result / log */
+#pv3d{width:100%;height:380px;border:1px solid var(--border);border-radius:8px;cursor:grab;touch-action:none;background:var(--bg)}
+.pvbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.pvbar h5{margin:0;font-size:14px}
+.kv{display:grid;grid-template-columns:150px 1fr;gap:3px 10px;font-size:12.5px}
+.kv .k{color:var(--muted)} .kv .v{font-family:var(--mono);word-break:break-word}
+.log{font-family:var(--mono);font-size:12px;max-height:190px;overflow:auto;white-space:pre-wrap;
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px}
+.alert-err{background:rgba(229,72,77,.12);border:1px solid var(--danger);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px}
+#editor{height:340px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
 #code{width:100%;min-height:340px;font-family:var(--mono);font-size:12px}
-#pv3d{width:100%;height:360px;border:1px solid var(--border);border-radius:.375rem;cursor:grab;touch-action:none}
-.log{font-family:var(--mono);font-size:12px;max-height:200px;overflow:auto;white-space:pre-wrap}
-.prim{border:1px solid var(--border);border-radius:.5rem;padding:.6rem .75rem;margin-bottom:.5rem;cursor:pointer}
-.prim.active{border-color:var(--accent);box-shadow:0 0 0 .15rem color-mix(in srgb,var(--accent) 25%,transparent)}
-input[type=range]{accent-color:var(--accent)}
-/* offline fallback layout if Bootstrap CSS fails: keep two columns usable */
-@supports not (display:grid){.row{display:flex;flex-wrap:wrap}}
+.rowline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.banner{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12.5px}
 </style>
 </head>
 <body>
-<nav class="navbar topbar px-3 py-2 sticky-top" style="background:var(--bg)">
-  <span class="navbar-brand mb-0 h1">OrcaCAD <small class="text-muted fw-normal">build123d · v0.2</small></span>
-  <span id="status" class="text-muted small me-auto"></span>
-  <div class="d-flex gap-2 align-items-center flex-wrap">
-    <select id="fmt" class="form-select form-select-sm" style="width:auto" title="Export format">
-      <option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option>
-    </select>
-    <input id="tol" type="number" class="form-control form-control-sm" style="width:90px" value="0.001" step="0.001" min="0.0001" max="1" title="STL tessellation tolerance">
-    <button id="runBtn" class="btn btn-primary btn-sm" onclick="runActive()">Run + Export</button>
-  </div>
-</nav>
+<header class="top">
+  <span class="brand">OrcaCAD <small>build123d · v0.3</small></span>
+  <span id="status" class="muted small"></span><span class="spacer"></span>
+  <select id="fmt" title="Export format"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
+  <input id="tol" type="number" value="0.001" step="0.001" min="0.0001" max="1" style="width:86px" title="Tessellation tolerance">
+  <button id="runBtn" class="btn btn-p" onclick="runActive()">Run + Export</button>
+</header>
 
-<div class="container-fluid py-3">
-<div class="row g-3">
-  <!-- LEFT: switchable panel -->
-  <div class="col-12 col-lg-4">
-    <ul class="nav nav-tabs" role="tablist">
-      <li class="nav-item" role="presentation"><button id="tabbtn-prims" class="nav-link active" onclick="switchLeft('prims')">Primitives</button></li>
-      <li class="nav-item" role="presentation"><button id="tabbtn-editor" class="nav-link" onclick="switchLeft('editor')">Code Editor</button></li>
-    </ul>
-    <div id="pane-prims" class="pt-3">
-      <div id="prims"></div>
+<div class="wrap"><div class="grid">
+  <div>
+    <div class="tabs" role="tablist">
+      <button id="tabbtn-objs" class="on" onclick="switchLeft('objs')">Objects</button>
+      <button id="tabbtn-editor" onclick="switchLeft('editor')">Code Editor</button>
     </div>
-    <div id="pane-editor" class="pt-3" style="display:none">
-      <div class="card"><div class="card-body">
-        <p class="small text-muted">Algebra mode. Assign the final solid to <span class="mono">result</span>.</p>
-        <div id="editor"></div>
-        <textarea id="code" class="form-control mt-2" style="display:none" spellcheck="false"></textarea>
-        <div class="d-flex gap-2 mt-2 flex-wrap align-items-center">
-          <input id="fname" class="form-control form-control-sm" style="width:150px" value="model" title="File name">
-          <select id="exSel" class="form-select form-select-sm" style="width:auto"></select>
-          <button class="btn btn-outline-secondary btn-sm" onclick="loadExample()">Load example</button>
+    <div id="pane-objs">
+      <div class="card"><h3>Predefined object</h3>
+        <div class="dd">
+          <button class="dd-btn" id="ddBtn" onclick="ddToggle(event)"><span id="ddLabel">Gridfinity Bin</span><span class="caret">▾</span></button>
+          <div class="dd-list" id="ddList" style="display:none">
+            <input id="objSearch" type="text" placeholder="Search objects…" oninput="ddFilter()" autocomplete="off">
+            <div class="dd-opts" id="objList"></div>
+          </div>
         </div>
-      </div></div>
+        <div class="obj-blurb" id="objBlurb"></div>
+      </div>
+      <div class="card"><h3>Parameters</h3><div id="prims"></div>
+        <button class="btn btn-p" style="width:100%;margin-top:10px" onclick="generate()">Generate + Export</button>
+      </div>
     </div>
-    <div class="card mt-3"><div class="card-body">
-      <h6 class="card-subtitle mb-2 text-muted">Manual import (v0.2)</h6>
-      <p class="card-text small">Plugins can't push models into the plater yet — drag the exported file onto Prepare to slice it.</p>
-    </div></div>
+    <div id="pane-editor" style="display:none">
+      <div class="card"><h3>build123d · algebra mode</h3>
+        <div class="banner">Assign the final solid to <span class="mono">result</span> — e.g. <span class="mono">result = Box(20,20,20)</span>.</div>
+        <div id="editor"></div>
+        <textarea id="code" style="display:none" spellcheck="false"></textarea>
+        <div class="rowline">
+          <input id="fname" value="model" style="width:140px" title="File name">
+          <select id="exSel" style="flex:1;min-width:140px"></select>
+          <button class="btn btn-g btn-s" onclick="loadExample()">Load</button>
+        </div>
+      </div>
+    </div>
+    <div class="card"><h3>Manual import</h3>
+      <div class="small muted">Plugins can't push models into the plater yet — drag the exported file onto Prepare to slice it.</div>
+    </div>
   </div>
-  <!-- RIGHT: always-on preview -->
-  <div class="col-12 col-lg-8">
-    <div class="card"><div class="card-body">
-      <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
-        <h5 class="card-title mb-0">Preview</h5>
-        <span id="pvInfo" class="text-muted small">nothing rendered yet — run a model</span>
-        <span class="ms-auto"></span>
-        <button class="btn btn-outline-secondary btn-sm" onclick="pvReset()">Reset view</button>
-        <button id="wireBtn" class="btn btn-outline-secondary btn-sm" onclick="pvToggleWire()">Wireframe: off</button>
-        <button id="spinBtn" class="btn btn-outline-secondary btn-sm" onclick="pvToggleSpin()">Spin: on</button>
+
+  <div>
+    <div class="card">
+      <div class="pvbar"><h5>Preview</h5><span id="pvInfo" class="muted small">nothing rendered yet — run a model</span><span class="spacer"></span>
+        <button class="btn btn-g btn-s" onclick="pvReset()">Reset view</button>
+        <button class="btn btn-g btn-s" id="wireBtn" onclick="pvToggleWire()">Wireframe: off</button>
+        <button class="btn btn-g btn-s" id="spinBtn" onclick="pvToggleSpin()">Spin: on</button>
       </div>
       <canvas id="pv3d"></canvas>
-      <div id="pvStats" class="mono small text-muted mt-2">—</div>
-    </div></div>
-    <div class="card mt-3"><div class="card-body">
-      <h5 class="card-title">Result</h5><div id="result" class="text-muted">Nothing exported yet.</div>
-    </div></div>
-    <div class="card mt-3"><div class="card-body">
-      <h5 class="card-title">Log</h5><div id="log" class="log card card-body">ready.
-</div>
-    </div></div>
+      <div id="pvStats" class="mono small muted" style="margin-top:8px">—</div>
+    </div>
+    <div class="card"><h5>Result</h5><div id="result" class="muted">Nothing exported yet.</div></div>
+    <div class="card"><h5>Log</h5><div id="log" class="log">ready.
+</div></div>
   </div>
-</div>
-</div>
+</div></div>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min/vs/loader.js"></script>
 <script>
 'use strict';
-/* ---------------- state ---------------- */
-var S={left:'prims',prim:'box',params:{}};
+/* ---------------- state ----------------
+   PRIMS mirrors the Python PRIMITIVES spec (keys + labels + param types).
+   A test enforces key parity; values here drive the dropdown + sliders. */
+var S={left:'objs',prim:'gridfinity_bin',params:{}};
 var PRIMS={
- box:{label:'Box',params:[['L','Length',20],['W','Width',20],['H','Height',20]]},
- cylinder:{label:'Cylinder',params:[['R','Radius',10],['H','Height',20]]},
- tube:{label:'Tube',params:[['R_OUT','Outer R',12],['R_IN','Inner R',8],['H','Height',25]]},
- bracket:{label:'Bracket',params:[['L','Length',60],['W','Width',30],['T','Thick',5],['D','Hole dia',5]]}
+ box:{label:'Box',blurb:'Simple centered block.',params:[['L','Length','mm','number',20,1,300,0.5],['W','Width','mm','number',20,1,300,0.5],['H','Height','mm','number',20,1,300,0.5]]},
+ cylinder:{label:'Cylinder',blurb:'Round post or puck.',params:[['R','Radius','mm','number',10,0.5,150,0.5],['H','Height','mm','number',20,1,300,0.5]]},
+ tube:{label:'Tube',blurb:'Hollow cylinder.',params:[['R_OUT','Outer radius','mm','number',12,1,150,0.5],['R_IN','Inner radius','mm','number',8,0.5,149,0.5],['H','Height','mm','number',25,1,300,0.5]]},
+ bracket:{label:'Bracket plate',blurb:'Flat plate with two holes.',params:[['L','Length','mm','number',60,10,300,0.5],['W','Width','mm','number',30,10,200,0.5],['T','Thickness','mm','number',5,1,50,0.5],['D','Hole dia','mm','number',5,1,50,0.5]]},
+ gridfinity_bin:{label:'Gridfinity Bin',blurb:'Spec-based bin: 42mm grid, stacking foot, lip + magnets optional.',params:[['GX','Grid X','u','int',2,1,6,1],['GY','Grid Y','u','int',2,1,6,1],['HU','Height','u','int',6,1,12,1],['WALL','Wall','mm','number',1.2,0.8,2.4,0.2],['MAGNETS','Magnet holes (6x2)','','bool',1],['LIP','Stacking lip','','bool',1]]},
+ gridfinity_baseplate:{label:'Gridfinity Baseplate',blurb:'Grid the bins snap into, with sockets + magnet holes.',params:[['GX','Grid X','u','int',4,1,6,1],['GY','Grid Y','u','int',4,1,6,1],['T','Thickness','mm','number',5,4.6,8,0.2],['SOCKETS','Bin sockets','','bool',1],['MAGNETS','Magnet holes (6x2)','','bool',1]]}
 };
 var EXAMPLES={
  calibration_cube:'from build123d import *\nresult = Box(20, 20, 20)\n',
  bracket:'from build123d import *\nL, W, T, D = 60, 30, 5, 5\nplate = Box(L, W, T)\nhole = Cylinder(D / 2, T + 2)\nh1 = Pos(-L / 4, 0, -1) * hole\nh2 = Pos(L / 4, 0, -1) * hole\nresult = plate - h1 - h2\n',
- tube_demo:'from build123d import *\nouter = Cylinder(12, 25)\ninner = Cylinder(8, 27)\ntube = outer - inner\nring = Pos(0, 0, 25) * Cylinder(10, 3)\nresult = tube + ring\n'
+ tube_demo:'from build123d import *\nouter = Cylinder(12, 25)\ninner = Cylinder(8, 27)\ntube = outer - inner\nring = Pos(0, 0, 25) * Cylinder(10, 3)\nresult = tube + ring\n',
+ gridfinity_bin_2x2x6:'(generated — pick Gridfinity Bin in Objects and press Generate, or run any snippet that sets `result`)'
 };
 /* ---------------- helpers ---------------- */
 function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
@@ -492,42 +723,65 @@ function tol(){return parseFloat(document.getElementById('tol').value)||0.001;}
 /* ---------------- left tabs ---------------- */
 function switchLeft(which){
  S.left=which;
- document.getElementById('pane-prims').style.display=which==='prims'?'':'none';
+ document.getElementById('pane-objs').style.display=which==='objs'?'':'none';
  document.getElementById('pane-editor').style.display=which==='editor'?'':'none';
- document.getElementById('tabbtn-prims').classList.toggle('active',which==='prims');
- document.getElementById('tabbtn-editor').classList.toggle('active',which==='editor');
+ document.getElementById('tabbtn-objs').classList.toggle('on',which==='objs');
+ document.getElementById('tabbtn-editor').classList.toggle('on',which==='editor');
  if(which==='editor')setTimeout(monacoLayout,30);
 }
-function runActive(){ if(S.left==='prims')generate(); else runEditor(); }
-/* ---------------- primitives ---------------- */
-function buildPrims(){
- var host=document.getElementById('prims');host.innerHTML='';
+function runActive(){ if(S.left==='objs')generate(); else runEditor(); }
+/* ---------------- searchable objects dropdown ---------------- */
+function ddToggle(ev){ev.stopPropagation();var l=document.getElementById('ddList');
+ var open=l.style.display!=='none';l.style.display=open?'none':'';
+ if(!open){document.getElementById('objSearch').value='';ddFilter();setTimeout(function(){document.getElementById('objSearch').focus();},20);}}
+document.addEventListener('click',function(e){
+ var l=document.getElementById('ddList');
+ if(l.style.display!=='none'&&!document.getElementById('ddBtn').contains(e.target)&&!l.contains(e.target))l.style.display='none';});
+function ddFilter(){
+ var q=document.getElementById('objSearch').value.trim().toLowerCase();
+ var host=document.getElementById('objList');host.innerHTML='';
  Object.keys(PRIMS).forEach(function(k){
-  var d=document.createElement('div');d.className='prim'+(S.prim===k?' active':'');
-  var t=document.createElement('div');t.innerHTML='<b>'+esc(PRIMS[k].label)+'</b>';
-  t.onclick=function(){S.prim=k;S.params={};buildPrims();};d.appendChild(t);
-  if(S.prim===k){
-   PRIMS[k].params.forEach(function(p){
-    var key=p[0],lab=p[1],def=p[2];
-    var val=(S.params[key]!=null)?S.params[key]:def;S.params[key]=val;
-    var row=document.createElement('div');row.className='d-flex gap-2 align-items-center mt-1 flex-wrap';
-    var lab2=document.createElement('small');lab2.className='text-muted';lab2.textContent=key+' '+lab;lab2.style.minWidth='90px';
-    var num=document.createElement('input');num.type='number';num.className='form-control form-control-sm';num.style.width='80px';num.value=val;num.step='0.5';
-    var rng=document.createElement('input');rng.type='range';rng.className='flex-grow-1';rng.min='0.5';rng.max=Math.max(def*3,50);rng.step='0.5';rng.value=val;
-    num.oninput=function(){S.params[key]=parseFloat(num.value);rng.value=num.value;};
-    rng.oninput=function(){S.params[key]=parseFloat(rng.value);num.value=rng.value;};
-    row.appendChild(lab2);row.appendChild(num);row.appendChild(rng);d.appendChild(row);
-   });
-   var b=document.createElement('button');b.className='btn btn-primary btn-sm mt-2';b.textContent='Generate + Export';
-   b.onclick=function(ev){ev.stopPropagation();generate();};d.appendChild(b);
-  }
-  host.appendChild(d);
+  var p=PRIMS[k];
+  if(q&&p.label.toLowerCase().indexOf(q)<0&&k.indexOf(q)<0)return;
+  var b=document.createElement('button');
+  b.innerHTML=esc(p.label)+'<small>'+esc(p.blurb||'')+'</small>';
+  if(k===S.prim)b.classList.add('hot');
+  b.onclick=function(){S.prim=k;S.params={};document.getElementById('ddList').style.display='none';buildObjs();};
+  host.appendChild(b);
  });
- var sel=document.getElementById('exSel');
- sel.innerHTML=Object.keys(EXAMPLES).map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('');
+ if(!host.children.length)host.innerHTML='<div class="muted small" style="padding:8px 10px">No objects match.</div>';
 }
+function buildObjs(){
+ var p=PRIMS[S.prim];
+ document.getElementById('ddLabel').textContent=p.label;
+ document.getElementById('objBlurb').textContent=p.blurb||'';
+ ddFilter();
+ var host=document.getElementById('prims');host.innerHTML='';
+ p.params.forEach(function(spec){
+  var key=spec[0],lab=spec[1],unit=spec[2],type=spec[3],def=spec[4],mn=spec[5],mx=spec[6],st=spec[7];
+  var row=document.createElement('div');row.className='prow';
+  if(type==='bool'){
+   var val=(S.params[key]!=null)?!!S.params[key]:!!def;S.params[key]=val;
+   row.innerHTML='<label><b>'+esc(key)+'</b> '+esc(lab)+'</label>';
+   var cb=document.createElement('input');cb.type='checkbox';cb.checked=val;
+   cb.onchange=function(){S.params[key]=cb.checked;};
+   row.appendChild(cb);host.appendChild(row);return;
+  }
+  var val=(S.params[key]!=null)?S.params[key]:def;S.params[key]=val;
+  row.innerHTML='<label><b>'+esc(key)+'</b> '+esc(lab)+'<span class="u">'+esc(unit)+'</span></label>';
+  var num=document.createElement('input');num.type='number';num.value=val;num.step=st;num.min=mn;num.max=mx;
+  if(type==='int'){num.oninput=function(){S.params[key]=parseInt(num.value,10);rng.value=num.value;};}
+  else{num.oninput=function(){S.params[key]=parseFloat(num.value);rng.value=num.value;};}
+  row.appendChild(num);
+  var rng=document.createElement('input');rng.type='range';rng.min=mn;rng.max=mx;rng.step=st;rng.value=val;
+  if(type==='int'){rng.oninput=function(){S.params[key]=parseInt(rng.value,10);num.value=rng.value;};}
+  else{rng.oninput=function(){S.params[key]=parseFloat(rng.value);num.value=rng.value;};}
+  row.appendChild(rng);host.appendChild(row);
+ });
+}
+/* ---------------- generate ---------------- */
 function generate(){
- setStatus('working…');log('primitive '+S.prim+' '+JSON.stringify(S.params));
+ setStatus('working…');log('object '+S.prim+' '+JSON.stringify(S.params));
  send({command:'generate',primitive:S.prim,params:S.params,format:fmt(),tolerance:tol(),filename:S.prim});
 }
 /* ---------------- editor (Monaco w/ textarea fallback) ---------------- */
@@ -573,13 +827,11 @@ function pvFit(){
  var mnx=1/0,mxx=-1/0,mny=1/0,mxy=-1/0,mnz=1/0,mxz=-1/0;
  for(var i=0;i<t.length;i+=3){var x=t[i],y=t[i+1],z=t[i+2];
   if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;if(z<mnz)mnz=z;if(z>mxz)mxz=z;}
- PV.ext={c:[(mnx+mxx)/2,(mny+mxy)/2,(mnz+mxz)/2],
-  d:Math.max(mxx-mnx,mxy-mny,mxz-mnz,1e-6)};
+ PV.ext={c:[(mnx+mxx)/2,(mny+mxy)/2,(mnz+mxz)/2],d:Math.max(mxx-mnx,mxy-mny,mxz-mnz,1e-6)};
 }
 function pvSet(p){
  PV.tris=(p&&p.tris)||[];PV.total=(p&&p.total)||0;pvFit();pvDraw();
- var info=document.getElementById('pvInfo');
- info.textContent=PV.tris.length?('mesh: '+PV.total+' tris'+(PV.total>PV.tris.length/9?' (decimated preview)':'')):'preview unavailable — stats only';
+ document.getElementById('pvInfo').textContent=PV.tris.length?('mesh: '+PV.total+' tris'+(PV.total>PV.tris.length/9?' (decimated preview)':'')):'preview unavailable — stats only';
 }
 function pvDraw(){
  var cv=document.getElementById('pv3d');if(!cv||!cv.clientWidth)return;
@@ -587,7 +839,7 @@ function pvDraw(){
  if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr;}
  var ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
  var t=PV.tris;
- ctx.fillStyle=pvCss('--muted','#6c757d');ctx.font='12px sans-serif';
+ ctx.fillStyle=pvCss('--muted','#9aa1ad');ctx.font='12px sans-serif';
  if(!t.length||!PV.ext){ctx.fillText('Run a model to see the 3D preview here.',14,H/2);return;}
  var cy=Math.cos(PV.yaw),sy=Math.sin(PV.yaw),cp=Math.cos(PV.pitch),sp=Math.sin(PV.pitch);
  var sc=Math.min(W,H)*0.38/PV.ext.d*PV.zoom,cx=W/2,cy0=H/2;
@@ -604,21 +856,16 @@ function pvDraw(){
   var za=(P[a*9+2]+P[a*9+5]+P[a*9+8])/3,zb=(P[b*9+2]+P[b*9+5]+P[b*9+8])/3;
   return za-zb;});
  var lx=0.35,ly=0.5,lz=0.79;
- var base=pvCss('--accent','#0d6efd');
- function shade(nx,ny,nz){
-  var d=nx*lx+ny*ly+nz*lz;if(d<0)d=0;
-  var k=0.35+0.65*d;return 'rgb('+Math.round(120*k+40)+','+Math.round(150*k+40)+','+Math.round(220*k+30)+')';
- }
- void base;
+ function shade(nx,ny,nz){var d=nx*lx+ny*ly+nz*lz;if(d<0)d=0;
+  var k=0.35+0.65*d;return 'rgb('+Math.round(120*k+40)+','+Math.round(150*k+40)+','+Math.round(220*k+30)+')';}
  for(j=0;j<n;j++){
   i=order[j]*9;
-  var ax=P[i],ay=P[i+1],az=P[i+2],bx=P[i+3],by=P[i+4],bz=P[i+5],cx2=P[i+6],cy2=P[i+7],cz=P[i+8];
-  // face normal in view space via rotated (not projected) coords: recompute cheaply
-  var ux=bx-ax,uy=by-ay,uz=bz-az,vx=cx2-ax,vy=cy2-ay,vz=cz-az;
+  var ax=P[i],ay=P[i+1],bx=P[i+3],by=P[i+4],cx2=P[i+6],cy2=P[i+7];
+  var ux=bx-ax,uy=by-ay,uz=P[i+5]-P[i+2],vx=cx2-ax,vy=cy2-ay,vz=P[i+8]-P[i+2];
   var nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
   var nl=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;nx/=nl;ny/=nl;nz/=nl;
   ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.lineTo(cx2,cy2);ctx.closePath();
-  if(PV.wire){ctx.strokeStyle=pvCss('--accent','#0d6efd');ctx.lineWidth=0.7;ctx.stroke();}
+  if(PV.wire){ctx.strokeStyle=pvCss('--accent','#22b8a8');ctx.lineWidth=0.7;ctx.stroke();}
   else{ctx.fillStyle=shade(nx,ny,nz);ctx.fill();ctx.strokeStyle='rgba(0,0,0,0.12)';ctx.lineWidth=0.4;ctx.stroke();}
  }
 }
@@ -627,7 +874,7 @@ function pvToggleWire(){PV.wire=!PV.wire;document.getElementById('wireBtn').text
 function pvToggleSpin(){PV.spin=!PV.spin;document.getElementById('spinBtn').textContent='Spin: '+(PV.spin?'on':'off');}
 (function(){
  var cv=document.getElementById('pv3d'),drag=null;
- cv.addEventListener('pointerdown',function(e){drag={x:e.clientX,y:e.clientY};cv.setPointerCapture(e.pointerId);cv.style.cursor='grabbing';});
+ cv.addEventListener('pointerdown',function(e){drag={x:e.clientX,y:e.clientY};try{cv.setPointerCapture(e.pointerId);}catch(_){}cv.style.cursor='grabbing';});
  cv.addEventListener('pointermove',function(e){if(!drag)return;PV.yaw+=(e.clientX-drag.x)*0.008;PV.pitch+=(e.clientY-drag.y)*0.008;drag={x:e.clientX,y:e.clientY};pvDraw();});
  ['pointerup','pointercancel','pointerleave'].forEach(function(ev){cv.addEventListener(ev,function(){drag=null;cv.style.cursor='grab';});});
  cv.addEventListener('wheel',function(e){e.preventDefault();PV.zoom*=e.deltaY>0?0.92:1.08;PV.zoom=Math.min(8,Math.max(0.2,PV.zoom));pvDraw();},{passive:false});
@@ -638,17 +885,16 @@ function pvToggleSpin(){PV.spin=!PV.spin;document.getElementById('spinBtn').text
 /* ---------------- bridge ---------------- */
 function showResult(d){
  var el=document.getElementById('result');
- var st=document.getElementById('pvStats');
- st.textContent='stats: '+JSON.stringify(d.stats||{});
+ document.getElementById('pvStats').textContent='stats: '+JSON.stringify(d.stats||{});
  if(d.ok){
-  el.innerHTML='<dl class="row mb-0">'
-   +'<dt class="col-sm-2">File</dt><dd class="col-sm-10 mono">'+esc(d.file)+'</dd>'
-   +'<dt class="col-sm-2">Size</dt><dd class="col-sm-10 mono">'+esc(d.size_bytes)+' bytes</dd>'
-   +'<dt class="col-sm-2">Solid</dt><dd class="col-sm-10 mono">'+esc(d.var||'result')+'</dd></dl>'
-   +'<p class="text-muted small mb-0">Drag this file onto Prepare to slice it.</p>';
+  el.innerHTML='<div class="kv">'
+   +'<div class="k">file</div><div class="v">'+esc(d.file)+'</div>'
+   +'<div class="k">size</div><div class="v">'+esc(d.size_bytes)+' bytes</div>'
+   +'<div class="k">solid</div><div class="v">'+esc(d.var||'result')+'</div></div>'
+   +'<p class="muted small">Drag this file onto Prepare to slice it.</p>';
   log('OK '+d.filename+' ('+d.size_bytes+' B)');
  }else{
-  el.innerHTML='<div class="alert alert-danger mb-0 mono">'+esc(d.error||'failed')+'</div>';
+  el.innerHTML='<div class="alert-err">'+esc(d.error||'failed')+'</div>';
   log('ERROR '+(d.error||'failed'));
  }
 }
@@ -659,9 +905,13 @@ if(window.orca&&window.orca.onMessage){window.orca.onMessage(function(d){
  if(d.type==='error'||d.ok===false){setStatus('failed');pvSet(null);showResult({ok:false,error:d.error});return;}
  log(String(JSON.stringify(d)).slice(0,2000));
 });}
-buildPrims();
-initMonaco();
-pvDraw();
+(function init(){
+ var sel=document.getElementById('exSel');
+ sel.innerHTML=Object.keys(EXAMPLES).map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('');
+ buildObjs();
+ initMonaco();
+ pvDraw();
+})();
 </script>
 </body>
 </html>
