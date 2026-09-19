@@ -3,12 +3,12 @@
 # dependencies = ["build123d", "numpy"]
 #
 # [tool.orcaslicer.plugin]
-# name = "OrcaCAD"
+# name = "orcad"
 # description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, Monaco editor, live 3D preview, STL/STEP/3MF export."
-# author = "OrcaCadPlugin"
+# author = "orcad"
 # version = "0.3.0"
 # ///
-"""OrcaCAD — build123d CAD tab (Pages capability).
+"""orcad — build123d CAD tab (Pages capability).
 
 Top-level "CAD" tab next to Prepare/Preview/Device/Project (same mechanism
 as a FilamentHub-style tab): implemented as orca.pages.PagesPluginCapabilityBase.
@@ -537,7 +537,7 @@ PAGE_HTML = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OrcaCAD</title>
+<title>orcad</title>
 <style>
 :root{
   color-scheme:light dark;
@@ -631,7 +631,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 </head>
 <body>
 <header class="top">
-  <span class="brand">OrcaCAD <small>build123d · v0.3</small></span>
+  <span class="brand">orcad <small>build123d · v0.3</small></span>
   <span id="status" class="muted small"></span><span class="spacer"></span>
   <select id="fmt" title="Export format"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
   <input id="tol" type="number" value="0.001" step="0.001" min="0.0001" max="1" style="width:86px" title="Tessellation tolerance">
@@ -973,7 +973,7 @@ if orca is not None:  # pragma: no cover - only inside OrcaSlicer
     if _PagesBase is not None:
         class CadPage(_PagesBase):
             def get_name(self):
-                return "CAD"
+                return "orcad"
 
             def get_icon(self):
                 return ""
@@ -1006,23 +1006,23 @@ if orca is not None:  # pragma: no cover - only inside OrcaSlicer
                 return {"tolerance": DEFAULT_TOLERANCE, "format": "stl"}
 
         @orca.plugin
-        class OrcaCadPlugin(orca.base):
+        class OrcadPlugin(orca.base):
             def register_capabilities(self):
                 orca.register_capability(CadPage)
     else:
         # Fallback for Orca builds without orca.pages: visible upgrade hint.
         class CadScriptFallback(orca.script.ScriptPluginCapabilityBase):
             def get_name(self):
-                return "OrcaCAD (needs Pages build)"
+                return "orcad (needs Pages build)"
 
             def execute(self):
                 return orca.ExecutionResult.failure(
                     orca.PluginResult.RecoverableError,
-                    "OrcaCAD needs OrcaSlicer Nightly with orca.pages "
+                    "orcad needs OrcaSlicer Nightly with orca.pages "
                     "(Pages tab API). Please update OrcaSlicer.",
                 )
 
         @orca.plugin
-        class OrcaCadPlugin(orca.base):
+        class OrcadPlugin(orca.base):
             def register_capabilities(self):
                 orca.register_capability(CadScriptFallback)

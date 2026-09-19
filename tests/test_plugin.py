@@ -1,6 +1,6 @@
-"""Unit tests for OrcaCAD v0.3 — run WITHOUT OrcaSlicer or build123d installed.
+"""Unit tests for orcad v0.3 — run WITHOUT OrcaSlicer or build123d installed.
 
-Covers pure logic in orcacad_plugin.py: param validation (number/int/bool),
+Covers pure logic in orcad.py: param validation (number/int/bool),
 codegen incl. Gridfinity, filename hygiene, examples syntax, preview helper,
 PAGE_HTML bridge contract (self-contained CSS, Monaco only CDN).
 """
@@ -11,16 +11,16 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-PLUGIN = ROOT / "orcacad_plugin.py"
+PLUGIN = ROOT / "orcad.py"
 
 ALLOWED_CDN_HOSTS = ("cdn.jsdelivr.net",)  # monaco loader only; CSS is inline
 
 
 def load_plugin():
     # orca is absent here -> plugin sets orca=None and skips capability classes.
-    spec = importlib.util.spec_from_file_location("orcacad_plugin", PLUGIN)
+    spec = importlib.util.spec_from_file_location("orcad", PLUGIN)
     mod = importlib.util.module_from_spec(spec)
-    sys.modules["orcacad_plugin"] = mod
+    sys.modules["orcad"] = mod
     spec.loader.exec_module(mod)
     return mod
 
@@ -32,7 +32,7 @@ def test_metadata_block():
     text = PLUGIN.read_text(encoding="utf-8")
     assert "# /// script" in text
     assert 'dependencies = ["build123d", "numpy"]' in text
-    assert 'name = "OrcaCAD"' in text
+    assert 'name = "orcad"' in text
     assert 'version = "0.3.0"' in text
 
 
