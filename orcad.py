@@ -6,17 +6,18 @@
 # name = "orcad"
 # description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, Monaco editor, live 3D preview, STL/STEP/3MF export."
 # author = "orcad"
-# version = "0.4.0"
+# version = "0.5.0"
 # ///
 """orcad — build123d CAD tab (Pages capability).
 
 Top-level "orcad" tab next to Prepare/Preview/Device/Project (same mechanism
 as a FilamentHub-style tab): implemented as orca.pages.PagesPluginCapabilityBase.
 
-Layout (v0.4):
+Layout (v0.5):
 - Left: tabbed panel switching between "Objects" (searchable predefined-object
-  dropdown + styled parameter sliders, live preview while editing) and
-  "Code Editor" (Monaco, textarea fallback when the CDN is unreachable).
+  dropdown + styled parameter sliders, live preview while editing; the Code
+  Editor mirrors the selected object + params) and "Code Editor" (Monaco,
+  textarea fallback when the CDN is unreachable).
 - Right: persistent 3D preview (always visible, live for objects) + result + log.
 - "Send to plate": exports STL and opens it with the OS default app, so
   OrcaSlicer's single-instance handling loads it onto the build plate
@@ -54,7 +55,7 @@ try:
 except ImportError:  # pragma: no cover - allows unit tests without Orca
     orca = None
 
-PLUGIN_VERSION = "0.4.0"
+PLUGIN_VERSION = "0.5.0"
 EXPORT_FORMATS = ("stl", "step", "3mf")
 DEFAULT_TOLERANCE = 0.001
 PREVIEW_MAX_TRIS = 3000  # cap on triangles sent to the page for preview
@@ -113,14 +114,17 @@ PRIMITIVES = {
     },
     "gridfinity_bin": {
         "label": "Gridfinity Bin",
-        "blurb": "Spec-based storage bin: 42mm grid, stacking foot, lip + magnets optional.",
+        "blurb": "Rebuilt-style bin: lofted tapered foot, tapered stacking lip, dividers, scoop, magnets.",
         "params": [
             {"key": "GX", "label": "Grid X", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 2},
             {"key": "GY", "label": "Grid Y", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 2},
             {"key": "HU", "label": "Height", "unit": "u", "ptype": "int", "min": 1, "max": 12, "step": 1, "default": 6},
             {"key": "WALL", "label": "Wall", "unit": "mm", "ptype": "number", "min": 0.8, "max": 2.4, "step": 0.2, "default": 1.2},
+            {"key": "DX", "label": "Dividers X", "unit": "", "ptype": "int", "min": 0, "max": 4, "step": 1, "default": 0},
+            {"key": "DY", "label": "Dividers Y", "unit": "", "ptype": "int", "min": 0, "max": 4, "step": 1, "default": 0},
             {"key": "MAGNETS", "label": "Magnet holes (6x2)", "ptype": "bool", "default": True},
             {"key": "LIP", "label": "Stacking lip", "ptype": "bool", "default": True},
+            {"key": "SCOOP", "label": "Scoop notch (front)", "ptype": "bool", "default": False},
         ],
     },
     "gridfinity_baseplate": {
@@ -211,22 +215,15 @@ def _gridfinity_bin_code(c):
         "_cd = D - 2 * WALL",
         f"_cavity = Pos(0, 0, BASE_H) * extrude(Plane.XY * RectangleRounded(_cw, _cd, max(0.5, {GF_CORNER} - WALL)), amount=H - BASE_H + 1)",
         "result = _outer - _cavity",
-        "# stacking feet, one per cell (simplified stepped spec profile)",
-        "_widths = (35.6, 37.2, 41.5)",
-        "_heights = (0.8, 1.8, 2.15)",
-        "_z = 0.0",
-        "_parts = []",
-        "for _w, _h in zip(_widths, _heights):",
-        "    for _ix in range(GX):",
-        "        for _iy in range(GY):",
-        f"            _cx = -(GX * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
-        f"            _cy = -(GY * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
-        "            _parts.append(Pos(_cx, _cy, _z) * Box(_w, _w, _h, align=(Align.CENTER, Align.CENTER, Align.MIN)))",
-        "    _z += _h",
-        "_feet = _parts[0]",
-        "for _p in _parts[1:]:",
-        "    _feet += _p",
-        "result += _feet",
+        "# stacking feet: lofted spec taper (true 45 deg chamfers), one per cell",
+        "# profile: (z, width, corner) bottom -> top, mirroring the rebuilt base",
+        "_prof = [(0.0, 35.6, 0.8), (0.8, 37.2, 1.5), (2.6, 37.2, 2.5), (4.75, 41.5, 3.75)]",
+        "for _ix in range(GX):",
+        "    for _iy in range(GY):",
+        f"        _cx = -(GX * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
+        f"        _cy = -(GY * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
+        "        _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]",
+        "        result += loft(Sketch() + _secs, ruled=True)",
     ]
     if c["MAGNETS"]:
         lines += [
@@ -241,11 +238,37 @@ def _gridfinity_bin_code(c):
         ]
     if c["LIP"]:
         lines += [
-            "# stacking lip: rim frame above the walls",
-            "_lw = W - 2.0",
-            "_ld = D - 2.0",
-            "_lip = extrude(Plane.XY * RectangleRounded(_lw, _ld, 3.0), amount=4.4) - extrude(Plane.XY * RectangleRounded(_lw - 2 * WALL, _ld - 2 * WALL, 2.0), amount=5.4)",
-            "result += Pos(0, 0, H) * _lip",
+            "# stacking lip: tapered ring above the rim (nests the feet above)",
+            "# outer flares past the walls, inner void mirrors the foot taper",
+            "_lo0 = W - WALL",
+            "_lo1 = W + WALL + 0.6",
+            "_li0 = _cw - 0.2",
+            "_li1 = _cw + 2 * WALL + 0.4",
+            "_lip_outer = loft(Sketch() + [Plane.XY.offset(H) * RectangleRounded(_lo0, _lo0, 3.0), Plane.XY.offset(H + 4.4) * RectangleRounded(_lo1, _lo1, 3.5)], ruled=True)",
+            "_lip_inner = loft(Sketch() + [Plane.XY.offset(H - 0.5) * RectangleRounded(_li0, _li0, 2.5), Plane.XY.offset(H + 4.5) * RectangleRounded(_li1, _li1, 3.0)], ruled=True)",
+            "result += _lip_outer - _lip_inner",
+        ]
+    if c["DX"] or c["DY"]:
+        lines += ["# divider walls"]
+    if c["DX"]:
+        lines += [
+            f"for _i in range(1, {c['DX']} + 1):",
+            f"    _x = -_cw / 2 + _i * _cw / ({c['DX']} + 1)",
+            "    result += Pos(_x, 0, BASE_H) * Box(WALL, _cd, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))",
+        ]
+    if c["DY"]:
+        lines += [
+            f"for _j in range(1, {c['DY']} + 1):",
+            f"    _y = -_cd / 2 + _j * _cd / ({c['DY']} + 1)",
+            "    result += Pos(0, _y, BASE_H) * Box(_cw, WALL, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))",
+        ]
+    if c["SCOOP"]:
+        lines += [
+            "# scoop notch in the front wall",
+            "_nw = min(_cw * 0.6, _cw - 2 * WALL)",
+            "_nh = (H - BASE_H) * 0.45 + 1",
+            "_notch = Pos(-_nw / 2, D / 2 - WALL - 1, H + 1 - _nh) * Box(_nw, WALL + 2, _nh, align=(Align.MIN, Align.MIN, Align.MIN))",
+            "result -= _notch",
         ]
     return "\n".join(lines) + "\n"
 
@@ -683,7 +706,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 </head>
 <body>
 <header class="top">
-  <span class="brand">orcad <small>build123d · v0.4</small></span>
+  <span class="brand">orcad <small>build123d · v0.5</small></span>
   <span id="status" class="muted small"></span><span class="spacer"></span>
   <select id="fmt" title="Export format"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
   <input id="tol" type="number" value="0.001" step="0.001" min="0.0001" max="1" style="width:86px" title="Tessellation tolerance">
@@ -713,7 +736,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
     </div>
     <div id="pane-editor" style="display:none">
       <div class="card"><h3>build123d · algebra mode</h3>
-        <div class="banner">Assign the final solid to <span class="mono">result</span> — e.g. <span class="mono">result = Box(20,20,20)</span>.</div>
+        <div class="banner">Assign the final solid to <span class="mono">result</span> — e.g. <span class="mono">result = Box(20,20,20)</span>.<br>It mirrors the Objects tab: changing selection or params rewrites this code.</div>
         <div id="editor"></div>
         <textarea id="code" style="display:none" spellcheck="false"></textarea>
         <div class="rowline">
@@ -757,7 +780,7 @@ var PRIMS={
  cylinder:{label:'Cylinder',blurb:'Round post or puck.',params:[['R','Radius','mm','number',10,0.5,150,0.5],['H','Height','mm','number',20,1,300,0.5]]},
  tube:{label:'Tube',blurb:'Hollow cylinder.',params:[['R_OUT','Outer radius','mm','number',12,1,150,0.5],['R_IN','Inner radius','mm','number',8,0.5,149,0.5],['H','Height','mm','number',25,1,300,0.5]]},
  bracket:{label:'Bracket plate',blurb:'Flat plate with two holes.',params:[['L','Length','mm','number',60,10,300,0.5],['W','Width','mm','number',30,10,200,0.5],['T','Thickness','mm','number',5,1,50,0.5],['D','Hole dia','mm','number',5,1,50,0.5]]},
- gridfinity_bin:{label:'Gridfinity Bin',blurb:'Spec-based bin: 42mm grid, stacking foot, lip + magnets optional.',params:[['GX','Grid X','u','int',2,1,6,1],['GY','Grid Y','u','int',2,1,6,1],['HU','Height','u','int',6,1,12,1],['WALL','Wall','mm','number',1.2,0.8,2.4,0.2],['MAGNETS','Magnet holes (6x2)','','bool',1],['LIP','Stacking lip','','bool',1]]},
+ gridfinity_bin:{label:'Gridfinity Bin',blurb:'Rebuilt-style bin: lofted foot, tapered lip, dividers, scoop, magnets.',params:[['GX','Grid X','u','int',2,1,6,1],['GY','Grid Y','u','int',2,1,6,1],['HU','Height','u','int',6,1,12,1],['WALL','Wall','mm','number',1.2,0.8,2.4,0.2],['DX','Dividers X','','int',0,0,4,1],['DY','Dividers Y','','int',0,0,4,1],['MAGNETS','Magnet holes (6x2)','','bool',1],['LIP','Stacking lip','','bool',1],['SCOOP','Scoop notch','','bool',0]]},
  gridfinity_baseplate:{label:'Gridfinity Baseplate',blurb:'Grid the bins snap into, with sockets + magnet holes.',params:[['GX','Grid X','u','int',4,1,6,1],['GY','Grid Y','u','int',4,1,6,1],['T','Thickness','mm','number',5,4.6,8,0.2],['SOCKETS','Bin sockets','','bool',1],['MAGNETS','Magnet holes (6x2)','','bool',1]]}
 };
 var EXAMPLES={
@@ -824,7 +847,7 @@ function ddFilter(){
   var b=document.createElement('button');
   b.innerHTML=esc(p.label)+'<small>'+esc(p.blurb||'')+'</small>';
   if(k===S.prim)b.classList.add('hot');
-  b.onclick=function(){S.prim=k;S.params={};document.getElementById('ddList').style.display='none';buildObjs();schedulePreview();};
+  b.onclick=function(){S.prim=k;S.params={};document.getElementById('ddList').style.display='none';buildObjs();refreshEditorCode();schedulePreview();};
   host.appendChild(b);
  });
  if(!host.children.length)host.innerHTML='<div class="muted small" style="padding:8px 10px">No objects match.</div>';
@@ -859,8 +882,17 @@ function buildObjs(){
 }
 /* ---------------- generate ---------------- */
 function generate(){
+ refreshEditorCode();
  setStatus('working…');log('object '+S.prim+' '+JSON.stringify(S.params));
  send({command:'generate',primitive:S.prim,params:S.params,format:fmt(),tolerance:tol(),filename:S.prim});
+}
+/* Editor mirror: the Code Editor tab always shows the code for the selected
+   object + params. Pure codegen (no CAD run), so it is instant and safe to
+   call on every selection/param change. Invalid intermediate states keep the
+   last good code. */
+function refreshEditorCode(){
+ if(S.left!=='objs')return;
+ send({command:'code',kind:'generate',primitive:S.prim,params:S.params});
 }
 /* ---------------- editor (Monaco w/ textarea fallback) ---------------- */
 var monacoInst=null, monacoReady=false;
@@ -979,6 +1011,7 @@ function showResult(d){
 if(window.orca&&window.orca.onMessage){window.orca.onMessage(function(d){
  if(!d)return;
  if(d.type==='progress'){setStatus(d.message||'working…');if(d.message)log(d.message);return;}
+ if(d.type==='code'){if(d.ok)setCode(d.code);return;}
  if(d.type==='preview'){
   if(d.seq!==PVSEQ)return; /* stale: superseded by a newer slider move */
   if(d.ok){pvSet(d.preview);document.getElementById('pvStats').textContent='stats: '+JSON.stringify(d.stats||{});document.getElementById('pvInfo').textContent='live preview';}
@@ -1001,9 +1034,10 @@ if(window.orca&&window.orca.onMessage){window.orca.onMessage(function(d){
  initMonaco();
  pvDraw();
  var pr=document.getElementById('prims');
- pr.addEventListener('input',schedulePreview);
- pr.addEventListener('change',schedulePreview);
+ pr.addEventListener('input',function(){refreshEditorCode();schedulePreview();});
+ pr.addEventListener('change',function(){refreshEditorCode();schedulePreview();});
  schedulePreview(); /* first live render of the default object */
+ refreshEditorCode(); /* editor opens showing the default object's code */
 })();
 </script>
 </body>
@@ -1036,6 +1070,13 @@ def _handle_message_sync(capability, msg):
     cmd = msg.get("command")
     if cmd == "ping":
         return {"type": "pong", "ok": True}
+    if cmd == "code":
+        # Editor mirror: pure codegen, no CAD run, no thread, instant.
+        try:
+            code, _stem = _build_code_from_msg(msg, str(msg.get("kind", "generate")))
+        except Exception as exc:
+            return {"type": "code", "ok": False, "error": str(exc)}
+        return {"type": "code", "ok": True, "code": code}
     if cmd in ("run", "generate"):
         try:
             export_format = str(msg.get("format", "stl")).lower()

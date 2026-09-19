@@ -33,7 +33,7 @@ def test_metadata_block():
     assert "# /// script" in text
     assert 'dependencies = ["build123d", "numpy"]' in text
     assert 'name = "orcad"' in text
-    assert 'version = "0.4.0"' in text
+    assert 'version = "0.5.0"' in text
 
 
 def test_primitives_codegen_ok():
@@ -64,12 +64,15 @@ def test_primitives_validation():
     # int + bool coercion
     c = mod.validate_primitive_params(
         "gridfinity_bin",
-        {"GX": 2.0, "GY": "2", "HU": 6, "WALL": 1.2, "MAGNETS": 1, "LIP": "false"})
-    assert c == {"GX": 2, "GY": 2, "HU": 6, "WALL": 1.2, "MAGNETS": True, "LIP": False}
+        {"GX": 2.0, "GY": "2", "HU": 6, "WALL": 1.2, "DX": 1, "DY": 0,
+         "MAGNETS": 1, "LIP": "false", "SCOOP": "no"})
+    assert c == {"GX": 2, "GY": 2, "HU": 6, "WALL": 1.2, "DX": 1, "DY": 0,
+                 "MAGNETS": True, "LIP": False, "SCOOP": False}
     try:
         mod.validate_primitive_params(
             "gridfinity_bin",
-            {"GX": 2.5, "GY": 2, "HU": 6, "WALL": 1.2, "MAGNETS": True, "LIP": True})
+            {"GX": 2.5, "GY": 2, "HU": 6, "WALL": 1.2, "DX": 0, "DY": 0,
+             "MAGNETS": True, "LIP": True, "SCOOP": False})
         raise AssertionError("expected ValueError for non-integer grid")
     except ValueError:
         pass
@@ -78,16 +81,21 @@ def test_primitives_validation():
 def test_gridfinity_codegen():
     code = mod.generate_primitive_code(
         "gridfinity_bin",
-        {"GX": 2, "GY": 3, "HU": 6, "WALL": 1.2, "MAGNETS": True, "LIP": True})
+        {"GX": 2, "GY": 3, "HU": 6, "WALL": 1.2, "DX": 1, "DY": 2,
+         "MAGNETS": True, "LIP": True, "SCOOP": True})
     for needle in ("RectangleRounded", "extrude", "GX * 42", "result = _outer - _cavity",
-                   "Cylinder(3.25", "result =", "Pos("):
+                   "Cylinder(3.25", "result =", "Pos(", "loft(", "ruled=True",
+                   "Sketch() + _secs", "divider walls", "scoop notch",
+                   "_lip_outer - _lip_inner"):
         assert needle in code, f"gridfinity bin code missing {needle!r}"
     ast.parse(code)
     no_lip = mod.generate_primitive_code(
         "gridfinity_bin",
-        {"GX": 1, "GY": 1, "HU": 3, "WALL": 1.2, "MAGNETS": False, "LIP": False})
+        {"GX": 1, "GY": 1, "HU": 3, "WALL": 1.2, "DX": 0, "DY": 0,
+         "MAGNETS": False, "LIP": False, "SCOOP": False})
     assert "Stacking lip" not in no_lip and "_lip" not in no_lip
     assert "magnet" not in no_lip.lower()
+    assert "divider" not in no_lip.lower() and "scoop" not in no_lip.lower()
     ast.parse(no_lip)
     plate = mod.generate_primitive_code(
         "gridfinity_baseplate",
@@ -158,6 +166,9 @@ def test_page_html_contract():
     # send-to-plate wiring
     for needle in ('id="plateBtn"', "sendPlate", "plate_result", "Send to plate"):
         assert needle in html, f"PAGE_HTML missing plate {needle!r}"
+    # editor mirror wiring (code section follows the selected object)
+    for needle in ("refreshEditorCode", "command:'code'", "d.type==='code'"):
+        assert needle in html, f"PAGE_HTML missing editor-mirror {needle!r}"
     # only allowlisted CDNs; everything else self-contained
     for url in re.findall(r'https://[^"\'\s<>]+', html):
         host = url.split("/")[2]
@@ -200,6 +211,28 @@ def test_preview_reports_missing_build123d():
         raise AssertionError("expected RuntimeError without build123d")
     except RuntimeError as exc:
         assert "build123d is not installed" in str(exc)
+
+
+def test_code_command_is_sync_codegen():
+    class FakeCap:
+        def post_message(self, d):
+            raise AssertionError("code command must not spawn worker posts")
+
+    cap = FakeCap()
+    res = mod._handle_message_sync(cap, {"command": "code", "kind": "generate",
+                                         "primitive": "box",
+                                         "params": {"L": 5, "W": 6, "H": 7}})
+    assert res["type"] == "code" and res["ok"] is True
+    assert "Box(5" in res["code"] and "result =" in res["code"]
+    # gridfinity code mirrors the objects tab state
+    res = mod._handle_message_sync(cap, {"command": "code", "kind": "generate",
+                                         "primitive": "gridfinity_bin",
+                                         "params": mod._defaults("gridfinity_bin")})
+    assert res["ok"] is True and "loft(" in res["code"]
+    # invalid params -> immediate error, editor keeps last good code
+    res = mod._handle_message_sync(cap, {"command": "code", "kind": "generate",
+                                         "primitive": "nope", "params": {}})
+    assert res["type"] == "code" and res["ok"] is False
 
 
 def test_preview_message_routing():

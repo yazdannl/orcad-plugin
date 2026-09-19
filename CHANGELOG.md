@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.0 — Editor mirror + Rebuilt-style Gridfinity port
+
+- Code Editor mirrors the Objects tab: selecting an object or moving any
+  slider instantly rewrites the editor code (pure codegen `code` command, no
+  CAD run); invalid intermediate states keep the last good code, hand edits
+  are never clobbered except by your own object/param changes.
+- Gridfinity Bin ported to Rebuilt-style geometry: lofted tapered stacking
+  feet with true 45° chamfers (was: stepped boxes), tapered stacking lip ring
+  that actually nests the feet above (was: straight frame that blocked them),
+  new divider walls (DX/DY), front scoop notch. Magnet holes unchanged.
+- Gridfinity Bin preselected on open; editor opens showing its code.
+
 ## 0.4.0 — Live preview + Send to plate
 
 - Live preview for Objects: debounced rebuild on slider/param change (650ms),
