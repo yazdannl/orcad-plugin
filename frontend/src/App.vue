@@ -5,12 +5,16 @@ import {
   MeshStandardMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three'
 import { EXAMPLES, PRIMS } from './primitives'
+import {
+  createDraftState, markDraftEdited, receiveGeneratedCode, replaceDraft,
+  replaceDraftWith,
+} from './codeDraft'
 
 const mode = ref('objects')
 const selected = ref('gridfinity_bin')
 const query = ref('')
 const params = reactive({})
-const code = ref('')
+const draft = reactive(createDraftState())
 const example = ref('calibration_cube')
 const status = ref('ready')
 const previewStatus = ref('waiting for a model')
@@ -23,6 +27,8 @@ const spinning = ref(true)
 const sequence = ref(0)
 let previewTimer
 let hydrating = false
+let codeRequestSequence = 0
+let latestCodeRequestId = null
 
 const selectedPrim = computed(() => PRIMS[selected.value] || PRIMS.box)
 const filteredPrims = computed(() => Object.entries(PRIMS).filter(([key, prim]) => {
@@ -54,13 +60,25 @@ function hydrateParams() {
   hydrating = false
 }
 function codeRequest() {
-  post({ command: 'code', kind: 'generate', primitive: selected.value, params: { ...params } })
+  const requestId = ++codeRequestSequence
+  latestCodeRequestId = requestId
+  post({ command: 'code', kind: 'generate', primitive: selected.value, params: { ...params }, request_id: requestId })
+}
+function editDraft(event) {
+  markDraftEdited(draft, event.target.value)
+}
+function confirmDraftReplacement(source) {
+  return !draft.dirty || window.confirm(`Replace your edited code with ${source}?`)
+}
+function replaceWithGenerated() {
+  if (!confirmDraftReplacement('generated object code')) return
+  replaceDraft(draft)
 }
 function payload(command) {
   if (mode.value === 'objects') {
     return { command, kind: 'generate', primitive: selected.value, params: { ...params }, format: 'stl', tolerance: tolerance(), filename: selected.value }
   }
-  return { command, kind: 'run', code: code.value, format: document.getElementById('fmt')?.value || 'stl', tolerance: tolerance(), filename: 'model' }
+  return { command, kind: 'run', code: draft.codeDraft, format: document.getElementById('fmt')?.value || 'stl', tolerance: tolerance(), filename: 'model' }
 }
 function requestPreview() {
   if (mode.value !== 'objects') return
@@ -105,7 +123,8 @@ function loadExample() {
     nextTick(codeRequest)
     return
   }
-  code.value = EXAMPLES[example.value] || ''
+  if (!confirmDraftReplacement('this example')) return
+  replaceDraftWith(draft, EXAMPLES[example.value] || '')
 }
 function showResult(message) {
   result.value = message
@@ -115,7 +134,11 @@ function showResult(message) {
 function handleMessage(message) {
   if (!message) return
   if (message.type === 'progress') { status.value = message.message || 'working…'; return }
-  if (message.type === 'code') { if (message.ok) code.value = message.code; return }
+  if (message.type === 'code') {
+    if (message.ok) receiveGeneratedCode(draft, message.request_id, latestCodeRequestId, message.code)
+    else if (message.request_id === latestCodeRequestId) log(message.error || 'code generation failed')
+    return
+  }
   if (message.type === 'preview') {
     if (message.seq !== sequence.value) return
     if (message.ok) {
@@ -305,8 +328,8 @@ onBeforeUnmount(() => {
           <button class="btn btn-primary w-full" @click="generate">Generate + export</button>
         </section>
         <section v-else class="space-y-2 p-3">
-          <label class="eyebrow" for="code">build123d code</label>
-          <textarea id="code" v-model="code" class="h-[410px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2.5 font-mono text-xs leading-5 outline-none" spellcheck="false"></textarea>
+          <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="code">build123d code <span v-if="draft.dirty" class="text-[var(--accent)]">· edited</span></label><button v-if="draft.generatedCode" class="btn btn-small" @click="replaceWithGenerated">Replace draft</button></div>
+          <textarea id="code" :value="draft.codeDraft" @input="editDraft" class="h-[410px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2.5 font-mono text-xs leading-5 outline-none" spellcheck="false"></textarea>
           <div class="flex gap-1.5"><select v-model="example" class="control min-w-0 flex-1"><option v-for="(_, key) in EXAMPLES" :key="key" :value="key">{{ key }}</option></select><button class="btn" @click="loadExample">Load</button><button class="btn btn-primary" @click="runCode">Run</button></div>
         </section>
       </aside>

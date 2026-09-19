@@ -229,8 +229,10 @@ def test_code_command_is_sync_codegen():
     cap = FakeCap()
     res = mod._handle_message_sync(cap, {"command": "code", "kind": "generate",
                                          "primitive": "box",
-                                         "params": {"L": 5, "W": 6, "H": 7}})
+                                         "params": {"L": 5, "W": 6, "H": 7},
+                                         "request_id": 17})
     assert res["type"] == "code" and res["ok"] is True
+    assert res["request_id"] == 17
     assert "L = 5.0" in res["code"] and "result = Box(L, W, H)" in res["code"]
     # gridfinity code mirrors the objects tab state
     res = mod._handle_message_sync(cap, {"command": "code", "kind": "generate",
