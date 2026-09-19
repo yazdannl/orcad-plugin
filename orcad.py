@@ -75,71 +75,6 @@ GF_MAG_D = 13.0       # magnet hole offset from cell center (26mm square)
 #              "min","max","step","default","hint"}
 # ---------------------------------------------------------------------------
 
-PRIMITIVES = {
-    "box": {
-        "label": "Box",
-        "blurb": "Simple centered block.",
-        "params": [
-            {"key": "L", "label": "Length", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
-            {"key": "W", "label": "Width", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
-            {"key": "H", "label": "Height", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
-        ],
-    },
-    "cylinder": {
-        "label": "Cylinder",
-        "blurb": "Round post or puck.",
-        "params": [
-            {"key": "R", "label": "Radius", "unit": "mm", "ptype": "number", "min": 0.5, "max": 150, "step": 0.5, "default": 10},
-            {"key": "H", "label": "Height", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 20},
-        ],
-    },
-    "tube": {
-        "label": "Tube",
-        "blurb": "Hollow cylinder.",
-        "params": [
-            {"key": "R_OUT", "label": "Outer radius", "unit": "mm", "ptype": "number", "min": 1, "max": 150, "step": 0.5, "default": 12},
-            {"key": "R_IN", "label": "Inner radius", "unit": "mm", "ptype": "number", "min": 0.5, "max": 149, "step": 0.5, "default": 8},
-            {"key": "H", "label": "Height", "unit": "mm", "ptype": "number", "min": 1, "max": 300, "step": 0.5, "default": 25},
-        ],
-    },
-    "bracket": {
-        "label": "Bracket plate",
-        "blurb": "Flat plate with two holes.",
-        "params": [
-            {"key": "L", "label": "Length", "unit": "mm", "ptype": "number", "min": 10, "max": 300, "step": 0.5, "default": 60},
-            {"key": "W", "label": "Width", "unit": "mm", "ptype": "number", "min": 10, "max": 200, "step": 0.5, "default": 30},
-            {"key": "T", "label": "Thickness", "unit": "mm", "ptype": "number", "min": 1, "max": 50, "step": 0.5, "default": 5},
-            {"key": "D", "label": "Hole dia", "unit": "mm", "ptype": "number", "min": 1, "max": 50, "step": 0.5, "default": 5},
-        ],
-    },
-    "gridfinity_bin": {
-        "label": "Gridfinity Bin",
-        "blurb": "Rebuilt-style bin: lofted tapered foot, tapered stacking lip, dividers, scoop, magnets.",
-        "params": [
-            {"key": "GX", "label": "Grid X", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 2},
-            {"key": "GY", "label": "Grid Y", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 2},
-            {"key": "HU", "label": "Height", "unit": "u", "ptype": "int", "min": 1, "max": 12, "step": 1, "default": 6},
-            {"key": "WALL", "label": "Wall", "unit": "mm", "ptype": "number", "min": 0.8, "max": 2.4, "step": 0.2, "default": 1.2},
-            {"key": "DX", "label": "Dividers X", "unit": "", "ptype": "int", "min": 0, "max": 4, "step": 1, "default": 0},
-            {"key": "DY", "label": "Dividers Y", "unit": "", "ptype": "int", "min": 0, "max": 4, "step": 1, "default": 0},
-            {"key": "MAGNETS", "label": "Magnet holes (6x2)", "ptype": "bool", "default": True},
-            {"key": "LIP", "label": "Stacking lip", "ptype": "bool", "default": True},
-            {"key": "SCOOP", "label": "Scoop notch (front)", "ptype": "bool", "default": False},
-        ],
-    },
-    "gridfinity_baseplate": {
-        "label": "Gridfinity Baseplate",
-        "blurb": "Grid the bins snap into, with sockets + magnet holes.",
-        "params": [
-            {"key": "GX", "label": "Grid X", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 4},
-            {"key": "GY", "label": "Grid Y", "unit": "u", "ptype": "int", "min": 1, "max": 6, "step": 1, "default": 4},
-            {"key": "T", "label": "Thickness", "unit": "mm", "ptype": "number", "min": 4.6, "max": 8, "step": 0.2, "default": 5},
-            {"key": "SOCKETS", "label": "Bin sockets", "ptype": "bool", "default": True},
-            {"key": "MAGNETS", "label": "Magnet holes (6x2)", "ptype": "bool", "default": True},
-        ],
-    },
-}
-
 
 def _num(v, name):
     try:
@@ -200,132 +135,137 @@ def validate_primitive_params(primitive, params):
     return cleaned
 
 
-def _gridfinity_bin_code(c):
-    gx, gy, hu = c["GX"], c["GY"], c["HU"]
-    lines = [
-        "from build123d import *",
-        f"GX, GY, HU = {gx}, {gy}, {hu}",
-        f"WALL = {c['WALL']}",
-        f"BASE_H = {GF_BASE_H}",
-        f"W = GX * {GF_PITCH} - {GF_TOL}",
-        f"D = GY * {GF_PITCH} - {GF_TOL}",
-        f"H = HU * {GF_HU}",
-        f"_outer = extrude(Plane.XY * RectangleRounded(W, D, {GF_CORNER}), amount=H)",
-        "_cw = W - 2 * WALL",
-        "_cd = D - 2 * WALL",
-        f"_cavity = Pos(0, 0, BASE_H) * extrude(Plane.XY * RectangleRounded(_cw, _cd, max(0.5, {GF_CORNER} - WALL)), amount=H - BASE_H + 1)",
-        "result = _outer - _cavity",
-        "# stacking feet: lofted spec taper (true 45 deg chamfers), one per cell",
-        "# profile: (z, width, corner) bottom -> top, mirroring the rebuilt base",
-        "_prof = [(0.0, 35.6, 0.8), (0.8, 37.2, 1.5), (2.6, 37.2, 2.5), (4.75, 41.5, 3.75)]",
-        "for _ix in range(GX):",
-        "    for _iy in range(GY):",
-        f"        _cx = -(GX * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
-        f"        _cy = -(GY * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
-        "        _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]",
-        "        result += loft(Sketch() + _secs, ruled=True)",
-    ]
-    if c["MAGNETS"]:
-        lines += [
-            f"# magnet holes (6x2mm magnets, 26mm grid per cell)",
-            "for _ix in range(GX):",
-            "    for _iy in range(GY):",
-            f"        _cx = -(GX * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
-            f"        _cy = -(GY * {GF_PITCH} - {GF_TOL}) / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
-            f"        for _dx in (-{GF_MAG_D}, {GF_MAG_D}):",
-            f"            for _dy in (-{GF_MAG_D}, {GF_MAG_D}):",
-            f"                result -= Pos(_cx + _dx, _cy + _dy, -0.5) * Cylinder({GF_MAG_R}, 3.1, align=(Align.CENTER, Align.CENTER, Align.MIN))",
-        ]
-    if c["LIP"]:
-        lines += [
-            "# stacking lip: tapered ring above the rim (nests the feet above)",
-            "# outer flares past the walls, inner void mirrors the foot taper",
-            "_lo0 = W - WALL",
-            "_lo1 = W + WALL + 0.6",
-            "_li0 = _cw - 0.2",
-            "_li1 = _cw + 2 * WALL + 0.4",
-            "_lip_outer = loft(Sketch() + [Plane.XY.offset(H) * RectangleRounded(_lo0, _lo0, 3.0), Plane.XY.offset(H + 4.4) * RectangleRounded(_lo1, _lo1, 3.5)], ruled=True)",
-            "_lip_inner = loft(Sketch() + [Plane.XY.offset(H - 0.5) * RectangleRounded(_li0, _li0, 2.5), Plane.XY.offset(H + 4.5) * RectangleRounded(_li1, _li1, 3.0)], ruled=True)",
-            "result += _lip_outer - _lip_inner",
-        ]
-    if c["DX"] or c["DY"]:
-        lines += ["# divider walls"]
-    if c["DX"]:
-        lines += [
-            f"for _i in range(1, {c['DX']} + 1):",
-            f"    _x = -_cw / 2 + _i * _cw / ({c['DX']} + 1)",
-            "    result += Pos(_x, 0, BASE_H) * Box(WALL, _cd, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))",
-        ]
-    if c["DY"]:
-        lines += [
-            f"for _j in range(1, {c['DY']} + 1):",
-            f"    _y = -_cd / 2 + _j * _cd / ({c['DY']} + 1)",
-            "    result += Pos(0, _y, BASE_H) * Box(_cw, WALL, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))",
-        ]
-    if c["SCOOP"]:
-        lines += [
-            "# scoop notch in the front wall",
-            "_nw = min(_cw * 0.6, _cw - 2 * WALL)",
-            "_nh = (H - BASE_H) * 0.45 + 1",
-            "_notch = Pos(-_nw / 2, D / 2 - WALL - 1, H + 1 - _nh) * Box(_nw, WALL + 2, _nh, align=(Align.MIN, Align.MIN, Align.MIN))",
-            "result -= _notch",
-        ]
-    return "\n".join(lines) + "\n"
+# BEGIN BUNDLED OBJECTS
+# Generated by `python3 packaging/bundle.py --write`.
+# Do not edit here; edit objects/*.py instead.
+"""Box predefined object for orcad.
+
+Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
+a self-contained build123d program assigning `result`. No imports allowed
+(single-file bundling constraint) — see packaging/bundle.py.
+"""
+box_SPEC = {'label': 'Box', 'blurb': 'Simple centered block.', 'params': [{'key': 'L', 'label': 'Length', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 300, 'step': 0.5, 'default': 20}, {'key': 'W', 'label': 'Width', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 300, 'step': 0.5, 'default': 20}, {'key': 'H', 'label': 'Height', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 300, 'step': 0.5, 'default': 20}]}
+
+def box_generate(c):
+    return f"from build123d import *\nresult = Box({c['L']}, {c['W']}, {c['H']})\n"
 
 
-def _gridfinity_baseplate_code(c):
-    gx, gy = c["GX"], c["GY"]
-    lines = [
-        "from build123d import *",
-        f"GX, GY = {gx}, {gy}",
-        f"T = {c['T']}",
-        f"W = GX * {GF_PITCH}",
-        f"D = GY * {GF_PITCH}",
-        "result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=T)",
-        "for _ix in range(GX):",
-        "    for _iy in range(GY):",
-        f"        _cx = -W / 2 + {GF_PITCH / 2} + _ix * {GF_PITCH}",
-        f"        _cy = -D / 2 + {GF_PITCH / 2} + _iy * {GF_PITCH}",
-    ]
-    if c["SOCKETS"]:
-        lines += [
-            "        _sock = Pos(_cx, _cy, T - 2.0) * extrude(Plane.XY * RectangleRounded(40.0, 40.0, 3.0), amount=3.0)",
-            "        result -= _sock",
-        ]
-    if c["MAGNETS"]:
-        lines += [
-            f"        result -= Pos(_cx, _cy, T - 4.6) * Cylinder({GF_MAG_R}, 2.8, align=(Align.CENTER, Align.CENTER, Align.MIN))",
-        ]
-    return "\n".join(lines) + "\n"
+"""Bracket-plate predefined object for orcad.
+
+Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
+a self-contained build123d program assigning `result`. No imports allowed
+(single-file bundling constraint) — see packaging/bundle.py.
+"""
+bracket_SPEC = {'label': 'Bracket plate', 'blurb': 'Flat plate with two holes.', 'params': [{'key': 'L', 'label': 'Length', 'unit': 'mm', 'ptype': 'number', 'min': 10, 'max': 300, 'step': 0.5, 'default': 60}, {'key': 'W', 'label': 'Width', 'unit': 'mm', 'ptype': 'number', 'min': 10, 'max': 200, 'step': 0.5, 'default': 30}, {'key': 'T', 'label': 'Thickness', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 50, 'step': 0.5, 'default': 5}, {'key': 'D', 'label': 'Hole dia', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 50, 'step': 0.5, 'default': 5}]}
+
+def bracket_generate(c):
+    return f"from build123d import *\nL, W, T, D = {c['L']}, {c['W']}, {c['T']}, {c['D']}\nplate = Box(L, W, T)\nhole = Cylinder(D / 2, T + 2)\nh1 = Pos(-L / 4, 0, -1) * hole\nh2 = Pos(L / 4, 0, -1) * hole\nresult = plate - h1 - h2\n"
+
+
+"""Cylinder predefined object for orcad.
+
+Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
+a self-contained build123d program assigning `result`. No imports allowed
+(single-file bundling constraint) — see packaging/bundle.py.
+"""
+cylinder_SPEC = {'label': 'Cylinder', 'blurb': 'Round post or puck.', 'params': [{'key': 'R', 'label': 'Radius', 'unit': 'mm', 'ptype': 'number', 'min': 0.5, 'max': 150, 'step': 0.5, 'default': 10}, {'key': 'H', 'label': 'Height', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 300, 'step': 0.5, 'default': 20}]}
+
+def cylinder_generate(c):
+    return f"from build123d import *\nresult = Cylinder({c['R']}, {c['H']})\n"
+
+
+"""Gridfinity Baseplate predefined object for orcad.
+
+Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
+a self-contained build123d program assigning `result`. No imports allowed
+(single-file bundling constraint) — see packaging/bundle.py.
+"""
+gridfinity_baseplate_SPEC = {'label': 'Gridfinity Baseplate', 'blurb': 'Grid the bins snap into, with sockets + magnet holes.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 4}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 4}, {'key': 'T', 'label': 'Thickness', 'unit': 'mm', 'ptype': 'number', 'min': 4.6, 'max': 8, 'step': 0.2, 'default': 5}, {'key': 'SOCKETS', 'label': 'Bin sockets', 'ptype': 'bool', 'default': True}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'ptype': 'bool', 'default': True}]}
+
+def gridfinity_baseplate_generate(c):
+    _pitch, _mag_r = (42.0, 3.25)
+    gx, gy = (c['GX'], c['GY'])
+    lines = ['from build123d import *', f'GX, GY = {gx}, {gy}', f"T = {c['T']}", f'W = GX * {_pitch}', f'D = GY * {_pitch}', 'result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=T)', 'for _ix in range(GX):', '    for _iy in range(GY):', f'        _cx = -W / 2 + {_pitch / 2} + _ix * {_pitch}', f'        _cy = -D / 2 + {_pitch / 2} + _iy * {_pitch}']
+    if c['SOCKETS']:
+        lines += ['        _sock = Pos(_cx, _cy, T - 2.0) * extrude(Plane.XY * RectangleRounded(40.0, 40.0, 3.0), amount=3.0)', '        result -= _sock']
+    if c['MAGNETS']:
+        lines += [f'        result -= Pos(_cx, _cy, T - 4.6) * Cylinder({_mag_r}, 2.8, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+    return '\n'.join(lines) + '\n'
+
+
+"""Gridfinity Bin predefined object for orcad (Rebuilt-style port).
+
+Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
+a self-contained build123d program assigning `result`. No imports allowed
+(single-file bundling constraint) — see packaging/bundle.py.
+
+Geometry: spec-based bin (42mm grid, 7mm height units, 0.5 tolerance) with
+lofted tapered stacking feet (true 45 deg chamfers), a tapered stacking lip
+ring that nests the feet, optional divider walls, front scoop notch and
+6x2mm magnet holes on the 26mm-per-cell grid.
+"""
+gridfinity_bin_SPEC = {'label': 'Gridfinity Bin', 'blurb': 'Rebuilt-style bin: lofted foot, tapered lip, dividers, scoop, magnets.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 2}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 2}, {'key': 'HU', 'label': 'Height', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 12, 'step': 1, 'default': 6}, {'key': 'WALL', 'label': 'Wall', 'unit': 'mm', 'ptype': 'number', 'min': 0.8, 'max': 2.4, 'step': 0.2, 'default': 1.2}, {'key': 'DX', 'label': 'Dividers X', 'unit': '', 'ptype': 'int', 'min': 0, 'max': 4, 'step': 1, 'default': 0}, {'key': 'DY', 'label': 'Dividers Y', 'unit': '', 'ptype': 'int', 'min': 0, 'max': 4, 'step': 1, 'default': 0}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'ptype': 'bool', 'default': True}, {'key': 'LIP', 'label': 'Stacking lip', 'ptype': 'bool', 'default': True}, {'key': 'SCOOP', 'label': 'Scoop notch (front)', 'ptype': 'bool', 'default': False}]}
+
+def gridfinity_bin_generate(c):
+    _pitch, _tol, _hu = (42.0, 0.5, 7.0)
+    _corner, _base_h = (3.75, 4.75)
+    _mag_r, _mag_d = (3.25, 13.0)
+    gx, gy, hu = (c['GX'], c['GY'], c['HU'])
+    lines = ['from build123d import *', f'GX, GY, HU = {gx}, {gy}, {hu}', f"WALL = {c['WALL']}", f'BASE_H = {_base_h}', f'W = GX * {_pitch} - {_tol}', f'D = GY * {_pitch} - {_tol}', f'H = HU * {_hu}', '# body: rounded walls, open top', f'_outer = extrude(Plane.XY * RectangleRounded(W, D, {_corner}), amount=H)', '_cw = W - 2 * WALL', '_cd = D - 2 * WALL', f'_cavity = Pos(0, 0, BASE_H) * extrude(Plane.XY * RectangleRounded(_cw, _cd, max(0.5, {_corner} - WALL)), amount=H - BASE_H + 1)', 'result = _outer - _cavity', '# stacking feet: lofted spec taper (true 45 deg chamfers), one per cell', '# profile: (z, width, corner) bottom -> top, mirroring the rebuilt base', '_prof = [(0.0, 35.6, 0.8), (0.8, 37.2, 1.5), (2.6, 37.2, 2.5), (4.75, 41.5, 3.75)]', 'for _ix in range(GX):', '    for _iy in range(GY):', f'        _cx = -(GX * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _ix * {_pitch}', f'        _cy = -(GY * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _iy * {_pitch}', '        _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]', '        result += loft(Sketch() + _secs, ruled=True)']
+    if c['MAGNETS']:
+        lines += ['# magnet holes (6x2mm magnets, 26mm grid per cell)', 'for _ix in range(GX):', '    for _iy in range(GY):', f'        _cx = -(GX * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _ix * {_pitch}', f'        _cy = -(GY * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _iy * {_pitch}', f'        for _dx in (-{_mag_d}, {_mag_d}):', f'            for _dy in (-{_mag_d}, {_mag_d}):', f'                result -= Pos(_cx + _dx, _cy + _dy, -0.5) * Cylinder({_mag_r}, 3.1, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+    if c['LIP']:
+        lines += ['# stacking lip: tapered ring above the rim (nests the feet above)', '# outer flares past the walls, inner void mirrors the foot taper', '_lo0 = W - WALL', '_lo1 = W + WALL + 0.6', '_li0 = _cw - 0.2', '_li1 = _cw + 2 * WALL + 0.4', '_lip_outer = loft(Sketch() + [Plane.XY.offset(H) * RectangleRounded(_lo0, _lo0, 3.0), Plane.XY.offset(H + 4.4) * RectangleRounded(_lo1, _lo1, 3.5)], ruled=True)', '_lip_inner = loft(Sketch() + [Plane.XY.offset(H - 0.5) * RectangleRounded(_li0, _li0, 2.5), Plane.XY.offset(H + 4.5) * RectangleRounded(_li1, _li1, 3.0)], ruled=True)', 'result += _lip_outer - _lip_inner']
+    if c['DX'] or c['DY']:
+        lines += ['# divider walls']
+    if c['DX']:
+        lines += [f"for _i in range(1, {c['DX']} + 1):", f"    _x = -_cw / 2 + _i * _cw / ({c['DX']} + 1)", '    result += Pos(_x, 0, BASE_H) * Box(WALL, _cd, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+    if c['DY']:
+        lines += [f"for _j in range(1, {c['DY']} + 1):", f"    _y = -_cd / 2 + _j * _cd / ({c['DY']} + 1)", '    result += Pos(0, _y, BASE_H) * Box(_cw, WALL, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+    if c['SCOOP']:
+        lines += ['# scoop notch in the front wall', '_nw = min(_cw * 0.6, _cw - 2 * WALL)', '_nh = (H - BASE_H) * 0.45 + 1', '_notch = Pos(-_nw / 2, D / 2 - WALL - 1, H + 1 - _nh) * Box(_nw, WALL + 2, _nh, align=(Align.MIN, Align.MIN, Align.MIN))', 'result -= _notch']
+    return '\n'.join(lines) + '\n'
+
+
+"""Tube predefined object for orcad.
+
+Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
+a self-contained build123d program assigning `result`. No imports allowed
+(single-file bundling constraint) — see packaging/bundle.py.
+"""
+tube_SPEC = {'label': 'Tube', 'blurb': 'Hollow cylinder.', 'params': [{'key': 'R_OUT', 'label': 'Outer radius', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 150, 'step': 0.5, 'default': 12}, {'key': 'R_IN', 'label': 'Inner radius', 'unit': 'mm', 'ptype': 'number', 'min': 0.5, 'max': 149, 'step': 0.5, 'default': 8}, {'key': 'H', 'label': 'Height', 'unit': 'mm', 'ptype': 'number', 'min': 1, 'max': 300, 'step': 0.5, 'default': 25}]}
+
+def tube_generate(c):
+    return f"from build123d import *\nresult = Cylinder({c['R_OUT']}, {c['H']}) - Cylinder({c['R_IN']}, {c['H']} + 2)\n"
+
+
+PRIMITIVES = {
+    "box": box_SPEC,
+    "bracket": bracket_SPEC,
+    "cylinder": cylinder_SPEC,
+    "gridfinity_baseplate": gridfinity_baseplate_SPEC,
+    "gridfinity_bin": gridfinity_bin_SPEC,
+    "tube": tube_SPEC,
+}
 
 
 def generate_primitive_code(primitive, params):
     """Return build123d algebra-mode code string assigning `result`."""
     c = validate_primitive_params(primitive, params)
-    if primitive == "box":
-        return f"from build123d import *\nresult = Box({c['L']}, {c['W']}, {c['H']})\n"
-    if primitive == "cylinder":
-        return f"from build123d import *\nresult = Cylinder({c['R']}, {c['H']})\n"
-    if primitive == "tube":
-        return (
-            "from build123d import *\n"
-            f"result = Cylinder({c['R_OUT']}, {c['H']}) - Cylinder({c['R_IN']}, {c['H']} + 2)\n"
-        )
-    if primitive == "bracket":
-        return (
-            "from build123d import *\n"
-            f"L, W, T, D = {c['L']}, {c['W']}, {c['T']}, {c['D']}\n"
-            "plate = Box(L, W, T)\n"
-            "hole = Cylinder(D / 2, T + 2)\n"
-            "h1 = Pos(-L / 4, 0, -1) * hole\n"
-            "h2 = Pos(L / 4, 0, -1) * hole\n"
-            "result = plate - h1 - h2\n"
-        )
-    if primitive == "gridfinity_bin":
-        return _gridfinity_bin_code(c)
-    if primitive == "gridfinity_baseplate":
-        return _gridfinity_baseplate_code(c)
-    raise ValueError(f"unknown object {primitive!r}")
+    try:
+        fn = {
+        "box": box_generate,
+        "bracket": bracket_generate,
+        "cylinder": cylinder_generate,
+        "gridfinity_baseplate": gridfinity_baseplate_generate,
+        "gridfinity_bin": gridfinity_bin_generate,
+        "tube": tube_generate,
+        }[primitive]
+    except KeyError:
+        raise ValueError(f"unknown object {primitive!r}")
+    return fn(c)
+
+# END BUNDLED OBJECTS
 
 
 def _defaults(primitive):

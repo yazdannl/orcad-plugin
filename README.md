@@ -15,7 +15,12 @@ automatic textarea fallback, so the tab works with or without network.
 ## Files
 
 - `orcad.py` — THE plugin. Single file, PEP 723, ready to upload to
-  Plugin Hub or copy into `data_dir()/orca_plugins/orcad/`.
+  Plugin Hub or copy into `data_dir()/orca_plugins/orcad/`. The objects
+  section is generated — do not edit it by hand.
+- `objects/<name>.py` — one file per predefined object (`SPEC` + `generate`);
+  source of truth for all parametric objects.
+- `packaging/bundle.py` — inlines `objects/` into `orcad.py`
+  (`--write` to regenerate, `--check` to verify; tests enforce sync).
 - `tests/test_plugin.py` — pure-logic tests, run without Orca/build123d.
 - `README.md`, `CHANGELOG.md`
 

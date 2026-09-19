@@ -325,3 +325,33 @@ def test_open_with_default_app_failure():
     from unittest.mock import MagicMock
     with mock.patch.object(mod.subprocess, "Popen", return_value=MagicMock()):
         mod._open_with_default_app("/tmp/x.stl")  # must not raise
+
+
+def _load_source_module(name, path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_objects_live_in_their_own_files():
+    expected = ["box", "bracket", "cylinder", "gridfinity_baseplate",
+                "gridfinity_bin", "tube"]
+    assert sorted(p.stem for p in (ROOT / "objects").glob("*.py")
+                  if p.name != "__init__.py") == expected
+    for name in expected:
+        obj = _load_source_module(f"objects_{name}", ROOT / "objects" / f"{name}.py")
+        assert isinstance(obj.SPEC.get("params"), list)
+        defaults = {p["key"]: p["default"] for p in obj.SPEC["params"]}
+        ast.parse(obj.generate(defaults))
+    registry = None
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    import objects as registry
+    assert sorted(registry.OBJECTS) == expected
+
+
+def test_bundle_in_sync():
+    bundle = _load_source_module("bundle", ROOT / "packaging" / "bundle.py")
+    assert bundle.check(), "orcad.py out of sync — run python3 packaging/bundle.py --write"
