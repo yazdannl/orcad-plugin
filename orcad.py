@@ -933,8 +933,70 @@ def _build_code_from_msg(msg, cmd):
     return code, stem
 
 
+class _CadJobScheduler:
+    """Run one CAD job at a time, keeping only the newest pending preview."""
+
+    def __init__(self):
+        self._condition = threading.Condition()
+        self._preview = None
+        self._exports = []
+        self._pending_keys = set()
+        self._active_key = None
+        self._worker = None
+
+    def _start_worker_locked(self):
+        if self._worker is None or not self._worker.is_alive():
+            self._worker = threading.Thread(
+                target=self._run, name="orcad-cad", daemon=True)
+            self._worker.start()
+
+    def submit_preview(self, work):
+        with self._condition:
+            self._preview = work
+            self._start_worker_locked()
+            self._condition.notify()
+
+    def submit_export(self, key, work):
+        with self._condition:
+            if key == self._active_key or key in self._pending_keys:
+                return False
+            self._exports.append((key, work))
+            self._pending_keys.add(key)
+            self._start_worker_locked()
+            self._condition.notify()
+            return True
+
+    def _run(self):
+        while True:
+            with self._condition:
+                while self._preview is None and not self._exports:
+                    self._condition.wait()
+                if self._exports:
+                    key, work = self._exports.pop(0)
+                    self._pending_keys.remove(key)
+                    self._active_key = key
+                else:
+                    key, work = None, self._preview
+                    self._preview = None
+                    if work is None:
+                        continue
+            try:
+                work()
+            finally:
+                with self._condition:
+                    self._active_key = None
+
+
+def _cad_scheduler(capability):
+    scheduler = getattr(capability, "_orcad_cad_scheduler", None)
+    if scheduler is None:
+        scheduler = _CadJobScheduler()
+        capability._orcad_cad_scheduler = scheduler
+    return scheduler
+
+
 def _handle_message_sync(capability, msg):
-    """Route one JS message; heavy work runs in a worker thread."""
+    """Route one JS message; CAD work is serialized by one worker."""
     if not isinstance(msg, dict):
         return {"type": "error", "ok": False, "error": "message must be an object"}
     cmd = msg.get("command")
@@ -970,7 +1032,9 @@ def _handle_message_sync(capability, msg):
             except Exception as exc:
                 capability.post_message({"type": "error", "ok": False, "error": str(exc)[:4000]})
 
-        threading.Thread(target=_work, name="orcad-export", daemon=True).start()
+        key = ("export", code, export_format, tolerance, stem)
+        if not _cad_scheduler(capability).submit_export(key, _work):
+            return {"type": "progress", "message": "Already running or queued…", "duplicate": True}
         return {"type": "progress", "message": "Started…"}
     if cmd == "preview":
         # Live preview: run CAD, post mesh, export nothing. Stale requests
@@ -997,7 +1061,7 @@ def _handle_message_sync(capability, msg):
                 capability.post_message({"type": "preview", "ok": False, "seq": seq,
                                          "error": str(exc)[:2000]})
 
-        threading.Thread(target=_work, name="orcad-preview", daemon=True).start()
+        _cad_scheduler(capability).submit_preview(_work)
         return None
     if cmd == "plate":
         # Send to plate: export STL, then open it with the OS default app so
@@ -1022,7 +1086,9 @@ def _handle_message_sync(capability, msg):
                 capability.post_message({"type": "plate_result", "ok": False,
                                          "error": str(exc)[:4000]})
 
-        threading.Thread(target=_work, name="orcad-plate", daemon=True).start()
+        key = ("plate", code, tolerance, stem)
+        if not _cad_scheduler(capability).submit_export(key, _work):
+            return {"type": "progress", "message": "Already running or queued…", "duplicate": True}
         return {"type": "progress", "message": "Started…"}
     return {"type": "error", "ok": False, "error": f"unknown command {cmd!r}"}
 

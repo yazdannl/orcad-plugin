@@ -245,6 +245,36 @@ def test_code_command_is_sync_codegen():
     assert res["type"] == "code" and res["ok"] is False
 
 
+def test_cad_scheduler_coalesces_and_prioritizes_exports():
+    import threading
+
+    scheduler = mod._CadJobScheduler()
+    events = []
+    first_started = threading.Event()
+    release_first = threading.Event()
+    finished = threading.Event()
+
+    def first_preview():
+        events.append("preview-1")
+        first_started.set()
+        assert release_first.wait(2)
+
+    def last_preview():
+        events.append("preview-3")
+        finished.set()
+
+    assert scheduler.submit_preview(first_preview) is None
+    assert first_started.wait(2)
+    scheduler.submit_preview(lambda: events.append("preview-2"))
+    scheduler.submit_preview(last_preview)
+    assert scheduler.submit_export(("export", "box"), lambda: events.append("export"))
+    assert not scheduler.submit_export(("export", "box"), lambda: events.append("duplicate"))
+
+    release_first.set()
+    assert finished.wait(2)
+    assert events == ["preview-1", "export", "preview-3"]
+
+
 def test_preview_message_routing():
     import time
 
