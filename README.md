@@ -14,30 +14,36 @@ magnet / screw holes with crush ribs, chamfers and supportless tops,
 corner-only holes, thumbscrew holes, stacking lip — verified feature by
 feature against OpenSCAD-rendered reference STLs (see `verify/`).
 
-The UI is a compact inline app (no CSS framework dependency) designed for
-Orca's embedded WebView. Three.js is the only page dependency; the editor is
-a native textarea and the layout remains usable without external stylesheets.
+The UI is a compact local Vue app with Tailwind CSS and a bundled Three.js
+runtime. `frontend/dist/index.html` is self-contained: Orca loads it from the
+plugin folder, so end users need no Node.js, CDN, or network access.
 
 ## Files
 
-- `orcad.py` — THE plugin. Single file, PEP 723, ready to upload to
-  Plugin Hub or copy into `data_dir()/orca_plugins/orcad/`. The objects
-  section is generated — do not edit it by hand.
+- `orcad.py` — plugin entry point. It loads the compiled frontend beside it;
+  keep `frontend/dist/index.html` next to it when installing.
+- `frontend/src/` — Vue/Tailwind source.
+- `frontend/dist/index.html` — compiled, self-contained frontend artifact.
+  Build it with `cd frontend && npm ci && npm run build`; Node is needed only
+  by contributors, never by plugin users.
 - `objects/<name>.py` — one RUNNABLE build123d program per predefined object.
   Parameter variables carry `# spec:` comments that declare the UI
   (e.g. `WALL = 1.2  # spec: number label=Wall unit=mm min=0.8 max=2.4 step=0.2`).
   Never import these (they execute CAD on import); the spec is extracted
   textually by the bundler.
-- `packaging/bundle.py` — inlines `objects/` into `orcad.py`
-  (`--write` to regenerate, `--check` to verify; tests enforce sync).
+- `packaging/bundle.py` — inlines `objects/` into `orcad.py` and keeps the
+  frontend parameter spec in sync (`--write` to regenerate, `--check` to verify;
+  tests enforce sync).
 - `tests/test_plugin.py` — pure-logic tests, run without Orca/build123d.
 - `README.md`, `CHANGELOG.md`
 
 ## Manual test (you do this in Orca)
 
 1. Use latest OrcaSlicer **Nightly** (Pages API = `main` branch; Stable 2.4.2 has no `orca.pages`).
-2. Copy `orcad.py` to `<Orca data dir>/orca_plugins/orcad/orcad.py`
-   (create the `orcad` folder). Or Plugins dialog → Install local plugin → pick the file.
+2. Copy `orcad.py` and the `frontend/` folder to
+   `<Orca data dir>/orca_plugins/orcad/` (the compiled
+   `frontend/dist/index.html` is required). Install the plugin folder/package
+   rather than only the Python file.
 3. Restart OrcaSlicer. Plugins dialog should list **orcad 0.7.0** with capability **orcad** (type Pages). Enable it.
 4. An **orcad** tab appears in the top tab bar. Open it: left side switches between
    **Objects** (filterable model list, Gridfinity Bin preselected, live preview as
@@ -58,9 +64,10 @@ First run installs `build123d+numpy` via bundled `uv` — slow (100s of MB OCP w
 
 ## Plugin Hub publish
 
-OrcaCloud → Plugin Hub → Create listing → upload `orcad.py`,
-thumbnail screenshot of CAD tab, tags (`cad`, `build123d`, `parametric`),
-OS = all, compatible Orca = Nightly/>2.4.2, description + changelog from CHANGELOG.md.
+OrcaCloud → Plugin Hub → Create listing → upload the plugin package
+(`orcad.py` plus `frontend/dist/index.html`), thumbnail screenshot of CAD tab,
+tags (`cad`, `build123d`, `parametric`), OS = all, compatible Orca =
+Nightly/>2.4.2, description + changelog from CHANGELOG.md.
 
 ## Limits (v0.7, honest)
 

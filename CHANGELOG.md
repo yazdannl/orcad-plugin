@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Local Vue frontend
+
+- Moved the UI into `frontend/src` as a Vue + Tailwind app and committed the
+  self-contained `frontend/dist/index.html` build artifact.
+- `orcad.py` now loads the compiled asset beside the plugin; Node is needed
+  only to rebuild it, not to run the plugin.
+
 ## Unreleased — Compact Three.js UI
 
 - Replaced the broken canvas/OrbitControls preview with a reliable Three.js

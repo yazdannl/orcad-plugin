@@ -1,0 +1,45 @@
+@import 'tailwindcss';
+
+:root {
+  color-scheme: light dark;
+  --bg: var(--orca-bg, #101318);
+  --panel: var(--orca-bg, #181c23);
+  --panel2: var(--orca-bg, #20252e);
+  --fg: var(--orca-fg, #eef1f5);
+  --muted: var(--orca-muted, #8c96a4);
+  --line: var(--orca-border, #303744);
+  --accent: var(--orca-accent, #28c2ad);
+  --accent-fg: var(--orca-accent-fg, #062b27);
+  --danger: #f06a72;
+  font-family: var(--orca-font, system-ui, -apple-system, 'Segoe UI', sans-serif);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: var(--orca-bg, #f3f5f8);
+    --panel: var(--orca-bg, #fff);
+    --panel2: var(--orca-bg, #e9edf2);
+    --fg: var(--orca-fg, #20252c);
+    --muted: var(--orca-muted, #697482);
+    --line: var(--orca-border, #d9dee6);
+    --accent: var(--orca-accent, #087e6e);
+    --accent-fg: #fff;
+  }
+}
+
+html, body, #app { min-height: 100%; margin: 0; }
+body { background: var(--bg); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; }
+button { cursor: pointer; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.control { border: 1px solid var(--line); border-radius: .45rem; background: var(--bg); color: var(--fg); padding: .35rem .5rem; }
+.btn { border: 1px solid var(--line); border-radius: .45rem; background: transparent; color: var(--fg); padding: .35rem .6rem; font-weight: 600; }
+.btn:hover { border-color: var(--accent); }
+.btn-primary { border-color: var(--accent); background: var(--accent); color: var(--accent-fg); }
+.btn-small { padding: .25rem .5rem; font-size: .75rem; }
+.tab { border: 0; border-radius: .4rem; background: transparent; color: var(--muted); padding: .4rem; font-weight: 650; }
+.tab.active { background: var(--accent); color: var(--accent-fg); }
+.eyebrow { display: block; color: var(--muted); font-size: .68rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+input[type='range'] { accent-color: var(--accent); }
+.viewer canvas { display: block; width: 100%; height: 100%; cursor: grab; }

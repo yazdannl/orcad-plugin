@@ -1,4 +1,4 @@
-"""Unit tests for orcad v0.6 — run WITHOUT OrcaSlicer or build123d installed.
+"""Unit tests for orcad — run WITHOUT OrcaSlicer or build123d installed.
 
 Covers pure logic in orcad.py: param validation (number/int/bool), object
 programs (spec extraction, value baking), live-preview + plate routing,
@@ -12,9 +12,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "orcad.py"
-
-ALLOWED_CDN_HOSTS = ("cdn.jsdelivr.net",)  # Three.js only; CSS and UI are inline
-
 
 def load_plugin():
     # orca is absent here -> plugin sets orca=None and skips capability classes.
@@ -160,45 +157,22 @@ def test_preview_helper_fails_soft_without_build123d():
 
 def test_page_html_contract():
     html = mod.PAGE_HTML
-    # bridge + theming (inline, no framework)
-    for needle in ("window.orca.postMessage", "window.orca.onMessage", "--orca-bg"):
+    assert mod.PAGE_ASSET.is_file()
+    for needle in ("window.orca.postMessage", "window.orca?.onMessage", "--orca-bg"):
         assert needle in html, f"PAGE_HTML missing {needle!r}"
     assert "bootstrap" not in html.lower(), "must not depend on Bootstrap CDN"
-    assert 'id="code"' in html and 'id="codePane"' in html
-    assert "Three.js" in html or "three@0.160.0" in html
-    # left tabs: objects <-> editor switch
-    for needle in ("objectsTab", "codeTab", "objectsPane", "codePane",
-                   "setMode", "runCode"):
-        assert needle in html, f"PAGE_HTML missing left-tab {needle!r}"
-    # searchable objects dropdown
-    for needle in ("objectSearch", "objectSelect", "renderObjectList", "renderParams"):
-        assert needle in html, f"PAGE_HTML missing dropdown {needle!r}"
-    # every Python object + example key must exist in the page JS (parity)
+    assert '<div id="app"></div>' in html
+    assert "Vue" in html and "Three.js" in html and ".min-h-screen" in html
+    for needle in ("Objects", "Code", "objectSearch", "plate_result", "Run / export",
+                   "Wireframe", "Spin", "Send to plate", "drag to rotate"):
+        assert needle in html, f"PAGE_HTML missing frontend feature {needle!r}"
     for key in mod.PRIMITIVES:
-        assert key in html, f"object {key} missing from page"
+        assert key in html, f"object {key} missing from frontend"
     for key in mod.EXAMPLES:
-        assert key in html, f"example {key} missing from page"
-    # always-on preview pane
-    for needle in ('id="pv3d"', "three@0.160.0", "applyPreview", "resizeViewer", "Wireframe", "Spin"):
-        assert needle in html, f"PAGE_HTML missing preview {needle!r}"
-    # result/log plumbing kept
-    for needle in ('id="result"', 'id="log"', 'id="fmt"', 'id="tol"'):
-        assert needle in html
-    # live preview wiring (debounced, seq-guarded, export-free)
-    for needle in ("schedulePreview", "currentPayload", "S.seq", "preview"):
-        assert needle in html, f"PAGE_HTML missing live-preview {needle!r}"
-    # send-to-plate wiring
-    for needle in ('id="plateBtn"', "sendPlate", "plate_result", "Send to plate"):
-        assert needle in html, f"PAGE_HTML missing plate {needle!r}"
-    # editor mirror wiring (code section follows the selected object)
-    for needle in ("sendCode", "command:'code'", "d.type==='code'"):
-        assert needle in html, f"PAGE_HTML missing editor-mirror {needle!r}"
-    # only allowlisted CDNs; everything else self-contained
-    for url in re.findall(r'https://[^"\'\s<>]+', html):
-        host = url.split("/")[2]
-        assert host in ALLOWED_CDN_HOSTS, f"unexpected external URL {url!r}"
-    assert len(html) < 200_000, f"PAGE_HTML too large: {len(html)}"
-
+        assert key in html, f"example {key} missing from frontend"
+    assert "vite" not in html.lower(), "build tooling must not ship in the page"
+    assert not re.search(r'<(?:script|link)[^>]+https?://', html), "frontend must not load network assets"
+    assert len(html) < 700_000, f"compiled frontend too large: {len(html)}"
 
 def test_filenames():
     assert mod.sanitize_stem("../../etc/passwd") == "etc_passwd"

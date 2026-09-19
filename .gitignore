@@ -1,7 +1,10 @@
 __pycache__/
+node_modules/
 .pytest_cache/
 *.pyc
 exports/
 dist/
+!frontend/dist/
+!frontend/dist/**
 .venv/
 .verify-cache/

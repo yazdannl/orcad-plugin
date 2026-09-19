@@ -9,16 +9,18 @@ carry `# spec:` comments, e.g.::
     LIP = True  # spec: bool label=Stacking lip
 
 This script extracts the UI spec from those variables, bakes per-object
-SPEC + TEMPLATE + the JS PRIMS block into orcad.py, and smoke-tests every
-object (defaults + min/max extremes must stay valid python).
+SPEC + TEMPLATE data into orcad.py, and smoke-tests every object (defaults +
+min/max extremes must stay valid python). The compiled frontend is built
+separately with `cd frontend && npm run build`.
 
 Single source of truth: objects/*.py. Never edit the generated regions.
 
 Usage:
-    python3 packaging/bundle.py --write   # regenerate orcad.py regions
+    python3 packaging/bundle.py --write   # regenerate Python + frontend spec regions
     python3 packaging/bundle.py --check   # exit 1 when out of sync (tests)
 """
 import ast
+import json
 import re
 import sys
 from pathlib import Path
@@ -26,11 +28,11 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 OBJDIR = ROOT / "objects"
 TARGET = ROOT / "orcad.py"
+FRONTEND_TARGET = ROOT / "frontend" / "src" / "primitives.js"
 PY_BEGIN = "# BEGIN BUNDLED OBJECTS"
 PY_END = "# END BUNDLED OBJECTS"
-JS_BEGIN = "/* BEGIN OBJECTS SPEC */"
-JS_END = "/* END OBJECTS SPEC */"
-
+FRONTEND_BEGIN = "/* BEGIN GENERATED PRIMS */"
+FRONTEND_END = "/* END GENERATED PRIMS */"
 SPEC_LINE_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^#\n]*#\s*spec\s*:\s*(.+)$"
 )
@@ -150,10 +152,6 @@ def smoke_object(parsed):
             ast.parse(bake_template(parsed["source"], trial))
 
 
-def _js_str(value):
-    return "'" + str(value).replace("\\", "\\\\").replace("'", "\\'") + "'"
-
-
 def build_py_region(objects):
     chunks = []
     for obj in objects:
@@ -180,24 +178,6 @@ def build_py_region(objects):
     )
 
 
-def build_js_block(objects):
-    entries = []
-    for obj in objects:
-        rendered = []
-        for p in obj["params"]:
-            if p["ptype"] == "bool":
-                rendered.append(f"[{_js_str(p['key'])},{_js_str(p['label'])},"
-                                f"{_js_str(p['unit'])},'bool',{1 if p['default'] else 0}]")
-            else:
-                default = p["default"]
-                rendered.append(f"[{_js_str(p['key'])},{_js_str(p['label'])},"
-                                f"{_js_str(p['unit'])},'{p['ptype']}',{default},"
-                                f"{p['min']},{p['max']},{p['step']}]")
-        entries.append(f" {obj['name']}:{{label:{_js_str(obj['label'])},"
-                       f"blurb:{_js_str(obj['blurb'])},params:[{','.join(rendered)}]}}")
-    return "var PRIMS={\n" + ",\n".join(entries) + "\n};"
-
-
 def _load_objects():
     objects = []
     for path in sorted(OBJDIR.glob("*.py")):
@@ -218,26 +198,50 @@ def _replace_region(text, begin, end, fresh):
     return "".join(lines[:bi + 1]) + fresh + "\n" + "".join(lines[ei:])
 
 
+def build_frontend_region(objects):
+    specs = {}
+    for obj in objects:
+        params = []
+        for p in obj["params"]:
+            if p["ptype"] == "bool":
+                params.append([p["key"], p["label"], p["unit"], "bool", p["default"]])
+            else:
+                params.append([p["key"], p["label"], p["unit"], p["ptype"], p["default"],
+                               p["min"], p["max"], p["step"]])
+        specs[obj["name"]] = {"label": obj["label"], "blurb": obj["blurb"], "params": params}
+    return "export const PRIMS = " + json.dumps(specs, separators=(",", ":")) + ";"
+
+
 def build_target():
     objects = _load_objects()
     text = TARGET.read_text(encoding="utf-8")
-    text = _replace_region(text, PY_BEGIN, PY_END, build_py_region(objects))
-    text = _replace_region(text, JS_BEGIN, JS_END, build_js_block(objects))
-    return text
+    return _replace_region(text, PY_BEGIN, PY_END, build_py_region(objects))
+
+
+def build_frontend_target():
+    objects = _load_objects()
+    text = FRONTEND_TARGET.read_text(encoding="utf-8")
+    return _replace_region(text, FRONTEND_BEGIN, FRONTEND_END, build_frontend_region(objects))
 
 
 def check():
-    return TARGET.read_text(encoding="utf-8") == build_target()
+    return (TARGET.read_text(encoding="utf-8") == build_target()
+            and FRONTEND_TARGET.read_text(encoding="utf-8") == build_frontend_target())
 
 
 def write():
-    TARGET.write_text(build_target(), encoding="utf-8")
+    objects = _load_objects()
+    TARGET.write_text(_replace_region(TARGET.read_text(encoding="utf-8"),
+                                      PY_BEGIN, PY_END, build_py_region(objects)), encoding="utf-8")
+    FRONTEND_TARGET.write_text(_replace_region(FRONTEND_TARGET.read_text(encoding="utf-8"),
+                                               FRONTEND_BEGIN, FRONTEND_END,
+                                               build_frontend_region(objects)), encoding="utf-8")
 
 
 if __name__ == "__main__":
     if "--write" in sys.argv:
         write()
-        print("bundled objects into orcad.py")
+        print("bundled objects into orcad.py and frontend/src/primitives.js")
     elif "--check" in sys.argv:
         sys.exit(0 if check() else 1)
     else:
