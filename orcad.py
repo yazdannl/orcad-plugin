@@ -245,6 +245,7 @@ DISTX = 0  # spec: number label=Minimum X unit=mm min=0 max=300 step=1
 DISTY = 0  # spec: number label=Minimum Y unit=mm min=0 max=300 step=1
 FITX = 0  # spec: number label=Fit X min=-1 max=1 step=0.1
 FITY = 0  # spec: number label=Fit Y min=-1 max=1 step=0.1
+# FITX: -1=left, 0=center, 1=right; FITY: -1=bottom, 0=center, 1=top.
 SCREW_D = 3.35  # spec: number label=Screw diameter unit=mm min=2 max=5 step=0.05
 SCREW_HEAD = 5  # spec: number label=Screw head diameter unit=mm min=3 max=8 step=0.1
 SCREW_SPACING = 0.5  # spec: number label=Screw spacing unit=mm min=0 max=2 step=0.1
@@ -261,8 +262,9 @@ CORNERS = False  # spec: bool label=Holes only at corners
 # Slab footprint: cells tile at the 42mm pitch (BASEPLATE_DIMENSIONS, gridfinity-baseplate.scad:19).
 _W0, _D0 = GX * 42.0, GY * 42.0
 W, D = max(_W0, DISTX), max(_D0, DISTY)
-_PX = (W - _W0) * (FITX / 2 + 0.5)
-_PY = (D - _D0) * (FITY / 2 + 0.5)
+# Shift the cell grid within the slab; FIT=0 keeps equal margins.
+_PX = (W - _W0) * FITX / 2
+_PY = (D - _D0) * FITY / 2
 _EXTRA = 6.4 if STYLE == 1 else (1.0 if STYLE == 2 else (6.75 if STYLE in (3, 4) else 0.0))
 _PT = T + _EXTRA
 result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=_PT)
