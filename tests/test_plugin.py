@@ -1,8 +1,8 @@
-"""Unit tests for orcad v0.3 — run WITHOUT OrcaSlicer or build123d installed.
+"""Unit tests for orcad v0.4 — run WITHOUT OrcaSlicer or build123d installed.
 
 Covers pure logic in orcad.py: param validation (number/int/bool),
-codegen incl. Gridfinity, filename hygiene, examples syntax, preview helper,
-PAGE_HTML bridge contract (self-contained CSS, Monaco only CDN).
+codegen incl. Gridfinity, live-preview + plate routing, filename hygiene,
+examples syntax, preview helper, PAGE_HTML bridge contract.
 """
 import ast
 import importlib.util
@@ -33,7 +33,7 @@ def test_metadata_block():
     assert "# /// script" in text
     assert 'dependencies = ["build123d", "numpy"]' in text
     assert 'name = "orcad"' in text
-    assert 'version = "0.3.0"' in text
+    assert 'version = "0.4.0"' in text
 
 
 def test_primitives_codegen_ok():
@@ -152,6 +152,12 @@ def test_page_html_contract():
     # result/log plumbing kept
     for needle in ('id="result"', 'id="log"', 'id="fmt"', 'id="tol"'):
         assert needle in html
+    # live preview wiring (debounced, seq-guarded, export-free)
+    for needle in ("schedulePreview", "currentPayload", "PVSEQ", "preview"):
+        assert needle in html, f"PAGE_HTML missing live-preview {needle!r}"
+    # send-to-plate wiring
+    for needle in ('id="plateBtn"', "sendPlate", "plate_result", "Send to plate"):
+        assert needle in html, f"PAGE_HTML missing plate {needle!r}"
     # only allowlisted CDNs; everything else self-contained
     for url in re.findall(r'https://[^"\'\s<>]+', html):
         host = url.split("/")[2]
@@ -176,3 +182,113 @@ def test_runner_rejects_bad_input_without_build123d():
         raise AssertionError("expected ValueError for oversize code")
     except ValueError:
         pass
+    try:
+        mod.preview_shape("x" * 300_000)
+        raise AssertionError("expected ValueError for oversize preview code")
+    except ValueError:
+        pass
+    try:
+        mod.preview_shape("result = 1", tolerance=99)
+        raise AssertionError("expected ValueError for bad preview tolerance")
+    except ValueError:
+        pass
+
+
+def test_preview_reports_missing_build123d():
+    try:
+        mod.preview_shape("result = Box(1, 1, 1)")
+        raise AssertionError("expected RuntimeError without build123d")
+    except RuntimeError as exc:
+        assert "build123d is not installed" in str(exc)
+
+
+def test_preview_message_routing():
+    import time
+
+    class FakeCap:
+        def __init__(self):
+            self.posts = []
+
+        def post_message(self, d):
+            self.posts.append(d)
+
+    # sync validation error -> immediate preview error, no thread
+    cap = FakeCap()
+    res = mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
+                                         "primitive": "nope", "params": {}})
+    assert res["type"] == "preview" and res["ok"] is False
+    assert cap.posts == []
+    # async path -> worker posts preview error (no build123d here)
+    cap = FakeCap()
+    assert mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
+                                          "primitive": "box",
+                                          "params": {"L": 1, "W": 1, "H": 1},
+                                          "seq": 7}) is None
+    deadline = time.time() + 5
+    while time.time() < deadline and not cap.posts:
+        time.sleep(0.05)
+    assert cap.posts and cap.posts[-1]["type"] == "preview"
+    assert cap.posts[-1].get("seq") == 7
+    # stale seq -> worker stays silent (preview gated until seq moves on)
+    import threading as _th
+    from unittest import mock as _mock
+    gate = _th.Event()
+
+    def slow_preview(code, tolerance=0.001):
+        assert gate.wait(5)
+        return {"ok": True, "var": "result", "stats": {}, "preview": None}
+
+    cap = FakeCap()
+    with _mock.patch.object(mod, "preview_shape", side_effect=slow_preview):
+        mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
+                                       "primitive": "box",
+                                       "params": {"L": 1, "W": 1, "H": 1}, "seq": 1})
+        mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
+                                       "primitive": "box",
+                                       "params": {"L": 2, "W": 2, "H": 2}, "seq": 2})
+        gate.set()
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            if any(p.get("type") == "preview" for p in cap.posts):
+                break
+            time.sleep(0.05)
+    seqs = [p.get("seq") for p in cap.posts if p.get("type") == "preview"]
+    assert seqs == [2], seqs
+
+
+def test_plate_message_routing():
+    import time
+
+    class FakeCap:
+        def __init__(self):
+            self.posts = []
+
+        def post_message(self, d):
+            self.posts.append(d)
+
+    cap = FakeCap()
+    ack = mod._handle_message_sync(cap, {"command": "plate", "kind": "generate",
+                                         "primitive": "box",
+                                         "params": {"L": 1, "W": 1, "H": 1}})
+    assert ack["type"] == "progress"
+    deadline = time.time() + 6
+    while time.time() < deadline:
+        if any(p.get("type") == "plate_result" for p in cap.posts):
+            break
+        time.sleep(0.05)
+    finals = [p for p in cap.posts if p.get("type") == "plate_result"]
+    assert finals and finals[-1]["ok"] is False  # no build123d in test env
+
+
+def test_open_with_default_app_failure():
+    from unittest import mock
+    with mock.patch.object(mod.subprocess, "Popen", side_effect=OSError("no opener")):
+        try:
+            mod._open_with_default_app("/tmp/nonexistent_dir/x.stl")
+            raise AssertionError("expected RuntimeError")
+        except RuntimeError as exc:
+            assert "Could not hand" in str(exc)
+
+    from unittest.mock import MagicMock
+    with mock.patch.object(mod.subprocess, "Popen", return_value=MagicMock()):
+        mod._open_with_default_app("/tmp/x.stl")  # must not raise

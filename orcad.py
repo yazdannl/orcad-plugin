@@ -6,18 +6,21 @@
 # name = "orcad"
 # description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, Monaco editor, live 3D preview, STL/STEP/3MF export."
 # author = "orcad"
-# version = "0.3.0"
+# version = "0.4.0"
 # ///
 """orcad — build123d CAD tab (Pages capability).
 
-Top-level "CAD" tab next to Prepare/Preview/Device/Project (same mechanism
+Top-level "orcad" tab next to Prepare/Preview/Device/Project (same mechanism
 as a FilamentHub-style tab): implemented as orca.pages.PagesPluginCapabilityBase.
 
-Layout (v0.3):
+Layout (v0.4):
 - Left: tabbed panel switching between "Objects" (searchable predefined-object
-  dropdown + styled parameter sliders) and "Code Editor" (Monaco, textarea
-  fallback when the CDN is unreachable).
-- Right: persistent 3D preview (always visible) + result + log.
+  dropdown + styled parameter sliders, live preview while editing) and
+  "Code Editor" (Monaco, textarea fallback when the CDN is unreachable).
+- Right: persistent 3D preview (always visible, live for objects) + result + log.
+- "Send to plate": exports STL and opens it with the OS default app, so
+  OrcaSlicer's single-instance handling loads it onto the build plate
+  (one audit prompt on first use, then remembered).
 - Predefined objects: Box, Cylinder, Tube, Bracket, Gridfinity Bin,
   Gridfinity Baseplate. Gridfinity geometry follows the public spec
   (42mm grid, 7mm height units, 0.5 tolerance, stacking foot + optional lip
@@ -38,7 +41,10 @@ shows an upgrade message.
 
 import datetime
 import json
+import os
 import re
+import subprocess
+import sys
 import threading
 import traceback
 from pathlib import Path
@@ -48,7 +54,7 @@ try:
 except ImportError:  # pragma: no cover - allows unit tests without Orca
     orca = None
 
-PLUGIN_VERSION = "0.3.0"
+PLUGIN_VERSION = "0.4.0"
 EXPORT_FORMATS = ("stl", "step", "3mf")
 DEFAULT_TOLERANCE = 0.001
 PREVIEW_MAX_TRIS = 3000  # cap on triangles sent to the page for preview
@@ -434,20 +440,8 @@ def _preview_payload(shape, tolerance=DEFAULT_TOLERANCE):
         return None
 
 
-def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
-                       filename_stem="model"):
-    """Execute user code, export result. Returns dict (JSON-able). No orca needed.
-
-    Raises RuntimeError with user-facing message on failure.
-    """
-    if export_format not in EXPORT_FORMATS:
-        raise ValueError(f"format must be one of {EXPORT_FORMATS}")
-    tol = float(tolerance)
-    if not (0.0001 <= tol <= 1.0):
-        raise ValueError("tolerance must be within [0.0001, 1.0]")
-    if len(code) > 200_000:
-        raise ValueError("code too large (>200k chars)")
-
+def _execute_code(code):
+    """Import build123d, exec code, return (shape, var). Raises RuntimeError."""
     try:
         import build123d  # noqa: F401  (ensures dependency present)
     except Exception as exc:
@@ -484,6 +478,64 @@ def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
         raise
     except Exception:
         pass  # best-effort only; let exporter decide
+    return shape, var
+
+
+def preview_shape(code, tolerance=DEFAULT_TOLERANCE):
+    """Execute code, return stats + preview payload WITHOUT exporting.
+
+    Returns dict (JSON-able). Raises RuntimeError on failure.
+    """
+    tol = float(tolerance)
+    if not (0.0001 <= tol <= 1.0):
+        raise ValueError("tolerance must be within [0.0001, 1.0]")
+    if len(code) > 200_000:
+        raise ValueError("code too large (>200k chars)")
+    shape, var = _execute_code(code)
+    return {"ok": True, "var": var, "stats": _shape_stats(shape),
+            "preview": _preview_payload(shape, tol)}
+
+
+def _open_with_default_app(path):
+    """Open a file with the OS default app (OrcaSlicer for .stl when associated).
+
+    This is how "send to plate" works: OrcaSlicer's single-instance handling
+    forwards the file to the running instance, which loads it onto the plate.
+    Spawning the opener is ProcessCreate-audited: the user approves it once
+    per plugin (remembered in .install_state.json).
+    """
+    s = str(path)
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(s)  # noqa: S606 - user-approved local file open
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", s])
+        else:
+            try:
+                subprocess.Popen(["xdg-open", s])
+            except FileNotFoundError:
+                subprocess.Popen(["gio", "open", s])
+    except Exception as exc:
+        raise RuntimeError(
+            f"Could not hand {s} to OrcaSlicer ({exc}). "
+            "Drag the file from exports/ onto Prepare instead.")
+
+
+def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
+                       filename_stem="model"):
+    """Execute user code, export result. Returns dict (JSON-able). No orca needed.
+
+    Raises RuntimeError with user-facing message on failure.
+    """
+    if export_format not in EXPORT_FORMATS:
+        raise ValueError(f"format must be one of {EXPORT_FORMATS}")
+    tol = float(tolerance)
+    if not (0.0001 <= tol <= 1.0):
+        raise ValueError("tolerance must be within [0.0001, 1.0]")
+    if len(code) > 200_000:
+        raise ValueError("code too large (>200k chars)")
+
+    shape, var = _execute_code(code)
 
     out_dir = exports_dir()
     filename = stamped_filename(filename_stem, export_format)
@@ -631,7 +683,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 </head>
 <body>
 <header class="top">
-  <span class="brand">orcad <small>build123d · v0.3</small></span>
+  <span class="brand">orcad <small>build123d · v0.4</small></span>
   <span id="status" class="muted small"></span><span class="spacer"></span>
   <select id="fmt" title="Export format"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
   <input id="tol" type="number" value="0.001" step="0.001" min="0.0001" max="1" style="width:86px" title="Tessellation tolerance">
@@ -672,7 +724,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
       </div>
     </div>
     <div class="card"><h3>Manual import</h3>
-      <div class="small muted">Plugins can't push models into the plater yet — drag the exported file onto Prepare to slice it.</div>
+      <div class="small muted">⤓ Send to plate loads the model directly (approves a one-time OS prompt first). Fallback: drag the exported file onto Prepare.</div>
     </div>
   </div>
 
@@ -682,6 +734,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
         <button class="btn btn-g btn-s" onclick="pvReset()">Reset view</button>
         <button class="btn btn-g btn-s" id="wireBtn" onclick="pvToggleWire()">Wireframe: off</button>
         <button class="btn btn-g btn-s" id="spinBtn" onclick="pvToggleSpin()">Spin: on</button>
+        <button class="btn btn-p btn-s" id="plateBtn" onclick="sendPlate()" title="Export STL and load it onto the build plate">⤓ Send to plate</button>
       </div>
       <canvas id="pv3d"></canvas>
       <div id="pvStats" class="mono small muted" style="margin-top:8px">—</div>
@@ -728,6 +781,31 @@ function switchLeft(which){
  document.getElementById('tabbtn-objs').classList.toggle('on',which==='objs');
  document.getElementById('tabbtn-editor').classList.toggle('on',which==='editor');
  if(which==='editor')setTimeout(monacoLayout,30);
+ else schedulePreview();
+}
+var PVSEQ=0, PVTIMER=null;
+/* Live preview: debounced rebuild of the objects-tab model, export nothing.
+   Editor tab keeps manual Run (code can be slow / half-typed). */
+function currentPayload(cmd){
+ if(S.left==='objs')return {command:cmd,kind:'generate',primitive:S.prim,params:S.params,format:'stl',tolerance:tol(),filename:S.prim};
+ return {command:cmd,kind:'run',code:getCode(),format:fmt(),tolerance:tol(),filename:document.getElementById('fname').value||'model'};
+}
+function schedulePreview(){
+ if(S.left!=='objs')return;
+ clearTimeout(PVTIMER);
+ PVTIMER=setTimeout(function(){
+  PVSEQ++;
+  document.getElementById('pvInfo').textContent='live preview…';
+  var p=currentPayload('preview');p.seq=PVSEQ;send(p);
+ },650);
+}
+function sendPlate(){
+ setStatus('working…');
+ log('send to plate… (first time: Orca asks a one-time permission to open the file — allow & remember)');
+ var p=(S.left==='objs')
+  ? {command:'plate',kind:'generate',primitive:S.prim,params:S.params,tolerance:tol(),filename:S.prim}
+  : {command:'plate',kind:'run',code:getCode(),tolerance:tol(),filename:document.getElementById('fname').value||'model'};
+ send(p);
 }
 function runActive(){ if(S.left==='objs')generate(); else runEditor(); }
 /* ---------------- searchable objects dropdown ---------------- */
@@ -746,7 +824,7 @@ function ddFilter(){
   var b=document.createElement('button');
   b.innerHTML=esc(p.label)+'<small>'+esc(p.blurb||'')+'</small>';
   if(k===S.prim)b.classList.add('hot');
-  b.onclick=function(){S.prim=k;S.params={};document.getElementById('ddList').style.display='none';buildObjs();};
+  b.onclick=function(){S.prim=k;S.params={};document.getElementById('ddList').style.display='none';buildObjs();schedulePreview();};
   host.appendChild(b);
  });
  if(!host.children.length)host.innerHTML='<div class="muted small" style="padding:8px 10px">No objects match.</div>';
@@ -891,7 +969,7 @@ function showResult(d){
    +'<div class="k">file</div><div class="v">'+esc(d.file)+'</div>'
    +'<div class="k">size</div><div class="v">'+esc(d.size_bytes)+' bytes</div>'
    +'<div class="k">solid</div><div class="v">'+esc(d.var||'result')+'</div></div>'
-   +'<p class="muted small">Drag this file onto Prepare to slice it.</p>';
+   +'<p class="muted small">Tip: ⤓ Send to plate loads it directly, or drag the file onto Prepare.</p>';
   log('OK '+d.filename+' ('+d.size_bytes+' B)');
  }else{
   el.innerHTML='<div class="alert-err">'+esc(d.error||'failed')+'</div>';
@@ -901,6 +979,17 @@ function showResult(d){
 if(window.orca&&window.orca.onMessage){window.orca.onMessage(function(d){
  if(!d)return;
  if(d.type==='progress'){setStatus(d.message||'working…');if(d.message)log(d.message);return;}
+ if(d.type==='preview'){
+  if(d.seq!==PVSEQ)return; /* stale: superseded by a newer slider move */
+  if(d.ok){pvSet(d.preview);document.getElementById('pvStats').textContent='stats: '+JSON.stringify(d.stats||{});document.getElementById('pvInfo').textContent='live preview';}
+  else{document.getElementById('pvInfo').textContent='preview: '+String(d.error||'failed').split('\n')[0].slice(0,160);}
+  return;
+ }
+ if(d.type==='plate_result'){
+  if(d.ok){setStatus('sent to plate');pvSet(d.preview);showResult(d);log('Sent to plate: '+d.filename+' — check Prepare. If it did not appear, drag the file from exports/.');}
+  else{setStatus('plate failed');showResult({ok:false,error:d.error});}
+  return;
+ }
  if(d.type==='result'&&d.ok){setStatus('done');pvSet(d.preview);showResult(d);return;}
  if(d.type==='error'||d.ok===false){setStatus('failed');pvSet(null);showResult({ok:false,error:d.error});return;}
  log(String(JSON.stringify(d)).slice(0,2000));
@@ -911,6 +1000,10 @@ if(window.orca&&window.orca.onMessage){window.orca.onMessage(function(d){
  buildObjs();
  initMonaco();
  pvDraw();
+ var pr=document.getElementById('prims');
+ pr.addEventListener('input',schedulePreview);
+ pr.addEventListener('change',schedulePreview);
+ schedulePreview(); /* first live render of the default object */
 })();
 </script>
 </body>
@@ -921,6 +1014,20 @@ if(window.orca&&window.orca.onMessage){window.orca.onMessage(function(d){
 # ---------------------------------------------------------------------------
 # Plugin wiring (only when running inside OrcaSlicer)
 # ---------------------------------------------------------------------------
+
+def _build_code_from_msg(msg, cmd):
+    """Return (code, stem) for run/generate-style messages. Raises ValueError."""
+    if cmd == "generate":
+        code = generate_primitive_code(
+            str(msg.get("primitive", "box")), dict(msg.get("params", {})))
+        stem = str(msg.get("filename") or msg.get("primitive") or "model")
+    else:
+        code = str(msg.get("code", ""))
+        if not code.strip():
+            raise ValueError("code is empty")
+        stem = str(msg.get("filename") or "model")
+    return code, stem
+
 
 def _handle_message_sync(capability, msg):
     """Route one JS message; heavy work runs in a worker thread."""
@@ -933,20 +1040,9 @@ def _handle_message_sync(capability, msg):
         try:
             export_format = str(msg.get("format", "stl")).lower()
             tolerance = float(msg.get("tolerance", DEFAULT_TOLERANCE))
-        except Exception:
-            return {"type": "error", "ok": False, "error": "bad format/tolerance"}
-        if cmd == "generate":
-            try:
-                code = generate_primitive_code(
-                    str(msg.get("primitive", "box")), dict(msg.get("params", {})))
-            except Exception as exc:
-                return {"type": "error", "ok": False, "error": str(exc)}
-            stem = str(msg.get("filename") or msg.get("primitive") or "model")
-        else:
-            code = str(msg.get("code", ""))
-            if not code.strip():
-                return {"type": "error", "ok": False, "error": "code is empty"}
-            stem = str(msg.get("filename") or "model")
+            code, stem = _build_code_from_msg(msg, cmd)
+        except Exception as exc:
+            return {"type": "error", "ok": False, "error": str(exc)}
 
         def _work():
             try:
@@ -963,6 +1059,58 @@ def _handle_message_sync(capability, msg):
                 capability.post_message({"type": "error", "ok": False, "error": str(exc)[:4000]})
 
         threading.Thread(target=_work, name="orcad-export", daemon=True).start()
+        return {"type": "progress", "message": "Started…"}
+    if cmd == "preview":
+        # Live preview: run CAD, post mesh, export nothing. Stale requests
+        # (slider moved again while building) are dropped via the seq guard.
+        try:
+            tolerance = float(msg.get("tolerance", DEFAULT_TOLERANCE))
+            code, _stem = _build_code_from_msg(msg, str(msg.get("kind", "generate")))
+        except Exception as exc:
+            return {"type": "preview", "ok": False, "error": str(exc)}
+        seq = msg.get("seq", 0)
+        capability._orcad_preview_seq = seq
+
+        def _work():
+            try:
+                res = preview_shape(code, tolerance)
+                if getattr(capability, "_orcad_preview_seq", None) != seq:
+                    return
+                capability.post_message({"type": "preview", "ok": True, "seq": seq,
+                                         "var": res["var"], "stats": res["stats"],
+                                         "preview": res.get("preview")})
+            except Exception as exc:
+                if getattr(capability, "_orcad_preview_seq", None) != seq:
+                    return
+                capability.post_message({"type": "preview", "ok": False, "seq": seq,
+                                         "error": str(exc)[:2000]})
+
+        threading.Thread(target=_work, name="orcad-preview", daemon=True).start()
+        return None
+    if cmd == "plate":
+        # Send to plate: export STL, then open it with the OS default app so
+        # OrcaSlicer's single-instance handling loads it onto the build plate.
+        try:
+            tolerance = float(msg.get("tolerance", DEFAULT_TOLERANCE))
+            code, stem = _build_code_from_msg(msg, str(msg.get("kind", "generate")))
+        except Exception as exc:
+            return {"type": "plate_result", "ok": False, "error": str(exc)}
+
+        def _work():
+            try:
+                capability.post_message({"type": "progress", "message": "Building STL for plate…"})
+                res = run_build123d_code(code, "stl", tolerance, stem)
+                capability.post_message({"type": "progress", "message": "Opening in OrcaSlicer…"})
+                _open_with_default_app(res["file"])
+                capability.post_message({"type": "plate_result", "ok": True,
+                                         "file": res["file"], "filename": res["filename"],
+                                         "size_bytes": res["size_bytes"], "stats": res["stats"],
+                                         "preview": res.get("preview")})
+            except Exception as exc:
+                capability.post_message({"type": "plate_result", "ok": False,
+                                         "error": str(exc)[:4000]})
+
+        threading.Thread(target=_work, name="orcad-plate", daemon=True).start()
         return {"type": "progress", "message": "Started…"}
     return {"type": "error", "ok": False, "error": f"unknown command {cmd!r}"}
 

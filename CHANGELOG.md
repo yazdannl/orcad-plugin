@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 — Live preview + Send to plate
+
+- Live preview for Objects: debounced rebuild on slider/param change (650ms),
+  export-free, with seq guard dropping stale results; errors shown subtly in
+  the preview header without clearing the last good mesh. Tab opens already
+  rendering the default Gridfinity Bin.
+- Send to plate: exports STL and opens it with the OS default app so
+  OrcaSlicer's single-instance handling loads it onto the build plate
+  (verified: no plate-mutation API exists in `orca.host` on `main` — same
+  mechanism generator plugins use). One audit prompt on first use, then
+  remembered; drag-and-drop fallback kept and documented.
+
 ## 0.3.0 — Self-contained modern UI + Gridfinity
 
 - UI reworked: 100% inline CSS (no framework CDN — Orca's WebView
