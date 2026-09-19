@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 — Object files are build123d programs
+
+- Each `objects/<name>.py` is now a real runnable build123d program; the UI
+  spec is extracted from `# spec:` comments on its parameter variables
+  (e.g. `WALL = 1.2  # spec: number label=Wall unit=mm min=0.8 max=2.4 step=0.2`).
+- The bundler also generates the dropdown spec block in the page, so objects,
+  editor code, params and UI all come from the single file — zero drift.
+- Param values are baked into the program's own variable lines; the Code
+  Editor shows the actual object file with your values in it.
+
 ## 0.5.1 — Gridfinity verified against original .scad
 
 - Bin + baseplate rewritten as a faithful port of

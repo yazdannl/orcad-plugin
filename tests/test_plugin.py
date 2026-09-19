@@ -1,8 +1,8 @@
-"""Unit tests for orcad v0.4 — run WITHOUT OrcaSlicer or build123d installed.
+"""Unit tests for orcad v0.6 — run WITHOUT OrcaSlicer or build123d installed.
 
-Covers pure logic in orcad.py: param validation (number/int/bool),
-codegen incl. Gridfinity, live-preview + plate routing, filename hygiene,
-examples syntax, preview helper, PAGE_HTML bridge contract.
+Covers pure logic in orcad.py: param validation (number/int/bool), object
+programs (spec extraction, value baking), live-preview + plate routing,
+filename hygiene, examples syntax, preview helper, PAGE_HTML bridge contract.
 """
 import ast
 import importlib.util
@@ -33,16 +33,18 @@ def test_metadata_block():
     assert "# /// script" in text
     assert 'dependencies = ["build123d", "numpy"]' in text
     assert 'name = "orcad"' in text
-    assert 'version = "0.5.1"' in text
+    assert 'version = "0.6.0"' in text
 
 
 def test_primitives_codegen_ok():
-    assert "Box(20" in mod.generate_primitive_code("box", {"L": 20, "W": 20, "H": 20})
-    assert "Cylinder(10" in mod.generate_primitive_code("cylinder", {"R": 10, "H": 20})
+    box = mod.generate_primitive_code("box", {"L": 20, "W": 20, "H": 20})
+    assert "L = 20.0" in box and "result = Box(L, W, H)" in box
+    cyl = mod.generate_primitive_code("cylinder", {"R": 10, "H": 20})
+    assert "R = 10.0" in cyl and "result = Cylinder(R, H)" in cyl
     tube = mod.generate_primitive_code("tube", {"R_OUT": 12, "R_IN": 8, "H": 25})
-    assert "Cylinder(12" in tube and "Cylinder(8" in tube
+    assert "R_OUT = 12.0" in tube and "Cylinder(R_OUT, H)" in tube
     br = mod.generate_primitive_code("bracket", {"L": 60, "W": 30, "T": 5, "D": 5})
-    assert "Pos(" in br and "result =" in br
+    assert "L = 60.0" in br and "result = plate - h1 - h2" in br
 
 
 def test_primitives_validation():
@@ -85,7 +87,8 @@ def test_gridfinity_codegen():
          "MAGNETS": True, "LIP": True, "SCOOP": True})
     for needle in ("RectangleRounded", "extrude", "GX * 42", "result = _outer - _cavity",
                    "Cylinder(3.25", "result =", "Pos(", "loft(", "ruled=True",
-                   "Sketch() + _secs", "divider walls", "scoop notch",
+                   "Sketch() + _secs", "GX = 2", "WALL = 1.2", "DX = 1",
+                   "DY = 2", "SCOOP = True", "divider walls", "scoop notch",
                    "_lip_outer - _lip_inner"):
         assert needle in code, f"gridfinity bin code missing {needle!r}"
     ast.parse(code)
@@ -93,9 +96,10 @@ def test_gridfinity_codegen():
         "gridfinity_bin",
         {"GX": 1, "GY": 1, "HU": 3, "WALL": 1.2, "DX": 0, "DY": 0,
          "MAGNETS": False, "LIP": False, "SCOOP": False})
-    assert "Stacking lip" not in no_lip and "_lip" not in no_lip
-    assert "magnet" not in no_lip.lower()
-    assert "divider" not in no_lip.lower() and "scoop" not in no_lip.lower()
+    # features stay in the program text (static file) but switch off by value
+    for needle in ("MAGNETS = False", "LIP = False", "DX = 0", "DY = 0",
+                   "SCOOP = False", "GX = 1", "HU = 3"):
+        assert needle in no_lip, f"disabled-option bake missing {needle!r}"
     ast.parse(no_lip)
     plate = mod.generate_primitive_code(
         "gridfinity_baseplate",
@@ -223,7 +227,7 @@ def test_code_command_is_sync_codegen():
                                          "primitive": "box",
                                          "params": {"L": 5, "W": 6, "H": 7}})
     assert res["type"] == "code" and res["ok"] is True
-    assert "Box(5" in res["code"] and "result =" in res["code"]
+    assert "L = 5.0" in res["code"] and "result = Box(L, W, H)" in res["code"]
     # gridfinity code mirrors the objects tab state
     res = mod._handle_message_sync(cap, {"command": "code", "kind": "generate",
                                          "primitive": "gridfinity_bin",
@@ -336,16 +340,17 @@ def _load_source_module(name, path):
 
 
 def test_objects_live_in_their_own_files():
+    bundle = _load_source_module("bundle", ROOT / "packaging" / "bundle.py")
     expected = ["box", "bracket", "cylinder", "gridfinity_baseplate",
                 "gridfinity_bin", "tube"]
     assert sorted(p.stem for p in (ROOT / "objects").glob("*.py")
                   if p.name != "__init__.py") == expected
     for name in expected:
-        obj = _load_source_module(f"objects_{name}", ROOT / "objects" / f"{name}.py")
-        assert isinstance(obj.SPEC.get("params"), list)
-        defaults = {p["key"]: p["default"] for p in obj.SPEC["params"]}
-        ast.parse(obj.generate(defaults))
-    registry = None
+        # parsed, never imported: object files execute CAD on import
+        parsed = bundle.parse_object(ROOT / "objects" / f"{name}.py")
+        assert parsed["name"] == name and parsed["label"] and parsed["params"]
+        assert "from build123d import *" in parsed["source"]
+        bundle.smoke_object(parsed)  # defaults + extremes stay valid python
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))
     import objects as registry
