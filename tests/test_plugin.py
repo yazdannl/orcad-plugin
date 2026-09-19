@@ -178,7 +178,7 @@ def test_page_html_contract():
     for key in mod.EXAMPLES:
         assert key in html, f"example {key} missing from page"
     # always-on preview pane
-    for needle in ('id="pv3d"', "pvSet", "pvDraw", "pvToggleWire", "pvToggleSpin"):
+    for needle in ('id="pv3d"', "three@0.160.0", "pvSet", "pvResize", "pvToggleWire", "pvToggleSpin"):
         assert needle in html, f"PAGE_HTML missing preview {needle!r}"
     # result/log plumbing kept
     for needle in ('id="result"', 'id="log"', 'id="fmt"', 'id="tol"'):

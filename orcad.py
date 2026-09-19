@@ -43,6 +43,7 @@ shows an upgrade message.
 import datetime
 import json
 import os
+from contextlib import suppress
 import re
 import subprocess
 import sys
@@ -975,7 +976,8 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;heigh
 input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--border)}
 input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--bg2)}
 /* preview / result / log */
-#pv3d{width:100%;height:380px;border:1px solid var(--border);border-radius:8px;cursor:grab;touch-action:none;background:var(--bg)}
+#pv3d{width:100%;height:380px;border:1px solid var(--border);border-radius:8px;overflow:hidden;touch-action:none;background:var(--bg)}
+#pv3d canvas{display:block;width:100%;height:100%;cursor:grab}
 .pvbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
 .pvbar h5{margin:0;font-size:14px}
 .kv{display:grid;grid-template-columns:150px 1fr;gap:3px 10px;font-size:12.5px}
@@ -1044,7 +1046,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
         <button class="btn btn-g btn-s" id="spinBtn" onclick="pvToggleSpin()">Spin: on</button>
         <button class="btn btn-p btn-s" id="plateBtn" onclick="sendPlate()" title="Export STL and load it onto the build plate">⤓ Send to plate</button>
       </div>
-      <canvas id="pv3d"></canvas>
+      <div id="pv3d" aria-label="Interactive 3D model preview"></div>
       <div id="pvStats" class="mono small muted" style="margin-top:8px">—</div>
     </div>
     <div class="card"><h5>Result</h5><div id="result" class="muted">Nothing exported yet.</div></div>
@@ -1053,6 +1055,8 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
   </div>
 </div></div>
 
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min/vs/loader.js"></script>
 <script>
 'use strict';
@@ -1216,69 +1220,37 @@ function runEditor(){
  send({command:'run',code:code,format:fmt(),tolerance:tol(),filename:fn});
 }
 function loadExample(){var k=document.getElementById('exSel').value;setCode(EXAMPLES[k]);log('loaded '+k);}
-/* ---------------- 3D preview (dependency-free canvas) ---------------- */
-var PV={tris:[],total:0,yaw:0.7,pitch:0.55,zoom:1,wire:false,spin:true,ext:null};
+/* ---------------- Three.js preview ---------------- */
+var PV={tris:[],total:0,wire:false,spin:true,mesh:null,box:null,scene:null,camera:null,renderer:null,controls:null};
 function pvCss(v,f){try{var s=getComputedStyle(document.body).getPropertyValue(v);if(s&&s.trim())return s.trim();}catch(e){}return f;}
-function pvFit(){
- var t=PV.tris;if(!t.length){PV.ext=null;return;}
- var mnx=1/0,mxx=-1/0,mny=1/0,mxy=-1/0,mnz=1/0,mxz=-1/0;
- for(var i=0;i<t.length;i+=3){var x=t[i],y=t[i+1],z=t[i+2];
-  if(x<mnx)mnx=x;if(x>mxx)mxx=x;if(y<mny)mny=y;if(y>mxy)mxy=y;if(z<mnz)mnz=z;if(z>mxz)mxz=z;}
- PV.ext={c:[(mnx+mxx)/2,(mny+mxy)/2,(mnz+mxz)/2],d:Math.max(mxx-mnx,mxy-mny,mxz-mnz,1e-6)};
+function pvInit(){
+ var host=document.getElementById('pv3d');
+ if(!window.THREE||!host){return;}
+ PV.scene=new THREE.Scene();PV.scene.background=new THREE.Color(pvCss('--bg','#14161b'));
+ PV.camera=new THREE.PerspectiveCamera(42,1,.01,10000);PV.camera.position.set(90,90,90);
+ PV.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});PV.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));host.appendChild(PV.renderer.domElement);
+ PV.controls=window.THREE.OrbitControls?new THREE.OrbitControls(PV.camera,PV.renderer.domElement):null;
+ if(PV.controls){PV.controls.enableDamping=true;PV.controls.dampingFactor=.08;}
+ PV.scene.add(new THREE.HemisphereLight(0xffffff,0x334455,2.2));var key=new THREE.DirectionalLight(0xffffff,2.5);key.position.set(80,120,100);PV.scene.add(key);
+ pvResize();window.addEventListener('resize',pvResize);pvFrame();
 }
+function pvResize(){if(!PV.renderer)return;var h=document.getElementById('pv3d'),w=h.clientWidth||640,ht=h.clientHeight||380;PV.renderer.setSize(w,ht,false);PV.camera.aspect=w/ht;PV.camera.updateProjectionMatrix();}
+function pvFrame(){requestAnimationFrame(pvFrame);if(!PV.renderer)return;if(PV.spin&&PV.mesh)PV.mesh.rotation.z+=.004;if(PV.controls)PV.controls.update();PV.renderer.render(PV.scene,PV.camera);}
 function pvSet(p){
- PV.tris=(p&&p.tris)||[];PV.total=(p&&p.total)||0;pvFit();pvDraw();
- document.getElementById('pvInfo').textContent=PV.tris.length?('mesh: '+PV.total+' tris'+(PV.total>PV.tris.length/9?' (decimated preview)':'')):'preview unavailable — stats only';
+ PV.tris=(p&&p.tris)||[];PV.total=(p&&p.total)||0;
+ if(!PV.scene){document.getElementById('pvInfo').textContent='Three.js preview unavailable';return;}
+ if(PV.mesh){PV.scene.remove(PV.mesh);PV.mesh.geometry.dispose();PV.mesh.material.dispose();PV.mesh=null;}
+ if(!PV.tris.length){document.getElementById('pvInfo').textContent='preview unavailable — stats only';return;}
+ var pos=new Float32Array(PV.tris),geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.computeVertexNormals();
+ PV.mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0x42cdbb,roughness:.72,metalness:.08,wireframe:PV.wire}));PV.scene.add(PV.mesh);geo.computeBoundingBox();
+ var c=geo.boundingBox.getCenter(new THREE.Vector3()),s=geo.boundingBox.getSize(new THREE.Vector3()),d=Math.max(s.x,s.y,s.z,1);PV.mesh.position.sub(c);
+ PV.camera.position.set(d*1.8,d*1.5,d*1.8);if(PV.controls){PV.controls.target.set(0,0,0);PV.controls.maxDistance=d*8;PV.controls.minDistance=d*.15;PV.controls.update();}
+ document.getElementById('pvInfo').textContent='mesh: '+PV.total+' tris'+(PV.total>PV.tris.length/9?' (decimated preview)':'');
 }
-function pvDraw(){
- var cv=document.getElementById('pv3d');if(!cv||!cv.clientWidth)return;
- var dpr=window.devicePixelRatio||1,W=cv.clientWidth,H=cv.clientHeight;
- if(cv.width!==W*dpr||cv.height!==H*dpr){cv.width=W*dpr;cv.height=H*dpr;}
- var ctx=cv.getContext('2d');ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
- var t=PV.tris;
- ctx.fillStyle=pvCss('--muted','#9aa1ad');ctx.font='12px sans-serif';
- if(!t.length||!PV.ext){ctx.fillText('Run a model to see the 3D preview here.',14,H/2);return;}
- var cy=Math.cos(PV.yaw),sy=Math.sin(PV.yaw),cp=Math.cos(PV.pitch),sp=Math.sin(PV.pitch);
- var sc=Math.min(W,H)*0.38/PV.ext.d*PV.zoom,cx=W/2,cy0=H/2;
- var n=t.length/9,order=new Array(n),i,j;
- for(i=0;i<n;i++)order[i]=i;
- var P=new Float64Array(t.length);
- for(i=0;i<t.length;i+=3){
-  var x=t[i]-PV.ext.c[0],y=t[i+1]-PV.ext.c[1],z=t[i+2]-PV.ext.c[2];
-  var x1=x*cy-y*sy,y1=x*sy+y*cy;
-  var y2=y1*cp-z*sp,z2=y1*sp+z*cp;
-  P[i]=cx+x1*sc;P[i+1]=cy0-y2*sc;P[i+2]=z2;
- }
- order.sort(function(a,b){
-  var za=(P[a*9+2]+P[a*9+5]+P[a*9+8])/3,zb=(P[b*9+2]+P[b*9+5]+P[b*9+8])/3;
-  return za-zb;});
- var lx=0.35,ly=0.5,lz=0.79;
- function shade(nx,ny,nz){var d=nx*lx+ny*ly+nz*lz;if(d<0)d=0;
-  var k=0.35+0.65*d;return 'rgb('+Math.round(120*k+40)+','+Math.round(150*k+40)+','+Math.round(220*k+30)+')';}
- for(j=0;j<n;j++){
-  i=order[j]*9;
-  var ax=P[i],ay=P[i+1],bx=P[i+3],by=P[i+4],cx2=P[i+6],cy2=P[i+7];
-  var ux=bx-ax,uy=by-ay,uz=P[i+5]-P[i+2],vx=cx2-ax,vy=cy2-ay,vz=P[i+8]-P[i+2];
-  var nx=uy*vz-uz*vy,ny=uz*vx-ux*vz,nz=ux*vy-uy*vx;
-  var nl=Math.sqrt(nx*nx+ny*ny+nz*nz)||1;nx/=nl;ny/=nl;nz/=nl;
-  ctx.beginPath();ctx.moveTo(ax,ay);ctx.lineTo(bx,by);ctx.lineTo(cx2,cy2);ctx.closePath();
-  if(PV.wire){ctx.strokeStyle=pvCss('--accent','#22b8a8');ctx.lineWidth=0.7;ctx.stroke();}
-  else{ctx.fillStyle=shade(nx,ny,nz);ctx.fill();ctx.strokeStyle='rgba(0,0,0,0.12)';ctx.lineWidth=0.4;ctx.stroke();}
- }
-}
-function pvReset(){PV.yaw=0.7;PV.pitch=0.55;PV.zoom=1;pvDraw();}
-function pvToggleWire(){PV.wire=!PV.wire;document.getElementById('wireBtn').textContent='Wireframe: '+(PV.wire?'on':'off');pvDraw();}
+function pvReset(){if(!PV.mesh)return;var b=PV.mesh.geometry.boundingBox,s=Math.max(b.max.x-b.min.x,b.max.y-b.min.y,b.max.z-b.min.z,1);PV.camera.position.set(s*1.8,s*1.5,s*1.8);if(PV.controls){PV.controls.target.set(0,0,0);PV.controls.update();}}
+function pvToggleWire(){PV.wire=!PV.wire;document.getElementById('wireBtn').textContent='Wireframe: '+(PV.wire?'on':'off');if(PV.mesh)PV.mesh.material.wireframe=PV.wire;}
 function pvToggleSpin(){PV.spin=!PV.spin;document.getElementById('spinBtn').textContent='Spin: '+(PV.spin?'on':'off');}
-(function(){
- var cv=document.getElementById('pv3d'),drag=null;
- cv.addEventListener('pointerdown',function(e){drag={x:e.clientX,y:e.clientY};try{cv.setPointerCapture(e.pointerId);}catch(_){}cv.style.cursor='grabbing';});
- cv.addEventListener('pointermove',function(e){if(!drag)return;PV.yaw+=(e.clientX-drag.x)*0.008;PV.pitch+=(e.clientY-drag.y)*0.008;drag={x:e.clientX,y:e.clientY};pvDraw();});
- ['pointerup','pointercancel','pointerleave'].forEach(function(ev){cv.addEventListener(ev,function(){drag=null;cv.style.cursor='grab';});});
- cv.addEventListener('wheel',function(e){e.preventDefault();PV.zoom*=e.deltaY>0?0.92:1.08;PV.zoom=Math.min(8,Math.max(0.2,PV.zoom));pvDraw();},{passive:false});
- cv.addEventListener('dblclick',pvReset);
- window.addEventListener('resize',pvDraw);
- setInterval(function(){if(PV.spin&&PV.tris.length){PV.yaw+=0.025;pvDraw();}},80);
-})();
+pvInit();
 /* ---------------- bridge ---------------- */
 function showResult(d){
  var el=document.getElementById('result');
@@ -1460,31 +1432,25 @@ if orca is not None:  # pragma: no cover - only inside OrcaSlicer
             def on_message(self, msg):
                 try:
                     if isinstance(msg, str):
-                        try:
+                        with suppress(Exception):
                             msg = json.loads(msg)
-                        except Exception:
-                            pass
                     res = _handle_message_sync(self, msg)
-                    # Immediate ack for sync commands; worker posts final result.
-                    if isinstance(res, dict) and res.get("type") == "progress" \
-                            and res.get("message") == "Started…":
-                        pass  # worker will post updates; no need to echo
-                    elif isinstance(res, dict):
+                    # Worker commands post their own result; sync commands get an ack.
+                    if not (isinstance(res, dict) and res.get("type") == "progress" \
+                            and res.get("message") == "Started…") and isinstance(res, dict):
                         self.post_message(res)
                 except Exception as exc:
-                    try:
+                    with suppress(Exception):
                         self.post_message({"type": "error", "ok": False,
                                            "error": f"handler failed: {exc}"})
-                    except Exception:
-                        pass
 
             def get_default_config(self):
                 return {"tolerance": DEFAULT_TOLERANCE, "format": "stl"}
 
         @orca.plugin
-        class OrcadPlugin(orca.base):
+        class OrcadPagePlugin(orca.base):
             def register_capabilities(self):
-                orca.register_capability(CadPage)
+                getattr(orca, "register_capability")(CadPage)
     else:
         # Fallback for Orca builds without orca.pages: visible upgrade hint.
         class CadScriptFallback(orca.script.ScriptPluginCapabilityBase):
@@ -1492,13 +1458,13 @@ if orca is not None:  # pragma: no cover - only inside OrcaSlicer
                 return "orcad (needs Pages build)"
 
             def execute(self):
-                return orca.ExecutionResult.failure(
-                    orca.PluginResult.RecoverableError,
+                return getattr(orca, "ExecutionResult").failure(
+                    getattr(orca, "PluginResult").RecoverableError,
                     "orcad needs OrcaSlicer Nightly with orca.pages "
                     "(Pages tab API). Please update OrcaSlicer.",
                 )
 
         @orca.plugin
-        class OrcadPlugin(orca.base):
+        class OrcadScriptPlugin(orca.base):
             def register_capabilities(self):
-                orca.register_capability(CadScriptFallback)
+                getattr(orca, "register_capability")(CadScriptFallback)
