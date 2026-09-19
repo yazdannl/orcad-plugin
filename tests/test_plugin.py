@@ -1,15 +1,18 @@
-"""Unit tests for OrcaCAD v0.1 — run WITHOUT OrcaSlicer or build123d installed.
+"""Unit tests for OrcaCAD v0.2 — run WITHOUT OrcaSlicer or build123d installed.
 
 Covers pure logic in orcacad_plugin.py: param validation, codegen,
-filename hygiene, examples syntax, PAGE_HTML bridge contract.
+filename hygiene, examples syntax, preview helper, PAGE_HTML bridge contract.
 """
 import ast
 import importlib.util
+import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "orcacad_plugin.py"
+
+ALLOWED_CDN_HOSTS = ("cdn.jsdelivr.net", "unpkg.com")
 
 
 def load_plugin():
@@ -29,7 +32,7 @@ def test_metadata_block():
     assert "# /// script" in text
     assert 'dependencies = ["build123d", "numpy"]' in text
     assert 'name = "OrcaCAD"' in text
-    assert 'version = "0.1.0"' in text
+    assert 'version = "0.2.0"' in text
 
 
 def test_primitives_codegen_ok():
@@ -73,19 +76,40 @@ def test_examples_parse():
         ast.parse(code)  # must be syntactically valid python
 
 
+def test_preview_helper_fails_soft_without_build123d():
+    # No OCP here: tessellate path must return None, never raise.
+    class FakeShape:
+        def tessellate(self, *a, **k):
+            raise ImportError("no OCP in test env")
+    assert mod._preview_payload(FakeShape()) is None
+    assert mod.PREVIEW_MAX_TRIS == 3000
+
+
 def test_page_html_contract():
     html = mod.PAGE_HTML
-    for needle in (
-        "window.orca.postMessage",
-        "window.orca.onMessage",
-        "--orca-bg",
-        'id="code"',
-        'id="fmt"',
-        "command:'generate'" in html and "generate" or "generate",
-    ):
+    # bridge + theming
+    for needle in ("window.orca.postMessage", "window.orca.onMessage", "--orca-bg"):
         assert needle in html, f"PAGE_HTML missing {needle!r}"
-    assert "http://" not in html.replace("http://www.w3.org", "") or True  # no CDN
-    assert "https://" not in html  # fully self-contained
+    # Bootstrap 5 + Monaco present
+    assert "bootstrap@5" in html
+    assert "monaco-editor" in html
+    # left tabs: primitives <-> editor switch
+    for needle in ("tabbtn-prims", "tabbtn-editor", "pane-prims", "pane-editor",
+                   "switchLeft", "runActive"):
+        assert needle in html, f"PAGE_HTML missing left-tab {needle!r}"
+    # editor ids (monaco container + textarea fallback share the code flow)
+    assert 'id="editor"' in html and 'id="code"' in html
+    assert "monacoFallback" in html
+    # always-on preview pane
+    for needle in ('id="pv3d"', "pvSet", "pvDraw", "pvToggleWire", "pvToggleSpin"):
+        assert needle in html, f"PAGE_HTML missing preview {needle!r}"
+    # result/log plumbing kept
+    for needle in ('id="result"', 'id="log"', 'id="fmt"', 'id="tol"'):
+        assert needle in html
+    # only allowlisted CDNs; everything else self-contained
+    for url in re.findall(r'https://[^"\'\s<>]+', html):
+        host = url.split("/")[2]
+        assert host in ALLOWED_CDN_HOSTS, f"unexpected external URL {url!r}"
     assert len(html) < 200_000, f"PAGE_HTML too large: {len(html)}"
 
 
