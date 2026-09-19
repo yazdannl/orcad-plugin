@@ -352,14 +352,14 @@ if REFINED or MAGNETS or SCREW:
 # expressed as simple cylinders so it remains robust in build123d.
 if STYLE in (3, 4):
     _r = SCREW_D / 2
-    for _x in (-W / 2, W / 2):
+    for _x, _rot_y in ((-W / 2, 90), (W / 2, -90)):
         for _i in range(max(1, NSCREWS)):
             _y = (_i - (max(1, NSCREWS) - 1) / 2) * (SCREW_HEAD + SCREW_SPACING)
-            result -= Pos(_x, _y, _PT / 2) * Rot(0, 90, 0) * Cylinder(_r, 4.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    for _y in (-D / 2, D / 2):
+            result -= Pos(_x, _y, _PT / 2) * Rot(0, _rot_y, 0) * Cylinder(_r, 4.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    for _y, _rot_x in ((-D / 2, -90), (D / 2, 90)):
         for _i in range(max(1, NSCREWS)):
             _x = (_i - (max(1, NSCREWS) - 1) / 2) * (SCREW_HEAD + SCREW_SPACING)
-            result -= Pos(_x, _y, _PT / 2) * Rot(90, 0, 0) * Cylinder(_r, 4.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            result -= Pos(_x, _y, _PT / 2) * Rot(_rot_x, 0, 0) * Cylinder(_r, 4.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
 """
 
 
