@@ -114,17 +114,21 @@ def test_gridfinity_codegen():
     ast.parse(bare)
     plate = mod.generate_primitive_code(
         "gridfinity_baseplate",
-        {"GX": 4, "GY": 4, "T": 5, "SOCKETS": True, "REFINED": False,
-         "MAGNETS": True, "SCREW": False, "CRUSH": True, "CHAMFER": True,
-         "PRINTABLE": False, "CORNERS": False})
+        {"GX": 4, "GY": 4, "T": 5, "STYLE": 0, "HOLESTYLE": 0,
+         "DISTX": 0, "DISTY": 0, "FITX": 0, "FITY": 0, "SCREW_D": 3.35,
+         "SCREW_HEAD": 5, "SCREW_SPACING": 0.5, "NSCREWS": 1,
+         "SOCKETS": True, "REFINED": False, "MAGNETS": True, "SCREW": False,
+         "CRUSH": True, "CHAMFER": True, "PRINTABLE": False, "CORNERS": False})
     assert "RectangleRounded(W, D, 2.0)" in plate and "result -=" in plate
     ast.parse(plate)
     try:
         mod.generate_primitive_code(
             "gridfinity_baseplate",
-            {"GX": 4, "GY": 4, "T": 4.0, "SOCKETS": True, "REFINED": False,
-             "MAGNETS": True, "SCREW": False, "CRUSH": True, "CHAMFER": True,
-             "PRINTABLE": False, "CORNERS": False})
+            {"GX": 4, "GY": 4, "T": 4.0, "STYLE": 0, "HOLESTYLE": 0,
+             "DISTX": 0, "DISTY": 0, "FITX": 0, "FITY": 0, "SCREW_D": 3.35,
+             "SCREW_HEAD": 5, "SCREW_SPACING": 0.5, "NSCREWS": 1,
+             "SOCKETS": True, "REFINED": False, "MAGNETS": True, "SCREW": False,
+             "CRUSH": True, "CHAMFER": True, "PRINTABLE": False, "CORNERS": False})
         raise AssertionError("expected ValueError for thin plate + magnets")
     except ValueError:
         pass

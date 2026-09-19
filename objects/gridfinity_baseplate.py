@@ -15,6 +15,16 @@ import math
 GX = 4  # spec: int label=Grid X unit=u min=1 max=6 step=1
 GY = 4  # spec: int label=Grid Y unit=u min=1 max=6 step=1
 T = 5  # spec: number label=Thickness unit=mm min=4.6 max=8 step=0.2
+STYLE = 0  # spec: int label=Plate style min=0 max=4 step=1
+HOLESTYLE = 0  # spec: int label=Mount holes min=0 max=2 step=1
+DISTX = 0  # spec: number label=Minimum X unit=mm min=0 max=300 step=1
+DISTY = 0  # spec: number label=Minimum Y unit=mm min=0 max=300 step=1
+FITX = 0  # spec: number label=Fit X min=-1 max=1 step=0.1
+FITY = 0  # spec: number label=Fit Y min=-1 max=1 step=0.1
+SCREW_D = 3.35  # spec: number label=Screw diameter unit=mm min=2 max=5 step=0.05
+SCREW_HEAD = 5  # spec: number label=Screw head diameter unit=mm min=3 max=8 step=0.1
+SCREW_SPACING = 0.5  # spec: number label=Screw spacing unit=mm min=0 max=2 step=0.1
+NSCREWS = 1  # spec: int label=Screws per seam min=1 max=3 step=1
 SOCKETS = True  # spec: bool label=Bin sockets
 REFINED = False  # spec: bool label=Refined holes
 MAGNETS = True  # spec: bool label=Magnet holes (6x2)
@@ -25,20 +35,33 @@ PRINTABLE = False  # spec: bool label=Supportless hole tops
 CORNERS = False  # spec: bool label=Holes only at corners
 
 # Slab footprint: cells tile at the 42mm pitch (BASEPLATE_DIMENSIONS, gridfinity-baseplate.scad:19).
-W = GX * 42.0
-D = GY * 42.0
-result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=T)
+_W0, _D0 = GX * 42.0, GY * 42.0
+W, D = max(_W0, DISTX), max(_D0, DISTY)
+_PX = (W - _W0) * (FITX / 2 + 0.5)
+_PY = (D - _D0) * (FITY / 2 + 0.5)
+_EXTRA = 6.4 if STYLE == 1 else (1.0 if STYLE == 2 else (6.75 if STYLE in (3, 4) else 0.0))
+_PT = T + _EXTRA
+result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=_PT)
 for _ix in range(GX):
     for _iy in range(GY):
-        _cx = (_ix - (GX - 1) / 2) * 42.0
-        _cy = (_iy - (GY - 1) / 2) * 42.0
+        _cx = (_ix - (GX - 1) / 2) * 42.0 + _PX
+        _cy = (_iy - (GY - 1) / 2) * 42.0 + _PY
         if SOCKETS:
             # socket per cell: tapered pocket approximating baseplate_cutter
             # (_BASEPLATE_PROFILE [[0,0],[0.7,0.7],[0.7,2.5],[2.85,4.65]],
             # gridfinity-baseplate.scad:38-43; bottom opening ~36.3 wide)
-            _sockD = T - 1.2
-            _sock = loft(Sketch() + [Pos(_cx, _cy, T - _sockD) * (Plane.XY * RectangleRounded(36.3, 36.3, 1.15)), Pos(_cx, _cy, 0) * (Plane.XY.offset(T + 0.5) * RectangleRounded(40.5, 40.5, 2.5))], ruled=True)
+            _sockD = _PT - 1.2
+            _sock = loft(Sketch() + [Pos(_cx, _cy, _PT - _sockD) * (Plane.XY * RectangleRounded(36.3, 36.3, 1.15)), Pos(_cx, _cy, 0) * (Plane.XY.offset(_PT + 0.5) * RectangleRounded(40.5, 40.5, 2.5))], ruled=True)
             result -= _sock
+        if STYLE == 1:
+            # weighted style: four underside weight pockets per grid cell
+            for _sx in (-10.7, 10.7):
+                for _sy in (-10.7, 10.7):
+                    result -= Pos(_cx + _sx, _cy + _sy, -0.01) * Box(15.5, 15.5, 4.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        elif STYLE in (2, 4):
+            # skeletonized/minimal styles remove the broad underside web while
+            # retaining the perimeter and the socket walls.
+            result -= Pos(_cx, _cy, -0.01) * Box(21.4, 21.4, max(1.0, _PT - 1.0), align=(Align.CENTER, Align.CENTER, Align.MIN))
 # ---- holes open at the top surface (mirrored block_base_hole) ----
 def _plate_hole_xy():
     if CORNERS:
@@ -48,8 +71,8 @@ def _plate_hole_xy():
     _pos = []
     for _ix in range(GX):
         for _iy in range(GY):
-            _cx = (_ix - (GX - 1) / 2) * 42.0
-            _cy = (_iy - (GY - 1) / 2) * 42.0
+            _cx = (_ix - (GX - 1) / 2) * 42.0 + _PX
+            _cy = (_iy - (GY - 1) / 2) * 42.0 + _PY
             for _dx in (-13.0, 13.0):
                 for _dy in (-13.0, 13.0):
                     _pos.append((_cx + _dx, _cy + _dy))
@@ -73,7 +96,7 @@ if REFINED or MAGNETS or SCREW:
             _ref += Pos(0, 0, -1.9) * Cylinder(2.93, 1.9, align=(Align.CENTER, Align.CENTER, Align.MIN))
             _ref += Pos(-6.93, -1.25, -2.5) * Box(4.4, 2.5, 2.5, align=(Align.MIN, Align.MIN, Align.MIN))
             _ref += Pos(-6.93, 0, -2.5) * Cylinder(1.25, 2.5, align=(Align.CENTER, Align.CENTER, Align.MIN))
-            result -= Pos(_hx, _hy, T) * _ref
+            result -= Pos(_hx, _hy, _PT) * _ref
         if MAGNETS:
             if CRUSH:
                 _pts = []
@@ -89,11 +112,27 @@ if REFINED or MAGNETS or SCREW:
                 _mhole -= _plate_printable(1.5 if SCREW else 1.0, 3.25)
             if CHAMFER:
                 _mhole += Cone(1.65, 4.05, 2.4, align=(Align.CENTER, Align.CENTER, Align.MIN))
-            result -= Pos(_hx, _hy, T - 2.4) * _mhole
+            result -= Pos(_hx, _hy, _PT - 2.4) * _mhole
         if SCREW:
-            _shole = Pos(0, 0, -0.25) * Cylinder(1.5, T + 0.5, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            _shole = Pos(0, 0, -0.25) * Cylinder(SCREW_D / 2, _PT + 0.5, align=(Align.CENTER, Align.CENTER, Align.MIN))
             if PRINTABLE:
-                _shole -= Pos(0, 0, T - 2.4) * _plate_printable(0.5, 1.5)
-            if CHAMFER:
-                _shole += Pos(0, 0, T - 0.8) * Cone(1.5, 2.3, 0.8, align=(Align.CENTER, Align.CENTER, Align.MIN))
+                _shole -= Pos(0, 0, _PT - 2.4) * _plate_printable(0.5, SCREW_D / 2)
+            if CHAMFER or HOLESTYLE == 1:
+                _shole += Pos(0, 0, _PT - 0.8) * Cone(SCREW_D / 2, SCREW_HEAD / 2, 0.8, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            elif HOLESTYLE == 2:
+                _shole += Pos(0, 0, _PT - 2.0) * Cylinder(SCREW_HEAD / 2, 2.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
             result -= Pos(_hx, _hy, 0) * _shole
+
+# Screw-together plates use horizontal clearance tunnels at the outside seams.
+# This is the same user-visible feature as the upstream style 3/4 cutter,
+# expressed as simple cylinders so it remains robust in build123d.
+if STYLE in (3, 4):
+    _r = SCREW_D / 2
+    for _x in (-W / 2, W / 2):
+        for _i in range(max(1, NSCREWS)):
+            _y = (_i - (max(1, NSCREWS) - 1) / 2) * (SCREW_HEAD + SCREW_SPACING)
+            result -= Pos(_x, _y, _PT / 2) * Rot(0, 90, 0) * Cylinder(_r, 4.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    for _y in (-D / 2, D / 2):
+        for _i in range(max(1, NSCREWS)):
+            _x = (_i - (max(1, NSCREWS) - 1) / 2) * (SCREW_HEAD + SCREW_SPACING)
+            result -= Pos(_x, _y, _PT / 2) * Rot(90, 0, 0) * Cylinder(_r, 4.0, align=(Align.CENTER, Align.CENTER, Align.MIN))
