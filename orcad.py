@@ -6,7 +6,7 @@
 # name = "orcad"
 # description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, Monaco editor, live 3D preview, STL/STEP/3MF export."
 # author = "orcad"
-# version = "0.5.0"
+# version = "0.5.1"
 # ///
 """orcad — build123d CAD tab (Pages capability).
 
@@ -55,7 +55,7 @@ try:
 except ImportError:  # pragma: no cover - allows unit tests without Orca
     orca = None
 
-PLUGIN_VERSION = "0.5.0"
+PLUGIN_VERSION = "0.5.1"
 EXPORT_FORMATS = ("stl", "step", "3mf")
 DEFAULT_TOLERANCE = 0.001
 PREVIEW_MAX_TRIS = 3000  # cap on triangles sent to the page for preview
@@ -179,17 +179,21 @@ def cylinder_generate(c):
 Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
 a self-contained build123d program assigning `result`. No imports allowed
 (single-file bundling constraint) — see packaging/bundle.py.
+
+Simplified solid-slab port of kennetek/gridfinity-rebuilt-openscad
+gridfinity-rebuilt-baseplate.scad (style_plate=0 "thin" + magnet holes):
+slab GX*42 x GY*42, one tapered socket per cell approximating the
+baseplate_cutter profile, four 6x2 magnet holes per cell.
 """
 gridfinity_baseplate_SPEC = {'label': 'Gridfinity Baseplate', 'blurb': 'Grid the bins snap into, with sockets + magnet holes.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 4}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 4}, {'key': 'T', 'label': 'Thickness', 'unit': 'mm', 'ptype': 'number', 'min': 4.6, 'max': 8, 'step': 0.2, 'default': 5}, {'key': 'SOCKETS', 'label': 'Bin sockets', 'ptype': 'bool', 'default': True}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'ptype': 'bool', 'default': True}]}
 
 def gridfinity_baseplate_generate(c):
-    _pitch, _mag_r = (42.0, 3.25)
     gx, gy = (c['GX'], c['GY'])
-    lines = ['from build123d import *', f'GX, GY = {gx}, {gy}', f"T = {c['T']}", f'W = GX * {_pitch}', f'D = GY * {_pitch}', 'result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=T)', 'for _ix in range(GX):', '    for _iy in range(GY):', f'        _cx = -W / 2 + {_pitch / 2} + _ix * {_pitch}', f'        _cy = -D / 2 + {_pitch / 2} + _iy * {_pitch}']
+    lines = ['from build123d import *', f'GX, GY = {gx}, {gy}', f"T = {c['T']}", 'W = GX * 42.0', 'D = GY * 42.0', 'result = extrude(Plane.XY * RectangleRounded(W, D, 2.0), amount=T)', 'for _ix in range(GX):', '    for _iy in range(GY):', '        _cx = (_ix - (GX - 1) / 2) * 42.0', '        _cy = (_iy - (GY - 1) / 2) * 42.0']
     if c['SOCKETS']:
-        lines += ['        _sock = Pos(_cx, _cy, T - 2.0) * extrude(Plane.XY * RectangleRounded(40.0, 40.0, 3.0), amount=3.0)', '        result -= _sock']
+        lines += ['# socket per cell: tapered pocket approximating baseplate_cutter', '# (_BASEPLATE_PROFILE [[0,0],[0.7,0.7],[0.7,2.5],[2.85,4.65]],', '# gridfinity-baseplate.scad:38-43; bottom opening ~36.3 wide)', '        _sockD = T - 1.2', '        _sock = loft(Sketch() + [Pos(_cx, _cy, T - _sockD) * (Plane.XY * RectangleRounded(36.3, 36.3, 1.15)), Pos(_cx, _cy, 0) * (Plane.XY.offset(T + 0.5) * RectangleRounded(40.5, 40.5, 2.5))], ruled=True)', '        result -= _sock']
     if c['MAGNETS']:
-        lines += [f'        result -= Pos(_cx, _cy, T - 4.6) * Cylinder({_mag_r}, 2.8, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+        lines += ['# magnet holes: r 3.25, depth 2.4 open at the top (MAGNET_HOLE_DEPTH,', '# standard.scad:29), four per cell at 21-8 = 13.0 from center', '# (hole_pattern, gridfinity-rebuilt-baseplate.scad:250-256)', '        for _dx in (-13.0, 13.0):', '            for _dy in (-13.0, 13.0):', '                result -= Pos(_cx + _dx, _cy + _dy, T - 2.4) * Cylinder(3.25, 2.9, align=(Align.CENTER, Align.CENTER, Align.MIN))']
     return '\n'.join(lines) + '\n'
 
 
@@ -199,31 +203,29 @@ Standalone module: exposes SPEC (parameter UI) and generate(c) which returns
 a self-contained build123d program assigning `result`. No imports allowed
 (single-file bundling constraint) — see packaging/bundle.py.
 
-Geometry: spec-based bin (42mm grid, 7mm height units, 0.5 tolerance) with
-lofted tapered stacking feet (true 45 deg chamfers), a tapered stacking lip
-ring that nests the feet, optional divider walls, front scoop notch and
-6x2mm magnet holes on the 26mm-per-cell grid.
+Geometry: faithful port of kennetek/gridfinity-rebuilt-openscad
+(gridfinity-rebuilt-bins.scad, gridz_define=0: H = gridz*7mm incl. base,
+excl. stacking lip). Key numbers cited inline as file:line.
 """
 gridfinity_bin_SPEC = {'label': 'Gridfinity Bin', 'blurb': 'Rebuilt-style bin: lofted foot, tapered lip, dividers, scoop, magnets.', 'params': [{'key': 'GX', 'label': 'Grid X', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 2}, {'key': 'GY', 'label': 'Grid Y', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 6, 'step': 1, 'default': 2}, {'key': 'HU', 'label': 'Height', 'unit': 'u', 'ptype': 'int', 'min': 1, 'max': 12, 'step': 1, 'default': 6}, {'key': 'WALL', 'label': 'Wall', 'unit': 'mm', 'ptype': 'number', 'min': 0.8, 'max': 2.4, 'step': 0.2, 'default': 1.2}, {'key': 'DX', 'label': 'Dividers X', 'unit': '', 'ptype': 'int', 'min': 0, 'max': 4, 'step': 1, 'default': 0}, {'key': 'DY', 'label': 'Dividers Y', 'unit': '', 'ptype': 'int', 'min': 0, 'max': 4, 'step': 1, 'default': 0}, {'key': 'MAGNETS', 'label': 'Magnet holes (6x2)', 'ptype': 'bool', 'default': True}, {'key': 'LIP', 'label': 'Stacking lip', 'ptype': 'bool', 'default': True}, {'key': 'SCOOP', 'label': 'Scoop notch (front)', 'ptype': 'bool', 'default': False}]}
 
 def gridfinity_bin_generate(c):
-    _pitch, _tol, _hu = (42.0, 0.5, 7.0)
-    _corner, _base_h = (3.75, 4.75)
-    _mag_r, _mag_d = (3.25, 13.0)
     gx, gy, hu = (c['GX'], c['GY'], c['HU'])
-    lines = ['from build123d import *', f'GX, GY, HU = {gx}, {gy}, {hu}', f"WALL = {c['WALL']}", f'BASE_H = {_base_h}', f'W = GX * {_pitch} - {_tol}', f'D = GY * {_pitch} - {_tol}', f'H = HU * {_hu}', '# body: rounded walls, open top', f'_outer = extrude(Plane.XY * RectangleRounded(W, D, {_corner}), amount=H)', '_cw = W - 2 * WALL', '_cd = D - 2 * WALL', f'_cavity = Pos(0, 0, BASE_H) * extrude(Plane.XY * RectangleRounded(_cw, _cd, max(0.5, {_corner} - WALL)), amount=H - BASE_H + 1)', 'result = _outer - _cavity', '# stacking feet: lofted spec taper (true 45 deg chamfers), one per cell', '# profile: (z, width, corner) bottom -> top, mirroring the rebuilt base', '_prof = [(0.0, 35.6, 0.8), (0.8, 37.2, 1.5), (2.6, 37.2, 2.5), (4.75, 41.5, 3.75)]', 'for _ix in range(GX):', '    for _iy in range(GY):', f'        _cx = -(GX * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _ix * {_pitch}', f'        _cy = -(GY * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _iy * {_pitch}', '        _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]', '        result += loft(Sketch() + _secs, ruled=True)']
+    div_top = 'H - 1.2' if c['LIP'] else 'H'
+    lines = ['from build123d import *', f'GX, GY, HU = {gx}, {gy}, {hu}', f"WALL = {c['WALL']}", '# spec constants (src/core/standard.scad): pitch 42.0 (:16), gap 0.5 (:205),', '# base 7.0 (:217), profile 4.75 (:211), top radius 3.75 (:190)', 'BASE_H = 7.0', 'PROF_H = 4.75', 'W = GX * 42.0 - 0.5  # grid_size_mm, base.scad:36-41', 'D = GY * 42.0 - 0.5', 'H = HU * 7.0  # fromGridfinityUnits, utility:24 (incl base, excl lip)', '# body: full-footprint bridge slab 4.75..H (_base_bridge_solid, base.scad:169),', '# open-top cavity from the infill floor at 7.0 (bin_render_infill, bin.scad:160)', '_outer = Pos(0, 0, PROF_H) * extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=H - PROF_H)', '_cw = W - 2 * WALL', '_cd = D - 2 * WALL', '_cavity = Pos(0, 0, BASE_H) * extrude(Plane.XY * RectangleRounded(_cw, _cd, max(0.5, 3.75 - WALL)), amount=H - BASE_H + 1)', 'result = _outer - _cavity', '# stacking feet: BASE_PROFILE [[0,0],[0.8,0.8],[0.8,2.6],[2.95,4.75]]', '# (standard.scad:175) -> (z, width, corner): bottom 35.6 = 41.5-2*2.95', '# (base_bottom_dimensions, :236), mid 37.2 = 35.6+2*0.8, top 41.5;', '# bottom corner 0.8 = BASE_BOTTOM_RADIUS (:229), top 3.75; mid transitions', '# are sharp miters in spec, 0.8 keeps the ruled loft stable', '_prof = [(0.0, 35.6, 0.8), (0.8, 37.2, 0.8), (2.6, 37.2, 0.8), (4.75, 41.5, 3.75)]', 'for _ix in range(GX):', '    for _iy in range(GY):', '        _cx = (_ix - (GX - 1) / 2) * 42.0  # cells centered on the bin', '        _cy = (_iy - (GY - 1) / 2) * 42.0', '        _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]', '        result += loft(Sketch() + _secs, ruled=True)']
     if c['MAGNETS']:
-        lines += ['# magnet holes (6x2mm magnets, 26mm grid per cell)', 'for _ix in range(GX):', '    for _iy in range(GY):', f'        _cx = -(GX * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _ix * {_pitch}', f'        _cy = -(GY * {_pitch} - {_tol}) / 2 + {_pitch / 2} + _iy * {_pitch}', f'        for _dx in (-{_mag_d}, {_mag_d}):', f'            for _dy in (-{_mag_d}, {_mag_d}):', f'                result -= Pos(_cx + _dx, _cy + _dy, -0.5) * Cylinder({_mag_r}, 3.1, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+        lines += ['# magnet holes: r 3.25, depth 2.4 (standard.scad:28-29), at', '# base_bottom/2 - 4.8 = 17.8-4.8 = 13.0 from cell center (:35, base.scad:272)', 'for _ix in range(GX):', '    for _iy in range(GY):', '        _cx = (_ix - (GX - 1) / 2) * 42.0', '        _cy = (_iy - (GY - 1) / 2) * 42.0', '        for _dx in (-13.0, 13.0):', '            for _dy in (-13.0, 13.0):', '                result -= Pos(_cx + _dx, _cy + _dy, -0.5) * Cylinder(3.25, 2.9, align=(Align.CENTER, Align.CENTER, Align.MIN))']
     if c['LIP']:
-        lines += ['# stacking lip: tapered ring above the rim (nests the feet above)', '# outer flares past the walls, inner void mirrors the foot taper', '_lo0 = W - WALL', '_lo1 = W + WALL + 0.6', '_li0 = _cw - 0.2', '_li1 = _cw + 2 * WALL + 0.4', '_lip_outer = loft(Sketch() + [Plane.XY.offset(H) * RectangleRounded(_lo0, _lo0, 3.0), Plane.XY.offset(H + 4.4) * RectangleRounded(_lo1, _lo1, 3.5)], ruled=True)', '_lip_inner = loft(Sketch() + [Plane.XY.offset(H - 0.5) * RectangleRounded(_li0, _li0, 2.5), Plane.XY.offset(H + 4.5) * RectangleRounded(_li1, _li1, 3.0)], ruled=True)', 'result += _lip_outer - _lip_inner']
+        lines += ['# Stacking lip: STACKING_LIP_LINE [[0,0],[0.7,0.7],[0.7,2.5],[2.6,4.4]]', '# (standard.scad:124), nominal height 4.4 (:144, actual ~3.55 with 0.6', '# fillet); outer face flush with the walls, inner funnel from W-5.2', '# (2x2.6) at the 1.2 support up to W at the rim (wall.scad:25-46)', '_lip_outer = loft(Sketch() + [Plane.XY.offset(H - 1.2) * RectangleRounded(W, D, 3.75), Plane.XY.offset(H + 4.4) * RectangleRounded(W, D, 3.75)], ruled=True)', '_lip_inner = loft(Sketch() + [Plane.XY.offset(H - 1.2) * RectangleRounded(W - 5.2, D - 5.2, 1.2), Plane.XY.offset(H + 4.5) * RectangleRounded(W, D, 3.75)], ruled=True)', 'result += _lip_outer - _lip_inner']
     if c['DX'] or c['DY']:
-        lines += ['# divider walls']
+        lines += ['# divider walls (compartment count DX+1 x DY+1; nominal d_div 1.2, standard.scad:10)']
+        lines += ['_div0 = BASE_H', f'_div1 = {div_top}', 'if _div1 > _div0:  # 1U bins have no infill, so no dividers (bin.scad:256)']
     if c['DX']:
-        lines += [f"for _i in range(1, {c['DX']} + 1):", f"    _x = -_cw / 2 + _i * _cw / ({c['DX']} + 1)", '    result += Pos(_x, 0, BASE_H) * Box(WALL, _cd, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+        lines += [f"    for _i in range(1, {c['DX']} + 1):", f"        _x = -_cw / 2 + _i * _cw / ({c['DX']} + 1)", '        result += Pos(_x, 0, _div0) * Box(WALL, _cd, _div1 - _div0, align=(Align.CENTER, Align.CENTER, Align.MIN))']
     if c['DY']:
-        lines += [f"for _j in range(1, {c['DY']} + 1):", f"    _y = -_cd / 2 + _j * _cd / ({c['DY']} + 1)", '    result += Pos(0, _y, BASE_H) * Box(_cw, WALL, H - BASE_H, align=(Align.CENTER, Align.CENTER, Align.MIN))']
+        lines += [f"    for _j in range(1, {c['DY']} + 1):", f"        _y = -_cd / 2 + _j * _cd / ({c['DY']} + 1)", '        result += Pos(0, _y, _div0) * Box(_cw, WALL, _div1 - _div0, align=(Align.CENTER, Align.CENTER, Align.MIN))']
     if c['SCOOP']:
-        lines += ['# scoop notch in the front wall', '_nw = min(_cw * 0.6, _cw - 2 * WALL)', '_nh = (H - BASE_H) * 0.45 + 1', '_notch = Pos(-_nw / 2, D / 2 - WALL - 1, H + 1 - _nh) * Box(_nw, WALL + 2, _nh, align=(Align.MIN, Align.MIN, Align.MIN))', 'result -= _notch']
+        lines += ['# scoop notch in the front wall (simplified finger pull; .scad scoops the compartment instead, cutouts.scad:141)', '_nw = min(_cw * 0.6, _cw - 2 * WALL)', '_nh = (H - BASE_H) * 0.45 + 1', '_notch = Pos(-_nw / 2, D / 2 - WALL - 1, H + 1 - _nh) * Box(_nw, WALL + 2, _nh, align=(Align.MIN, Align.MIN, Align.MIN))', 'result -= _notch']
     return '\n'.join(lines) + '\n'
 
 
@@ -646,7 +648,7 @@ input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;bac
 </head>
 <body>
 <header class="top">
-  <span class="brand">orcad <small>build123d · v0.5</small></span>
+  <span class="brand">orcad <small>build123d · v0.5.1</small></span>
   <span id="status" class="muted small"></span><span class="spacer"></span>
   <select id="fmt" title="Export format"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
   <input id="tol" type="number" value="0.001" step="0.001" min="0.0001" max="1" style="width:86px" title="Tessellation tolerance">

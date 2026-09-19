@@ -33,7 +33,7 @@ def test_metadata_block():
     assert "# /// script" in text
     assert 'dependencies = ["build123d", "numpy"]' in text
     assert 'name = "orcad"' in text
-    assert 'version = "0.5.0"' in text
+    assert 'version = "0.5.1"' in text
 
 
 def test_primitives_codegen_ok():

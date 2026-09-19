@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.5.1 — Gridfinity verified against original .scad
+
+- Bin + baseplate rewritten as a faithful port of
+  kennetek/gridfinity-rebuilt-openscad (file:line citations inline).
+  Fixed real bugs found by STL-vs-STL comparison: off-center cells,
+  flat-bottom slab, buried single magnet hole, box sockets, square-only lip.
+- Verified: OpenSCAD-rendered reference STLs vs build123d output match
+  (footprint, foot taper, magnet positions within 0.3mm). Known deltas:
+  nominal 4.4 lip, ~6% volume (lip + omitted interior fillets).
+- Predefined objects now live in `objects/*.py` (one file each), bundled
+  into `orcad.py` via `packaging/bundle.py` (`--check` enforced by tests).
+
 ## 0.5.0 — Editor mirror + Rebuilt-style Gridfinity port
 
 - Code Editor mirrors the Objects tab: selecting an object or moving any
