@@ -49,7 +49,10 @@ def _parse_spec_body(body, path, var):
         for key in ("min", "max", "step"):
             if key not in fields:
                 raise ValueError(f"{path}: spec on {var} needs {key}=")
-            fields[key] = float(fields[key])
+            try:
+                fields[key] = float(fields[key])
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"{path}: spec on {var} has invalid {key}") from exc
     elif set(fields) - {"label", "unit"}:
         raise ValueError(f"{path}: bool spec on {var} takes only label=/unit=")
     fields.setdefault("unit", "")
@@ -99,12 +102,17 @@ def parse_object(path):
         try:
             default = ast.literal_eval(value_src.strip())
         except Exception:
-            raise ValueError(f"{path}:{lineno}: spec default must be a literal")
+            raise ValueError(f"{path}:{lineno}: spec default must be a literal") from None
         ptype, fields = _parse_spec_body(match.group(2), f"{path}:{lineno}", var)
         if ptype == "bool" and not isinstance(default, bool):
             raise ValueError(f"{path}:{lineno}: bool default must be True/False")
-        if ptype == "int" and not float(default).is_integer():
-            raise ValueError(f"{path}:{lineno}: int default must be whole")
+        if ptype == "int":
+            try:
+                whole = float(default).is_integer()
+            except (TypeError, ValueError):
+                whole = False
+            if not whole:
+                raise ValueError(f"{path}:{lineno}: int default must be whole")
         if ptype == "number" and not isinstance(default, (int, float)):
             raise ValueError(f"{path}:{lineno}: number default must be numeric")
         param = {"key": var, "label": fields["label"], "unit": fields.get("unit", ""),
@@ -167,7 +175,7 @@ def build_py_region(objects):
         + "    try:\n"
         + "        template = _TEMPLATES[primitive]\n"
         + "    except KeyError:\n"
-        + '        raise ValueError(f"unknown object {primitive!r}")\n'
+        + '        raise ValueError(f"unknown object {primitive!r}") from None\n'
         + "    return _bake_template(template, c)\n"
     )
 

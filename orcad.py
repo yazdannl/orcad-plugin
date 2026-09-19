@@ -4,7 +4,7 @@
 #
 # [tool.orcaslicer.plugin]
 # name = "orcad"
-# description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, Monaco editor, live 3D preview, STL/STEP/3MF export."
+# description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, compact Three.js preview, code editor, and STL/STEP/3MF export."
 # author = "orcad"
 # version = "0.6.0"
 # ///
@@ -16,9 +16,9 @@ as a FilamentHub-style tab): implemented as orca.pages.PagesPluginCapabilityBase
 Layout (v0.5):
 - Left: tabbed panel switching between "Objects" (searchable predefined-object
   dropdown + styled parameter sliders, live preview while editing; the Code
-  Editor mirrors the selected object + params) and "Code Editor" (Monaco,
-  textarea fallback when the CDN is unreachable).
-- Right: persistent 3D preview (always visible, live for objects) + result + log.
+  Editor mirrors the selected object + params) and "Code" (a reliable native
+  build123d textarea editor).
+- Right: persistent Three.js 3D preview (always visible, live for objects) + result + log.
 - "Send to plate": exports STL and opens it with the OS default app, so
   OrcaSlicer's single-instance handling loads it onto the build plate
   (one audit prompt on first use, then remembered).
@@ -30,10 +30,9 @@ Layout (v0.5):
   Manual import into plater (orca.host is read-only): drag the exported file
   onto the plater.
 
-Styling is 100% inline (no CSS framework CDN): Orca's WebView does not
-reliably load external stylesheets, so the modern dark/light adaptive theme
-ships in the page. Only the Monaco editor loads from CDN, with an automatic
-plain-textarea fallback.
+The UI is inline and framework-free so it works in Orca's embedded WebView.
+Three.js is the only page dependency and renders the server tessellation with
+native pointer rotation and wheel zoom; the code editor is a plain textarea.
 
 Tested target: OrcaSlicer Nightly / >2.4.2 with `orca.pages` (main branch).
 On older builds without orca.pages, falls back to a Script capability that
@@ -42,8 +41,10 @@ shows an upgrade message.
 
 import datetime
 import json
+import math
 import os
 from contextlib import suppress
+from typing import Any, cast
 import re
 import subprocess
 import sys
@@ -52,7 +53,7 @@ import traceback
 from pathlib import Path
 
 try:
-    import orca  # provided by OrcaSlicer embedded interpreter
+    import orca  # type: ignore[import-not-found]  # provided by OrcaSlicer embedded interpreter
 except ImportError:  # pragma: no cover - allows unit tests without Orca
     orca = None
 
@@ -81,8 +82,8 @@ def _num(v, name):
     try:
         f = float(v)
     except (TypeError, ValueError):
-        raise ValueError(f"{name} must be a number, got {v!r}")
-    if not (f == f and abs(f) != float("inf")):
+        raise ValueError(f"{name} must be a number, got {v!r}") from None
+    if not math.isfinite(f):
         raise ValueError(f"{name} must be finite")
     return f
 
@@ -119,16 +120,17 @@ def validate_primitive_params(primitive, params):
         if ptype == "int":
             if not v.is_integer():
                 raise ValueError(f"{key} must be a whole number")
-            cleaned[key] = int(v)
+            try:
+                cleaned[key] = int(v)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError(f"{key} must be a whole number") from exc
         else:
             cleaned[key] = v
     if primitive == "tube" and not cleaned["R_IN"] < cleaned["R_OUT"]:
         raise ValueError("R_IN must be smaller than R_OUT")
-    if primitive == "bracket":
-        if cleaned["D"] >= min(cleaned["L"] / 2, cleaned["W"]):
+    if primitive == "bracket" and cleaned["D"] >= min(cleaned["L"] / 2, cleaned["W"]):
             raise ValueError("Hole diameter D too large for plate size")
-    if primitive == "gridfinity_bin":
-        if cleaned["REFINED"] and cleaned["MAGNETS"]:
+    if primitive == "gridfinity_bin" and cleaned["REFINED"] and cleaned["MAGNETS"]:
             raise ValueError("refined holes exclude magnet holes (original rule)")
     if primitive == "gridfinity_baseplate":
         if cleaned["REFINED"] and cleaned["MAGNETS"]:
@@ -608,7 +610,7 @@ def generate_primitive_code(primitive, params):
     try:
         template = _TEMPLATES[primitive]
     except KeyError:
-        raise ValueError(f"unknown object {primitive!r}")
+        raise ValueError(f"unknown object {primitive!r}") from None
     return _bake_template(template, c)
 
 # END BUNDLED OBJECTS
@@ -701,29 +703,22 @@ def _find_result(namespace):
     for key, obj in namespace.items():
         if key.startswith("_"):
             continue
-        try:
-            if isinstance(obj, Shape):
-                return obj, key
-        except Exception:
-            continue
+        if isinstance(obj, Shape):
+            return obj, key
     return None, None
 
 
 def _shape_stats(shape):
     stats = {}
     for attr in ("volume", "area"):
-        try:
-            v = getattr(shape, attr, None)
-            stats[attr + "_mm"] = round(float(v() if callable(v) else v), 3)
-        except Exception:
-            pass
-    try:
+        with suppress(Exception):
+            value = cast(Any, getattr(shape, attr, None))
+            stats[attr + "_mm"] = round(_num(value() if callable(value) else value, attr), 3)
+    with suppress(Exception):
         bb = shape.bounding_box()
-        stats["bbox_min"] = [round(float(x), 3) for x in bb.min]
-        stats["bbox_max"] = [round(float(x), 3) for x in bb.max]
-        stats["bbox_size"] = [round(float(x), 3) for x in bb.size]
-    except Exception:
-        pass
+        stats["bbox_min"] = [round(_num(x, "bbox"), 3) for x in bb.min]
+        stats["bbox_max"] = [round(_num(x, "bbox"), 3) for x in bb.max]
+        stats["bbox_size"] = [round(_num(x, "bbox"), 3) for x in bb.size]
     return stats
 
 
@@ -733,7 +728,7 @@ def _preview_payload(shape, tolerance=DEFAULT_TOLERANCE):
     Returns {"tris": [x1,y1,z1, ...], "shown": n, "total": m} or None.
     """
     try:
-        vertices, triangles = shape.tessellate(float(tolerance), 0.1)
+        vertices, triangles = shape.tessellate(_num(tolerance, "tolerance"), 0.1)
         total = len(triangles)
         if total == 0:
             return None
@@ -758,15 +753,15 @@ def _execute_code(code):
             "build123d is not installed in Orca's Python environment yet. "
             "Reopen Plugins dialog / restart OrcaSlicer so bundled `uv` can "
             f"install dependencies, then retry. ({exc})"
-        )
+        ) from exc
 
     namespace = {"__name__": "__orcad__"}
     try:
         exec("from build123d import *", namespace)  # noqa: S102 - intentional CAD exec
-        exec(compile(code, "<orcad>", "exec"), namespace)  # noqa: S102
+        exec(code, namespace)  # noqa: S102 - intentional CAD exec
     except Exception as exc:
         tb = traceback.format_exc(limit=8)
-        raise RuntimeError(f"CAD code failed: {exc}\n{tb}")
+        raise RuntimeError(f"CAD code failed: {exc}\n{tb}") from exc
 
     shape, var = _find_result(namespace)
     if shape is None:
@@ -776,8 +771,9 @@ def _execute_code(code):
         )
     # volume sanity (2D sketches have ~0 volume -> STL would be empty)
     try:
-        vol = float(shape.volume() if callable(getattr(shape, "volume", None))
-                    else shape.volume)
+        shape_obj = cast(Any, shape)
+        vol = _num(shape_obj.volume() if callable(getattr(shape_obj, "volume", None))
+                   else shape_obj.volume, "volume")
         if vol <= 0:
             raise RuntimeError(
                 f"`{var}` has zero volume ({vol}). STL/3MF need a solid — "
@@ -786,8 +782,15 @@ def _execute_code(code):
     except RuntimeError:
         raise
     except Exception:
-        pass  # best-effort only; let exporter decide
+        return shape, var  # best-effort only; let exporter decide
     return shape, var
+
+
+def _tolerance(value):
+    tol = _num(value, "tolerance")
+    if not (0.0001 <= tol <= 1.0):
+        raise ValueError("tolerance must be within [0.0001, 1.0]")
+    return tol
 
 
 def preview_shape(code, tolerance=DEFAULT_TOLERANCE):
@@ -795,9 +798,7 @@ def preview_shape(code, tolerance=DEFAULT_TOLERANCE):
 
     Returns dict (JSON-able). Raises RuntimeError on failure.
     """
-    tol = float(tolerance)
-    if not (0.0001 <= tol <= 1.0):
-        raise ValueError("tolerance must be within [0.0001, 1.0]")
+    tol = _tolerance(tolerance)
     if len(code) > 200_000:
         raise ValueError("code too large (>200k chars)")
     shape, var = _execute_code(code)
@@ -816,7 +817,7 @@ def _open_with_default_app(path):
     s = str(path)
     try:
         if sys.platform.startswith("win"):
-            os.startfile(s)  # noqa: S606 - user-approved local file open
+            cast(Any, os).startfile(s)  # noqa: S606 - user-approved local file open
         elif sys.platform == "darwin":
             subprocess.Popen(["open", s])
         else:
@@ -827,7 +828,7 @@ def _open_with_default_app(path):
     except Exception as exc:
         raise RuntimeError(
             f"Could not hand {s} to OrcaSlicer ({exc}). "
-            "Drag the file from exports/ onto Prepare instead.")
+            "Drag the file from exports/ onto Prepare instead.") from exc
 
 
 def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
@@ -838,7 +839,7 @@ def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
     """
     if export_format not in EXPORT_FORMATS:
         raise ValueError(f"format must be one of {EXPORT_FORMATS}")
-    tol = float(tolerance)
+    tol = _tolerance(tolerance)
     if not (0.0001 <= tol <= 1.0):
         raise ValueError("tolerance must be within [0.0001, 1.0]")
     if len(code) > 200_000:
@@ -868,7 +869,7 @@ def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
     except RuntimeError:
         raise
     except Exception as exc:
-        raise RuntimeError(f"Export to {export_format} failed: {exc}")
+        raise RuntimeError(f"Export to {export_format} failed: {exc}") from exc
 
     try:
         size = out_path.stat().st_size
@@ -880,190 +881,48 @@ def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
         "filename": filename,
         "format": export_format,
         "var": var,
-        "size_bytes": int(size),
+        "size_bytes": size,
         "stats": _shape_stats(shape),
         "preview": _preview_payload(shape, tol),
     }
 
 
 # ---------------------------------------------------------------------------
-# Page UI — fully self-contained (inline CSS, no framework CDN).
-# Orca's WebView does not reliably load external stylesheets, so the modern
-# theme ships in the page and adapts via --orca-* vars (dark-first fallback).
-# Only Monaco loads from CDN, with an automatic textarea fallback.
+# Page UI — compact inline app with one Three.js rendering dependency.
+# Orca's WebView does not reliably load external stylesheets, so the adaptive
+# theme and responsive layout ship in the page.
 # ---------------------------------------------------------------------------
 
 PAGE_HTML = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>orcad</title>
 <style>
-:root{
-  color-scheme:light dark;
-  --bg:var(--orca-bg,#14161b); --bg2:var(--orca-bg,#1b1e25);
-  --fg:var(--orca-fg,#e9ebef); --muted:var(--orca-muted,#9aa1ad);
-  --border:var(--orca-border,#2c313b); --accent:var(--orca-accent,#22b8a8);
-  --accent-fg:var(--orca-accent-fg,#062a27); --danger:#e5484d;
-  --ui:var(--orca-font,system-ui,-apple-system,'Segoe UI',Roboto,Inter,sans-serif);
-  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
-  --r:10px;
-}
-@media (prefers-color-scheme:light){
-  :root{--bg:var(--orca-bg,#f6f7f9);--bg2:var(--orca-bg,#ffffff);
-    --fg:var(--orca-fg,#1c2026);--muted:var(--orca-muted,#66707d);
-    --border:var(--orca-border,#e0e4ea);--accent:var(--orca-accent,#0b8067);--accent-fg:var(--orca-accent-fg,#fff)}
-}
-*{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--fg);font:13.5px/1.55 var(--ui);-webkit-font-smoothing:antialiased}
-.mono{font-family:var(--mono)} .muted{color:var(--muted)} .small{font-size:12px}
-/* header */
-.top{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border)}
-.brand{font-size:15px;font-weight:700;letter-spacing:.01em}
-.brand small{color:var(--muted);font-weight:400}
-.spacer{flex:1}
-select,input[type=number],input[type=text],textarea{background:var(--bg);color:var(--fg);
-  border:1px solid var(--border);border-radius:8px;padding:6px 10px;font:inherit}
-select:focus-visible,input:focus-visible,textarea:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-.btn{font:inherit;font-weight:600;border-radius:8px;padding:7px 14px;cursor:pointer;border:1px solid transparent}
-.btn-p{background:var(--accent);color:var(--accent-fg)}
-.btn-p:hover{filter:brightness(1.08)} .btn-p:disabled{opacity:.55;cursor:default}
-.btn-g{background:transparent;color:var(--fg);border-color:var(--border)}
-.btn-g:hover{border-color:var(--accent)} .btn-s{padding:4px 10px;font-size:12px;border-radius:7px}
-/* layout */
-.wrap{padding:14px 16px 24px;max-width:1500px;margin:0 auto}
-.grid{display:grid;grid-template-columns:360px minmax(0,1fr);gap:14px;align-items:start}
-@media(max-width:900px){.grid{grid-template-columns:1fr}}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:14px;margin-bottom:14px}
-.card h5{margin:0 0 4px;font-size:13px} .card h3{margin:0 0 10px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
-.sec-t{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}
-/* tabs */
-.tabs{display:flex;gap:4px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:4px;margin-bottom:12px}
-.tabs button{flex:1;border:0;background:transparent;color:var(--muted);font:inherit;font-weight:600;
-  padding:8px;border-radius:7px;cursor:pointer}
-.tabs button.on{background:var(--accent);color:var(--accent-fg)}
-/* dropdown */
-.dd{position:relative}
-.dd-btn{width:100%;display:flex;align-items:center;gap:8px;text-align:left;background:var(--bg);
-  border:1px solid var(--border);border-radius:9px;padding:9px 12px;color:var(--fg);font:inherit;cursor:pointer}
-.dd-btn:hover{border-color:var(--accent)}
-.dd-btn .caret{margin-left:auto;color:var(--muted)}
-.dd-list{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--bg2);
-  border:1px solid var(--border);border-radius:10px;overflow:hidden;box-shadow:0 12px 32px rgba(0,0,0,.35)}
-.dd-list input{width:100%;border:0;border-bottom:1px solid var(--border);border-radius:0}
-.dd-opts{max-height:240px;overflow:auto;padding:4px}
-.dd-opts button{display:block;width:100%;text-align:left;border:0;background:transparent;color:var(--fg);
-  font:inherit;padding:8px 10px;border-radius:7px;cursor:pointer}
-.dd-opts button small{display:block;color:var(--muted);font-size:11.5px}
-.dd-opts button:hover,.dd-opts button.hot{background:var(--accent);color:var(--accent-fg)}
-.dd-opts button:hover small,.dd-opts button.hot small{color:inherit;opacity:.8}
-.obj-blurb{font-size:12px;color:var(--muted);margin:8px 2px 0}
-/* params */
-.prow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;
-  padding:9px 2px;border-bottom:1px dashed var(--border)}
-.prow:last-of-type{border-bottom:0}
-.prow label{font-size:12.5px} .prow label b{font-weight:650}
-.prow .u{color:var(--muted);font-size:11px;margin-left:4px}
-.prow input[type=number]{width:84px;text-align:right;padding:5px 8px}
-.prow input[type=range]{grid-column:1/-1;width:100%;margin:2px 0 0}
-.prow input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);justify-self:end}
-input[type=range]{-webkit-appearance:none;appearance:none;height:22px;background:transparent;cursor:pointer}
-input[type=range]::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--border)}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:16px;height:16px;margin-top:-5px;
-  border-radius:50%;background:var(--accent);border:2px solid var(--bg2)}
-input[type=range]::-moz-range-track{height:6px;border-radius:3px;background:var(--border)}
-input[type=range]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:var(--accent);border:2px solid var(--bg2)}
-/* preview / result / log */
-#pv3d{width:100%;height:380px;border:1px solid var(--border);border-radius:8px;overflow:hidden;touch-action:none;background:var(--bg)}
-#pv3d canvas{display:block;width:100%;height:100%;cursor:grab}
-.pvbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
-.pvbar h5{margin:0;font-size:14px}
-.kv{display:grid;grid-template-columns:150px 1fr;gap:3px 10px;font-size:12.5px}
-.kv .k{color:var(--muted)} .kv .v{font-family:var(--mono);word-break:break-word}
-.log{font-family:var(--mono);font-size:12px;max-height:190px;overflow:auto;white-space:pre-wrap;
-  background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:9px 11px}
-.alert-err{background:rgba(229,72,77,.12);border:1px solid var(--danger);border-radius:8px;padding:9px 11px;font-family:var(--mono);font-size:12px}
-#editor{height:340px;border:1px solid var(--border);border-radius:8px;overflow:hidden}
-#code{width:100%;min-height:340px;font-family:var(--mono);font-size:12px}
-.rowline{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
-.banner{border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:12.5px}
+:root{color-scheme:light dark;--bg:var(--orca-bg,#101318);--panel:var(--orca-bg,#181c23);--panel2:var(--orca-bg,#20252e);--fg:var(--orca-fg,#eef1f5);--muted:var(--orca-muted,#8c96a4);--line:var(--orca-border,#303744);--accent:var(--orca-accent,#28c2ad);--accentfg:var(--orca-accent-fg,#062b27);--danger:#f06a72;--font:var(--orca-font,system-ui,-apple-system,"Segoe UI",sans-serif);--mono:ui-monospace,SFMono-Regular,Consolas,monospace}
+@media(prefers-color-scheme:light){:root{--bg:var(--orca-bg,#f3f5f8);--panel:var(--orca-bg,#fff);--panel2:var(--orca-bg,#e9edf2);--fg:var(--orca-fg,#20252c);--muted:var(--orca-muted,#697482);--line:var(--orca-border,#d9dee6);--accent:var(--orca-accent,#087e6e);--accentfg:#fff}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.45 var(--font)}button,input,select,textarea{font:inherit}button{cursor:pointer}button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}.mono{font-family:var(--mono)}.muted{color:var(--muted)}
+.appbar{height:52px;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line)}.logo{font-weight:750;letter-spacing:.02em}.logo span{color:var(--accent);font-weight:450}.status{font-size:12px;color:var(--muted)}.grow{flex:1}
+.btn{border:1px solid var(--line);border-radius:7px;background:transparent;color:var(--fg);padding:6px 10px;font-weight:600}.btn:hover{border-color:var(--accent)}.btn.primary{border-color:var(--accent);background:var(--accent);color:var(--accentfg)}.btn.small{padding:4px 8px;font-size:12px}.btn:disabled{opacity:.5;cursor:default}select,input[type=number],input[type=text]{border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg);padding:6px 8px}.format{width:76px}.tol{width:80px}
+.shell{max-width:1500px;margin:0 auto;padding:14px;display:grid;grid-template-columns:310px minmax(0,1fr);gap:14px}.side,.card{background:var(--panel);border:1px solid var(--line);border-radius:10px}.side{overflow:hidden;align-self:start}.tabs{display:grid;grid-template-columns:1fr 1fr;padding:5px;gap:4px;border-bottom:1px solid var(--line)}.tabs button{border:0;border-radius:6px;background:transparent;color:var(--muted);padding:7px;font-weight:650}.tabs button.on{background:var(--accent);color:var(--accentfg)}.sidebody{padding:12px}.label{display:block;color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:0 0 6px}.search{width:100%;margin-bottom:8px}.object{width:100%;min-height:36px}.blurb{font-size:12px;color:var(--muted);margin:8px 1px 14px}.section-title{color:var(--muted);font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:16px 0 5px}.param{padding:8px 0;border-bottom:1px dashed var(--line)}.param:last-child{border:0}.paramhead{display:flex;align-items:center;justify-content:space-between;gap:8px}.param label{font-size:12px}.param b{font-weight:650}.unit{color:var(--muted);font-size:11px;margin-left:4px}.param input[type=number]{width:76px;text-align:right;padding:4px 6px}.param input[type=range]{display:block;width:100%;margin:7px 0 0;accent-color:var(--accent)}.param input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}.editor{width:100%;height:410px;resize:vertical;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--fg);padding:10px;font:12px/1.5 var(--mono)}.editor-actions{display:flex;gap:6px;margin-top:8px}.editor-actions select{min-width:0;flex:1}
+.main{min-width:0;display:grid;gap:14px}.viewer{padding:0;overflow:hidden}.viewerbar{height:46px;display:flex;align-items:center;gap:7px;padding:0 10px;border-bottom:1px solid var(--line)}.viewerbar strong{font-size:13px}.viewerbar .muted{font-size:12px}.viewerhost{position:relative;height:510px;background:radial-gradient(circle at 50% 35%,rgba(60,80,100,.23),transparent 65%),var(--bg)}#pv3d{width:100%;height:100%;touch-action:none}#pv3d canvas{display:block;width:100%;height:100%;cursor:grab}.empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--muted);pointer-events:none}.empty strong{display:block;color:var(--fg);margin-bottom:3px}.empty.hidden{display:none}.viewerfoot{display:flex;align-items:center;gap:10px;padding:8px 10px;border-top:1px solid var(--line);font-size:12px}.viewerfoot .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.stats{display:flex;gap:6px;flex-wrap:wrap}.stat{background:var(--panel2);border-radius:5px;padding:2px 6px}.stat b{font-family:var(--mono);font-weight:500}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card{padding:12px}.card h2{font-size:12px;margin:0 0 8px}.result{min-height:76px;font-size:12px}.kv{display:grid;grid-template-columns:80px 1fr;gap:3px 8px}.kv .k{color:var(--muted)}.kv .v{font-family:var(--mono);word-break:break-all}.log{height:76px;overflow:auto;white-space:pre-wrap;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px;font:11px/1.4 var(--mono)}.error{color:var(--danger);white-space:pre-wrap;font:11px/1.4 var(--mono)}
+@media(max-width:900px){.shell{grid-template-columns:1fr}.side{order:2}.viewerhost{height:420px}.bottom{grid-template-columns:1fr}}@media(max-width:560px){.appbar{padding:0 9px}.appbar .tol{display:none}.shell{padding:8px}.viewerhost{height:330px}.viewerbar{flex-wrap:wrap;height:auto;padding:8px}.viewerbar .grow{display:none}}
 </style>
 </head>
 <body>
-<header class="top">
-  <span class="brand">orcad <small>build123d · v0.6</small></span>
-  <span id="status" class="muted small"></span><span class="spacer"></span>
-  <select id="fmt" title="Export format"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
-  <input id="tol" type="number" value="0.001" step="0.001" min="0.0001" max="1" style="width:86px" title="Tessellation tolerance">
-  <button id="runBtn" class="btn btn-p" onclick="runActive()">Run + Export</button>
-</header>
-
-<div class="wrap"><div class="grid">
-  <div>
-    <div class="tabs" role="tablist">
-      <button id="tabbtn-objs" class="on" onclick="switchLeft('objs')">Objects</button>
-      <button id="tabbtn-editor" onclick="switchLeft('editor')">Code Editor</button>
-    </div>
-    <div id="pane-objs">
-      <div class="card"><h3>Predefined object</h3>
-        <div class="dd">
-          <button class="dd-btn" id="ddBtn" onclick="ddToggle(event)"><span id="ddLabel">Gridfinity Bin</span><span class="caret">▾</span></button>
-          <div class="dd-list" id="ddList" style="display:none">
-            <input id="objSearch" type="text" placeholder="Search objects…" oninput="ddFilter()" autocomplete="off">
-            <div class="dd-opts" id="objList"></div>
-          </div>
-        </div>
-        <div class="obj-blurb" id="objBlurb"></div>
-      </div>
-      <div class="card"><h3>Parameters</h3><div id="prims"></div>
-        <button class="btn btn-p" style="width:100%;margin-top:10px" onclick="generate()">Generate + Export</button>
-      </div>
-    </div>
-    <div id="pane-editor" style="display:none">
-      <div class="card"><h3>build123d · algebra mode</h3>
-        <div class="banner">Assign the final solid to <span class="mono">result</span> — e.g. <span class="mono">result = Box(20,20,20)</span>.<br>It mirrors the Objects tab: changing selection or params rewrites this code.</div>
-        <div id="editor"></div>
-        <textarea id="code" style="display:none" spellcheck="false"></textarea>
-        <div class="rowline">
-          <input id="fname" value="model" style="width:140px" title="File name">
-          <select id="exSel" style="flex:1;min-width:140px"></select>
-          <button class="btn btn-g btn-s" onclick="loadExample()">Load</button>
-        </div>
-      </div>
-    </div>
-    <div class="card"><h3>Manual import</h3>
-      <div class="small muted">⤓ Send to plate loads the model directly (approves a one-time OS prompt first). Fallback: drag the exported file onto Prepare.</div>
-    </div>
-  </div>
-
-  <div>
-    <div class="card">
-      <div class="pvbar"><h5>Preview</h5><span id="pvInfo" class="muted small">nothing rendered yet — run a model</span><span class="spacer"></span>
-        <button class="btn btn-g btn-s" onclick="pvReset()">Reset view</button>
-        <button class="btn btn-g btn-s" id="wireBtn" onclick="pvToggleWire()">Wireframe: off</button>
-        <button class="btn btn-g btn-s" id="spinBtn" onclick="pvToggleSpin()">Spin: on</button>
-        <button class="btn btn-p btn-s" id="plateBtn" onclick="sendPlate()" title="Export STL and load it onto the build plate">⤓ Send to plate</button>
-      </div>
-      <div id="pv3d" aria-label="Interactive 3D model preview"></div>
-      <div id="pvStats" class="mono small muted" style="margin-top:8px">—</div>
-    </div>
-    <div class="card"><h5>Result</h5><div id="result" class="muted">Nothing exported yet.</div></div>
-    <div class="card"><h5>Log</h5><div id="log" class="log">ready.
-</div></div>
-  </div>
-</div></div>
-
+<header class="appbar"><div class="logo">orcad <span>build123d</span></div><div id="status" class="status">ready</div><div class="grow"></div><select id="fmt" class="format" title="Export format"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select><input id="tol" class="tol" type="number" value="0.001" step="0.001" min="0.0001" max="1" title="Tessellation tolerance"><button id="runBtn" class="btn primary">Run / export</button></header>
+<div class="shell">
+<aside class="side"><nav class="tabs"><button id="objectsTab" class="on">Objects</button><button id="codeTab">Code</button></nav>
+<section id="objectsPane" class="sidebody"><label class="label" for="objectSearch">Model</label><input id="objectSearch" class="search" type="text" placeholder="Filter objects…" autocomplete="off"><select id="objectSelect" class="object"></select><div id="blurb" class="blurb"></div><div class="section-title">Parameters</div><div id="params"></div><button id="generateBtn" class="btn primary" style="width:100%;margin-top:12px">Generate + export</button></section>
+<section id="codePane" class="sidebody" hidden><label class="label" for="code">build123d code</label><textarea id="code" class="editor" spellcheck="false"></textarea><div class="editor-actions"><select id="exampleSelect"></select><button id="loadExample" class="btn small">Load</button><button id="runCode" class="btn primary small">Run</button></div></section>
+</aside>
+<main class="main"><section class="card viewer"><div class="viewerbar"><strong>Preview</strong><span id="previewStatus" class="muted">waiting for a model</span><div class="grow"></div><button id="resetView" class="btn small">Reset</button><button id="wireBtn" class="btn small">Wireframe</button><button id="spinBtn" class="btn small">Spin: on</button><button id="plateBtn" class="btn primary small">Send to plate</button></div><div id="viewerHost" class="viewerhost"><div id="pv3d"></div><div id="empty" class="empty"><div><strong>Nothing previewed yet</strong><span>Choose a model and adjust a parameter.</span></div></div></div><div class="viewerfoot"><div id="stats" class="stats"></div><div class="grow"></div><span class="muted">drag to rotate · wheel to zoom</span></div></section><div class="bottom"><section class="card"><h2>Last export</h2><div id="result" class="result muted">Nothing exported yet.</div></section><section class="card"><h2>Activity</h2><div id="log" class="log">ready.</div></section></div></main>
+</div>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min/vs/loader.js"></script>
 <script>
 'use strict';
-/* ---------------- state ----------------
-   PRIMS mirrors the Python PRIMITIVES spec (keys + labels + param types).
-   A test enforces key parity; values here drive the dropdown + sliders. */
-var S={left:'objs',prim:'gridfinity_bin',params:{}};
 /* BEGIN OBJECTS SPEC */
 var PRIMS={
  box:{label:'Box',blurb:'Simple centered block.',params:[['L','Length','mm','number',20,1.0,300.0,0.5],['W','Width','mm','number',20,1.0,300.0,0.5],['H','Height','mm','number',20,1.0,300.0,0.5]]},
@@ -1074,230 +933,31 @@ var PRIMS={
  tube:{label:'Tube',blurb:'Hollow cylinder.',params:[['R_OUT','Outer radius','mm','number',12,1.0,150.0,0.5],['R_IN','Inner radius','mm','number',8,0.5,149.0,0.5],['H','Height','mm','number',25,1.0,300.0,0.5]]}
 };
 /* END OBJECTS SPEC */
-var EXAMPLES={
- calibration_cube:'from build123d import *\nresult = Box(20, 20, 20)\n',
- bracket:'from build123d import *\nL, W, T, D = 60, 30, 5, 5\nplate = Box(L, W, T)\nhole = Cylinder(D / 2, T + 2)\nh1 = Pos(-L / 4, 0, -1) * hole\nh2 = Pos(L / 4, 0, -1) * hole\nresult = plate - h1 - h2\n',
- tube_demo:'from build123d import *\nouter = Cylinder(12, 25)\ninner = Cylinder(8, 27)\ntube = outer - inner\nring = Pos(0, 0, 25) * Cylinder(10, 3)\nresult = tube + ring\n',
- gridfinity_bin_2x2x6:'(generated — pick Gridfinity Bin in Objects and press Generate, or run any snippet that sets `result`)'
-};
-/* ---------------- helpers ---------------- */
-function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
-function log(m){var el=document.getElementById('log');el.textContent+=m+'\n';el.scrollTop=el.scrollHeight;}
-function setStatus(m){document.getElementById('status').textContent=m;}
-function send(o){try{window.orca.postMessage(o);}catch(e){log('bridge error: '+e);}}
-function fmt(){return document.getElementById('fmt').value;}
-function tol(){return parseFloat(document.getElementById('tol').value)||0.001;}
-/* ---------------- left tabs ---------------- */
-function switchLeft(which){
- S.left=which;
- document.getElementById('pane-objs').style.display=which==='objs'?'':'none';
- document.getElementById('pane-editor').style.display=which==='editor'?'':'none';
- document.getElementById('tabbtn-objs').classList.toggle('on',which==='objs');
- document.getElementById('tabbtn-editor').classList.toggle('on',which==='editor');
- if(which==='editor')setTimeout(monacoLayout,30);
- else schedulePreview();
-}
-var PVSEQ=0, PVTIMER=null;
-/* Live preview: debounced rebuild of the objects-tab model, export nothing.
-   Editor tab keeps manual Run (code can be slow / half-typed). */
-function currentPayload(cmd){
- if(S.left==='objs')return {command:cmd,kind:'generate',primitive:S.prim,params:S.params,format:'stl',tolerance:tol(),filename:S.prim};
- return {command:cmd,kind:'run',code:getCode(),format:fmt(),tolerance:tol(),filename:document.getElementById('fname').value||'model'};
-}
-function schedulePreview(){
- if(S.left!=='objs')return;
- clearTimeout(PVTIMER);
- PVTIMER=setTimeout(function(){
-  PVSEQ++;
-  document.getElementById('pvInfo').textContent='live preview…';
-  var p=currentPayload('preview');p.seq=PVSEQ;send(p);
- },650);
-}
-function sendPlate(){
- setStatus('working…');
- log('send to plate… (first time: Orca asks a one-time permission to open the file — allow & remember)');
- var p=(S.left==='objs')
-  ? {command:'plate',kind:'generate',primitive:S.prim,params:S.params,tolerance:tol(),filename:S.prim}
-  : {command:'plate',kind:'run',code:getCode(),tolerance:tol(),filename:document.getElementById('fname').value||'model'};
- send(p);
-}
-function runActive(){ if(S.left==='objs')generate(); else runEditor(); }
-/* ---------------- searchable objects dropdown ---------------- */
-function ddToggle(ev){ev.stopPropagation();var l=document.getElementById('ddList');
- var open=l.style.display!=='none';l.style.display=open?'none':'';
- if(!open){document.getElementById('objSearch').value='';ddFilter();setTimeout(function(){document.getElementById('objSearch').focus();},20);}}
-document.addEventListener('click',function(e){
- var l=document.getElementById('ddList');
- if(l.style.display!=='none'&&!document.getElementById('ddBtn').contains(e.target)&&!l.contains(e.target))l.style.display='none';});
-function ddFilter(){
- var q=document.getElementById('objSearch').value.trim().toLowerCase();
- var host=document.getElementById('objList');host.innerHTML='';
- Object.keys(PRIMS).forEach(function(k){
-  var p=PRIMS[k];
-  if(q&&p.label.toLowerCase().indexOf(q)<0&&k.indexOf(q)<0)return;
-  var b=document.createElement('button');
-  b.innerHTML=esc(p.label)+'<small>'+esc(p.blurb||'')+'</small>';
-  if(k===S.prim)b.classList.add('hot');
-  b.onclick=function(){S.prim=k;S.params={};document.getElementById('ddList').style.display='none';buildObjs();refreshEditorCode();schedulePreview();};
-  host.appendChild(b);
- });
- if(!host.children.length)host.innerHTML='<div class="muted small" style="padding:8px 10px">No objects match.</div>';
-}
-function buildObjs(){
- var p=PRIMS[S.prim];
- document.getElementById('ddLabel').textContent=p.label;
- document.getElementById('objBlurb').textContent=p.blurb||'';
- ddFilter();
- var host=document.getElementById('prims');host.innerHTML='';
- p.params.forEach(function(spec){
-  var key=spec[0],lab=spec[1],unit=spec[2],type=spec[3],def=spec[4],mn=spec[5],mx=spec[6],st=spec[7];
-  var row=document.createElement('div');row.className='prow';
-  if(type==='bool'){
-   var val=(S.params[key]!=null)?!!S.params[key]:!!def;S.params[key]=val;
-   row.innerHTML='<label><b>'+esc(key)+'</b> '+esc(lab)+'</label>';
-   var cb=document.createElement('input');cb.type='checkbox';cb.checked=val;
-   cb.onchange=function(){S.params[key]=cb.checked;};
-   row.appendChild(cb);host.appendChild(row);return;
-  }
-  var val=(S.params[key]!=null)?S.params[key]:def;S.params[key]=val;
-  row.innerHTML='<label><b>'+esc(key)+'</b> '+esc(lab)+'<span class="u">'+esc(unit)+'</span></label>';
-  var num=document.createElement('input');num.type='number';num.value=val;num.step=st;num.min=mn;num.max=mx;
-  if(type==='int'){num.oninput=function(){S.params[key]=parseInt(num.value,10);rng.value=num.value;};}
-  else{num.oninput=function(){S.params[key]=parseFloat(num.value);rng.value=num.value;};}
-  row.appendChild(num);
-  var rng=document.createElement('input');rng.type='range';rng.min=mn;rng.max=mx;rng.step=st;rng.value=val;
-  if(type==='int'){rng.oninput=function(){S.params[key]=parseInt(rng.value,10);num.value=rng.value;};}
-  else{rng.oninput=function(){S.params[key]=parseFloat(rng.value);num.value=rng.value;};}
-  row.appendChild(rng);host.appendChild(row);
- });
-}
-/* ---------------- generate ---------------- */
-function generate(){
- refreshEditorCode();
- setStatus('working…');log('object '+S.prim+' '+JSON.stringify(S.params));
- send({command:'generate',primitive:S.prim,params:S.params,format:fmt(),tolerance:tol(),filename:S.prim});
-}
-/* Editor mirror: the Code Editor tab always shows the code for the selected
-   object + params. Pure codegen (no CAD run), so it is instant and safe to
-   call on every selection/param change. Invalid intermediate states keep the
-   last good code. */
-function refreshEditorCode(){
- if(S.left!=='objs')return;
- send({command:'code',kind:'generate',primitive:S.prim,params:S.params});
-}
-/* ---------------- editor (Monaco w/ textarea fallback) ---------------- */
-var monacoInst=null, monacoReady=false;
-function getCode(){return monacoReady&&monacoInst?monacoInst.getValue():document.getElementById('code').value;}
-function setCode(v){if(monacoReady&&monacoInst)monacoInst.setValue(v);document.getElementById('code').value=v;}
-function monacoLayout(){try{if(monacoReady&&monacoInst)monacoInst.layout();}catch(e){}}
-function monacoFallback(reason){
- if(monacoReady)return;monacoReady=false;
- document.getElementById('editor').style.display='none';
- document.getElementById('code').style.display='';
- if(!document.getElementById('code').value)document.getElementById('code').value=EXAMPLES.calibration_cube;
- log('editor: plain textarea fallback ('+reason+')');
-}
-function initMonaco(){
- var ta=document.getElementById('code');
- if(!window.require||!window.require.config){monacoFallback('loader blocked/offline');return;}
- var timer=setTimeout(function(){if(!monacoReady)monacoFallback('load timeout (offline?)');},8000);
- try{
-  window.require.config({paths:{vs:'https://cdn.jsdelivr.net/npm/monaco-editor@0.49.0/min/vs'}});
-  window.require(['vs/editor/editor.main'],function(){
-   clearTimeout(timer);
-   var dark=window.matchMedia&&window.matchMedia('(prefers-color-scheme: dark)').matches;
-   monacoInst=window.monaco.editor.create(document.getElementById('editor'),{
-    value:ta.value||EXAMPLES.calibration_cube,language:'python',
-    theme:dark?'vs-dark':'vs',automaticLayout:true,minimap:{enabled:false},fontSize:13,scrollBeyondLastLine:false});
-   monacoReady=true;ta.style.display='none';log('editor: monaco ready');
-  },function(){clearTimeout(timer);monacoFallback('module load failed');});
- }catch(e){clearTimeout(timer);monacoFallback('init error');}
-}
-function runEditor(){
- var code=getCode();
- var fn=document.getElementById('fname').value||'model';
- setStatus('working…');log('run '+code.length+' chars -> '+fn+'.'+fmt());
- send({command:'run',code:code,format:fmt(),tolerance:tol(),filename:fn});
-}
-function loadExample(){var k=document.getElementById('exSel').value;setCode(EXAMPLES[k]);log('loaded '+k);}
-/* ---------------- Three.js preview ---------------- */
-var PV={tris:[],total:0,wire:false,spin:true,mesh:null,box:null,scene:null,camera:null,renderer:null,controls:null};
-function pvCss(v,f){try{var s=getComputedStyle(document.body).getPropertyValue(v);if(s&&s.trim())return s.trim();}catch(e){}return f;}
-function pvInit(){
- var host=document.getElementById('pv3d');
- if(!window.THREE||!host){return;}
- PV.scene=new THREE.Scene();PV.scene.background=new THREE.Color(pvCss('--bg','#14161b'));
- PV.camera=new THREE.PerspectiveCamera(42,1,.01,10000);PV.camera.position.set(90,90,90);
- PV.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});PV.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));host.appendChild(PV.renderer.domElement);
- PV.controls=window.THREE.OrbitControls?new THREE.OrbitControls(PV.camera,PV.renderer.domElement):null;
- if(PV.controls){PV.controls.enableDamping=true;PV.controls.dampingFactor=.08;}
- PV.scene.add(new THREE.HemisphereLight(0xffffff,0x334455,2.2));var key=new THREE.DirectionalLight(0xffffff,2.5);key.position.set(80,120,100);PV.scene.add(key);
- pvResize();window.addEventListener('resize',pvResize);pvFrame();
-}
-function pvResize(){if(!PV.renderer)return;var h=document.getElementById('pv3d'),w=h.clientWidth||640,ht=h.clientHeight||380;PV.renderer.setSize(w,ht,false);PV.camera.aspect=w/ht;PV.camera.updateProjectionMatrix();}
-function pvFrame(){requestAnimationFrame(pvFrame);if(!PV.renderer)return;if(PV.spin&&PV.mesh)PV.mesh.rotation.z+=.004;if(PV.controls)PV.controls.update();PV.renderer.render(PV.scene,PV.camera);}
-function pvSet(p){
- PV.tris=(p&&p.tris)||[];PV.total=(p&&p.total)||0;
- if(!PV.scene){document.getElementById('pvInfo').textContent='Three.js preview unavailable';return;}
- if(PV.mesh){PV.scene.remove(PV.mesh);PV.mesh.geometry.dispose();PV.mesh.material.dispose();PV.mesh=null;}
- if(!PV.tris.length){document.getElementById('pvInfo').textContent='preview unavailable — stats only';return;}
- var pos=new Float32Array(PV.tris),geo=new THREE.BufferGeometry();geo.setAttribute('position',new THREE.BufferAttribute(pos,3));geo.computeVertexNormals();
- PV.mesh=new THREE.Mesh(geo,new THREE.MeshStandardMaterial({color:0x42cdbb,roughness:.72,metalness:.08,wireframe:PV.wire}));PV.scene.add(PV.mesh);geo.computeBoundingBox();
- var c=geo.boundingBox.getCenter(new THREE.Vector3()),s=geo.boundingBox.getSize(new THREE.Vector3()),d=Math.max(s.x,s.y,s.z,1);PV.mesh.position.sub(c);
- PV.camera.position.set(d*1.8,d*1.5,d*1.8);if(PV.controls){PV.controls.target.set(0,0,0);PV.controls.maxDistance=d*8;PV.controls.minDistance=d*.15;PV.controls.update();}
- document.getElementById('pvInfo').textContent='mesh: '+PV.total+' tris'+(PV.total>PV.tris.length/9?' (decimated preview)':'');
-}
-function pvReset(){if(!PV.mesh)return;var b=PV.mesh.geometry.boundingBox,s=Math.max(b.max.x-b.min.x,b.max.y-b.min.y,b.max.z-b.min.z,1);PV.camera.position.set(s*1.8,s*1.5,s*1.8);if(PV.controls){PV.controls.target.set(0,0,0);PV.controls.update();}}
-function pvToggleWire(){PV.wire=!PV.wire;document.getElementById('wireBtn').textContent='Wireframe: '+(PV.wire?'on':'off');if(PV.mesh)PV.mesh.material.wireframe=PV.wire;}
-function pvToggleSpin(){PV.spin=!PV.spin;document.getElementById('spinBtn').textContent='Spin: '+(PV.spin?'on':'off');}
-pvInit();
-/* ---------------- bridge ---------------- */
-function showResult(d){
- var el=document.getElementById('result');
- document.getElementById('pvStats').textContent='stats: '+JSON.stringify(d.stats||{});
- if(d.ok){
-  el.innerHTML='<div class="kv">'
-   +'<div class="k">file</div><div class="v">'+esc(d.file)+'</div>'
-   +'<div class="k">size</div><div class="v">'+esc(d.size_bytes)+' bytes</div>'
-   +'<div class="k">solid</div><div class="v">'+esc(d.var||'result')+'</div></div>'
-   +'<p class="muted small">Tip: ⤓ Send to plate loads it directly, or drag the file onto Prepare.</p>';
-  log('OK '+d.filename+' ('+d.size_bytes+' B)');
- }else{
-  el.innerHTML='<div class="alert-err">'+esc(d.error||'failed')+'</div>';
-  log('ERROR '+(d.error||'failed'));
- }
-}
-if(window.orca&&window.orca.onMessage){window.orca.onMessage(function(d){
- if(!d)return;
- if(d.type==='progress'){setStatus(d.message||'working…');if(d.message)log(d.message);return;}
- if(d.type==='code'){if(d.ok)setCode(d.code);return;}
- if(d.type==='preview'){
-  if(d.seq!==PVSEQ)return; /* stale: superseded by a newer slider move */
-  if(d.ok){pvSet(d.preview);document.getElementById('pvStats').textContent='stats: '+JSON.stringify(d.stats||{});document.getElementById('pvInfo').textContent='live preview';}
-  else{document.getElementById('pvInfo').textContent='preview: '+String(d.error||'failed').split('\n')[0].slice(0,160);}
-  return;
- }
- if(d.type==='plate_result'){
-  if(d.ok){setStatus('sent to plate');pvSet(d.preview);showResult(d);log('Sent to plate: '+d.filename+' — check Prepare. If it did not appear, drag the file from exports/.');}
-  else{setStatus('plate failed');showResult({ok:false,error:d.error});}
-  return;
- }
- if(d.type==='result'&&d.ok){setStatus('done');pvSet(d.preview);showResult(d);return;}
- if(d.type==='error'||d.ok===false){setStatus('failed');pvSet(null);showResult({ok:false,error:d.error});return;}
- log(String(JSON.stringify(d)).slice(0,2000));
-});}
-(function init(){
- var sel=document.getElementById('exSel');
- sel.innerHTML=Object.keys(EXAMPLES).map(function(k){return '<option value="'+k+'">'+k+'</option>';}).join('');
- buildObjs();
- initMonaco();
- pvDraw();
- var pr=document.getElementById('prims');
- pr.addEventListener('input',function(){refreshEditorCode();schedulePreview();});
- pr.addEventListener('change',function(){refreshEditorCode();schedulePreview();});
- schedulePreview(); /* first live render of the default object */
- refreshEditorCode(); /* editor opens showing the default object's code */
-})();
+var EXAMPLES={calibration_cube:'from build123d import *\nresult = Box(20, 20, 20)\n',bracket:'from build123d import *\nL, W, T, D = 60, 30, 5, 5\nplate = Box(L, W, T)\nhole = Cylinder(D / 2, T + 2)\nh1 = Pos(-L / 4, 0, -1) * hole\nh2 = Pos(L / 4, 0, -1) * hole\nresult = plate - h1 - h2\n',tube_demo:'from build123d import *\nouter = Cylinder(12, 25)\ninner = Cylinder(8, 27)\ntube = outer - inner\nring = Pos(0, 0, 25) * Cylinder(10, 3)\nresult = tube + ring\n',gridfinity_bin_2x2x6:'(generated — choose Gridfinity Bin and click Generate)'};
+var S={mode:'objects',primitive:'gridfinity_bin',params:{},seq:0,timer:null,wire:false,spin:true};
+function $(id){return document.getElementById(id)}function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}function log(s){var e=$('log');e.textContent+=s+'\n';e.scrollTop=e.scrollHeight}function status(s){$('status').textContent=s}function send(o){try{window.orca.postMessage(o)}catch(e){log('bridge: '+e)}}function tolerance(){return parseFloat($('tol').value)||.001}
+function currentPayload(command){if(S.mode==='objects')return{command:command,kind:'generate',primitive:S.primitive,params:S.params,format:'stl',tolerance:tolerance(),filename:S.primitive};return{command:command,kind:'run',code:$('code').value,format:$('fmt').value,tolerance:tolerance(),filename:'model'}}
+function renderObjectList(){var q=$('objectSearch').value.toLowerCase(),sel=$('objectSelect'),old=S.primitive;sel.innerHTML='';Object.keys(PRIMS).forEach(function(k){var p=PRIMS[k];if(q&&k.indexOf(q)<0&&p.label.toLowerCase().indexOf(q)<0)return;var o=document.createElement('option');o.value=k;o.textContent=p.label;sel.appendChild(o)});if(!sel.options.length)return;sel.value=PRIMS[S.primitive]&&(!q||sel.querySelector('option[value="'+S.primitive+'"]'))?S.primitive:sel.options[0].value;if(sel.value!==old){S.primitive=sel.value;S.params={}}}
+function updateParam(k,v){S.params[k]=v;sendCode();schedulePreview()}
+function renderParams(){var p=PRIMS[S.primitive],host=$('params');$('blurb').textContent=p.blurb||'';host.innerHTML='';p.params.forEach(function(a){var k=a[0],row=document.createElement('div');row.className='param';var head=document.createElement('div');head.className='paramhead';var lab=document.createElement('label');lab.innerHTML='<b>'+esc(k)+'</b> '+esc(a[1])+'<span class="unit">'+esc(a[2])+'</span>';head.appendChild(lab);var val=S.params[k]!=null?S.params[k]:a[4];S.params[k]=val;if(a[3]==='bool'){var cb=document.createElement('input');cb.type='checkbox';cb.checked=!!val;cb.onchange=function(){updateParam(k,cb.checked)};head.appendChild(cb);row.appendChild(head)}else{var num=document.createElement('input');num.type='number';num.min=a[5];num.max=a[6];num.step=a[7];num.value=val;var rng=document.createElement('input');rng.type='range';rng.min=a[5];rng.max=a[6];rng.step=a[7];rng.value=val;function set(v){var n=a[3]==='int'?parseInt(v,10):parseFloat(v);if(isNaN(n))return;S.params[k]=n;num.value=n;rng.value=n;sendCode();schedulePreview()}num.oninput=function(){set(num.value)};rng.oninput=function(){set(rng.value)};head.appendChild(num);row.appendChild(head);row.appendChild(rng)}host.appendChild(row)})}
+function sendCode(){send({command:'code',kind:'generate',primitive:S.primitive,params:S.params})}
+function schedulePreview(){if(S.mode!=='objects')return;clearTimeout(S.timer);S.timer=setTimeout(function(){S.seq++;$('previewStatus').textContent='building preview…';sendCode();var p=currentPayload('preview');p.seq=S.seq;send(p)},420)}
+function generate(){var p=currentPayload('generate');status('building…');log('export '+(p.filename||'model'));send(p)}
+function runCode(){S.mode='code';var p=currentPayload('run');status('building…');log('run code');send(p)}
+function sendPlate(){var p=currentPayload('plate');status('sending…');log('send to plate');send(p)}
+function setMode(m){S.mode=m;$('objectsTab').classList.toggle('on',m==='objects');$('codeTab').classList.toggle('on',m==='code');$('objectsPane').hidden=m!=='objects';$('codePane').hidden=m!=='code';if(m==='code')sendCode();else schedulePreview()}
+function showResult(d){var e=$('result');if(!d.ok){e.innerHTML='<div class="error">'+esc(d.error||'failed')+'</div>';return}e.innerHTML='<div class="kv"><div class="k">file</div><div class="v">'+esc(d.file)+'</div><div class="k">size</div><div class="v">'+esc(d.size_bytes)+' bytes</div><div class="k">solid</div><div class="v">'+esc(d.var||'result')+'</div></div>';log('ok '+(d.filename||'model'))}
+function showStats(stats){var e=$('stats');e.innerHTML='';Object.keys(stats||{}).slice(0,5).forEach(function(k){var s=document.createElement('span');s.className='stat';s.innerHTML=esc(k)+': <b>'+esc(stats[k])+'</b>';e.appendChild(s)})}
+function removeMesh(){if(V.mesh){V.scene.remove(V.mesh);V.mesh.geometry.dispose();V.mesh.material.dispose();V.mesh=null}}
+function applyPreview(p){$('empty').classList.toggle('hidden',!!(p&&p.tris&&p.tris.length));removeMesh();if(!p||!p.tris||!p.tris.length){$('previewStatus').textContent='no mesh returned';return}if(!V.renderer){$('previewStatus').textContent='WebGL preview unavailable';return}var g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(new Float32Array(p.tris),3));g.computeVertexNormals();g.computeBoundingBox();var c=g.boundingBox.getCenter(new THREE.Vector3()),size=g.boundingBox.getSize(new THREE.Vector3()),d=Math.max(size.x,size.y,size.z,1);V.mesh=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x35c4b0,roughness:.75,metalness:.05,wireframe:S.wire}));V.mesh.position.set(-c.x,-c.y,-c.z);V.scene.add(V.mesh);V.size=d;fitView();$('previewStatus').textContent='mesh ready · '+(p.total||p.tris.length/9)+' triangles'}
+function fitView(){if(!V.camera||!V.size)return;V.camera.position.set(V.size*1.9,V.size*1.5,V.size*1.9);V.camera.lookAt(0,0,0)}
+function initViewer(){var host=$('pv3d');try{if(!window.THREE)throw Error('Three.js did not load');V.scene=new THREE.Scene();V.camera=new THREE.PerspectiveCamera(40,1,.01,100000);V.renderer=new THREE.WebGLRenderer({antialias:true,alpha:true});V.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));host.appendChild(V.renderer.domElement);V.scene.add(new THREE.HemisphereLight(0xffffff,0x263746,2));var light=new THREE.DirectionalLight(0xffffff,2.4);light.position.set(70,100,80);V.scene.add(light);var drag=null;host.addEventListener('pointerdown',function(e){drag={x:e.clientX,y:e.clientY};try{host.setPointerCapture(e.pointerId)}catch(_){}host.style.cursor='grabbing'});host.addEventListener('pointermove',function(e){if(!drag||!V.mesh)return;V.mesh.rotation.y+=(e.clientX-drag.x)*.01;V.mesh.rotation.x=Math.max(-1.45,Math.min(1.45,V.mesh.rotation.x+(e.clientY-drag.y)*.01));drag={x:e.clientX,y:e.clientY}});['pointerup','pointercancel','pointerleave'].forEach(function(k){host.addEventListener(k,function(){drag=null;host.style.cursor='grab'})});host.addEventListener('wheel',function(e){e.preventDefault();if(!V.camera||!V.size)return;var q=e.deltaY>0?1.1:.9;V.camera.position.multiplyScalar(q);var d=V.camera.position.length();if(d<V.size*.35||d>V.size*8) V.camera.position.setLength(Math.max(V.size*.35,Math.min(V.size*8,d)));V.camera.lookAt(0,0,0)},{passive:false});resizeViewer();window.addEventListener('resize',resizeViewer)}catch(e){$('previewStatus').textContent='preview unavailable';log(String(e));return}requestAnimationFrame(viewerLoop)}
+function resizeViewer(){if(!V.renderer)return;var h=$('pv3d'),w=h.clientWidth||640,ht=h.clientHeight||400;V.renderer.setSize(w,ht,false);V.camera.aspect=w/ht;V.camera.updateProjectionMatrix()}
+function viewerLoop(){requestAnimationFrame(viewerLoop);if(V.mesh&&S.spin)V.mesh.rotation.y+=.005;V.renderer.render(V.scene,V.camera)}
+function handleMessage(d){if(!d)return;if(d.type==='progress'){status(d.message||'working…');return}if(d.type==='code'){if(d.ok&&S.mode==='code')$('code').value=d.code;return}if(d.type==='preview'){if(d.seq!==S.seq)return;if(d.ok){applyPreview(d.preview);showStats(d.stats);$('previewStatus').textContent='preview ready'}else{$('previewStatus').textContent='preview failed';log(d.error||'preview failed')}return}if(d.type==='plate_result'){showResult(d);if(d.ok)applyPreview(d.preview);status(d.ok?'sent':'failed');return}if(d.type==='result'){showResult(d);if(d.ok){applyPreview(d.preview);showStats(d.stats);status('done')}return}if(d.type==='error'||d.ok===false){showResult({ok:false,error:d.error});status('failed')}}
+var V={scene:null,camera:null,renderer:null,mesh:null,size:0};
+$('objectsTab').onclick=function(){setMode('objects')};$('codeTab').onclick=function(){setMode('code')};$('objectSearch').oninput=function(){renderObjectList();renderParams();schedulePreview()};$('objectSelect').onchange=function(){S.primitive=this.value;S.params={};renderParams();sendCode();schedulePreview()};$('generateBtn').onclick=generate;$('runBtn').onclick=function(){S.mode==='objects'?generate():runCode()};$('runCode').onclick=runCode;$('plateBtn').onclick=sendPlate;$('resetView').onclick=function(){if(V.mesh){V.mesh.rotation.set(0,0,0);fitView()}};$('wireBtn').onclick=function(){S.wire=!S.wire;this.textContent='Wireframe: '+(S.wire?'on':'off');if(V.mesh)V.mesh.material.wireframe=S.wire};$('spinBtn').onclick=function(){S.spin=!S.spin;this.textContent='Spin: '+(S.spin?'on':'off')};$('loadExample').onclick=function(){$('code').value=EXAMPLES[$('exampleSelect').value]||''};
+Object.keys(EXAMPLES).forEach(function(k){var o=document.createElement('option');o.value=k;o.textContent=k;$('exampleSelect').appendChild(o)});if(window.orca&&window.orca.onMessage)window.orca.onMessage(handleMessage);renderObjectList();renderParams();initViewer();sendCode();schedulePreview();
 </script>
 </body>
 </html>
@@ -1450,7 +1110,7 @@ if orca is not None:  # pragma: no cover - only inside OrcaSlicer
         @orca.plugin
         class OrcadPagePlugin(orca.base):
             def register_capabilities(self):
-                getattr(orca, "register_capability")(CadPage)
+                orca.register_capability(CadPage)  # type: ignore[attr-defined]
     else:
         # Fallback for Orca builds without orca.pages: visible upgrade hint.
         class CadScriptFallback(orca.script.ScriptPluginCapabilityBase):
@@ -1458,8 +1118,8 @@ if orca is not None:  # pragma: no cover - only inside OrcaSlicer
                 return "orcad (needs Pages build)"
 
             def execute(self):
-                return getattr(orca, "ExecutionResult").failure(
-                    getattr(orca, "PluginResult").RecoverableError,
+                return orca.ExecutionResult.failure(  # type: ignore[attr-defined]
+                    orca.PluginResult.RecoverableError,  # type: ignore[attr-defined]
                     "orcad needs OrcaSlicer Nightly with orca.pages "
                     "(Pages tab API). Please update OrcaSlicer.",
                 )
@@ -1467,4 +1127,4 @@ if orca is not None:  # pragma: no cover - only inside OrcaSlicer
         @orca.plugin
         class OrcadScriptPlugin(orca.base):
             def register_capabilities(self):
-                getattr(orca, "register_capability")(CadScriptFallback)
+                orca.register_capability(CadScriptFallback)  # type: ignore[attr-defined]

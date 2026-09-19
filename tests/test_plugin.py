@@ -13,12 +13,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "orcad.py"
 
-ALLOWED_CDN_HOSTS = ("cdn.jsdelivr.net",)  # monaco loader only; CSS is inline
+ALLOWED_CDN_HOSTS = ("cdn.jsdelivr.net",)  # Three.js only; CSS and UI are inline
 
 
 def load_plugin():
     # orca is absent here -> plugin sets orca=None and skips capability classes.
     spec = importlib.util.spec_from_file_location("orcad", PLUGIN)
+    assert spec is not None and spec.loader is not None
     mod = importlib.util.module_from_spec(spec)
     sys.modules["orcad"] = mod
     spec.loader.exec_module(mod)
@@ -163,14 +164,14 @@ def test_page_html_contract():
     for needle in ("window.orca.postMessage", "window.orca.onMessage", "--orca-bg"):
         assert needle in html, f"PAGE_HTML missing {needle!r}"
     assert "bootstrap" not in html.lower(), "must not depend on Bootstrap CDN"
-    assert "monaco-editor" in html  # editor CDN w/ textarea fallback
-    assert "monacoFallback" in html and 'id="code"' in html and 'id="editor"' in html
+    assert 'id="code"' in html and 'id="codePane"' in html
+    assert "Three.js" in html or "three@0.160.0" in html
     # left tabs: objects <-> editor switch
-    for needle in ("tabbtn-objs", "tabbtn-editor", "pane-objs", "pane-editor",
-                   "switchLeft", "runActive"):
+    for needle in ("objectsTab", "codeTab", "objectsPane", "codePane",
+                   "setMode", "runCode"):
         assert needle in html, f"PAGE_HTML missing left-tab {needle!r}"
     # searchable objects dropdown
-    for needle in ("objSearch", "objList", "ddFilter", "ddToggle", "ddLabel"):
+    for needle in ("objectSearch", "objectSelect", "renderObjectList", "renderParams"):
         assert needle in html, f"PAGE_HTML missing dropdown {needle!r}"
     # every Python object + example key must exist in the page JS (parity)
     for key in mod.PRIMITIVES:
@@ -178,19 +179,19 @@ def test_page_html_contract():
     for key in mod.EXAMPLES:
         assert key in html, f"example {key} missing from page"
     # always-on preview pane
-    for needle in ('id="pv3d"', "three@0.160.0", "pvSet", "pvResize", "pvToggleWire", "pvToggleSpin"):
+    for needle in ('id="pv3d"', "three@0.160.0", "applyPreview", "resizeViewer", "Wireframe", "Spin"):
         assert needle in html, f"PAGE_HTML missing preview {needle!r}"
     # result/log plumbing kept
     for needle in ('id="result"', 'id="log"', 'id="fmt"', 'id="tol"'):
         assert needle in html
     # live preview wiring (debounced, seq-guarded, export-free)
-    for needle in ("schedulePreview", "currentPayload", "PVSEQ", "preview"):
+    for needle in ("schedulePreview", "currentPayload", "S.seq", "preview"):
         assert needle in html, f"PAGE_HTML missing live-preview {needle!r}"
     # send-to-plate wiring
     for needle in ('id="plateBtn"', "sendPlate", "plate_result", "Send to plate"):
         assert needle in html, f"PAGE_HTML missing plate {needle!r}"
     # editor mirror wiring (code section follows the selected object)
-    for needle in ("refreshEditorCode", "command:'code'", "d.type==='code'"):
+    for needle in ("sendCode", "command:'code'", "d.type==='code'"):
         assert needle in html, f"PAGE_HTML missing editor-mirror {needle!r}"
     # only allowlisted CDNs; everything else self-contained
     for url in re.findall(r'https://[^"\'\s<>]+', html):
@@ -336,22 +337,25 @@ def test_plate_message_routing():
     assert finals and finals[-1]["ok"] is False  # no build123d in test env
 
 
-def test_open_with_default_app_failure():
+def test_open_with_default_app_failure(tmp_path):
     from unittest import mock
+    missing = tmp_path / "nonexistent_dir" / "x.stl"
+    existing = tmp_path / "x.stl"
     with mock.patch.object(mod.subprocess, "Popen", side_effect=OSError("no opener")):
         try:
-            mod._open_with_default_app("/tmp/nonexistent_dir/x.stl")
+            mod._open_with_default_app(str(missing))
             raise AssertionError("expected RuntimeError")
         except RuntimeError as exc:
             assert "Could not hand" in str(exc)
 
     from unittest.mock import MagicMock
     with mock.patch.object(mod.subprocess, "Popen", return_value=MagicMock()):
-        mod._open_with_default_app("/tmp/x.stl")  # must not raise
+        mod._open_with_default_app(str(existing))  # must not raise
 
 
 def _load_source_module(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
+    assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)

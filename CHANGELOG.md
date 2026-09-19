@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Compact Three.js UI
+
+- Replaced the broken canvas/OrbitControls preview with a reliable Three.js
+  WebGL viewer using native drag rotation and wheel zoom.
+- Rebuilt the page as a compact responsive inline app: filterable model list,
+  generated parameter controls, native code editor, export/status cards, and
+  responsive preview layout.
+- Removed the Monaco and OrbitControls CDN dependencies; Three.js is the only
+  page dependency, and the embedded WebView remains usable without CSS assets.
+
 ## 0.7.0 — Complete Rebuilt port, STL-verified feature by feature
 
 - Gridfinity Bin now ports the whole entry-file feature set: grid divisions

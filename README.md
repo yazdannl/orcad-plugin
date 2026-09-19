@@ -3,7 +3,7 @@
 Real Plugin-Hub plugin (Nightly / >2.4.2). Adds a top-level **orcad** tab
 next to Prepare/Preview/Device/Project via `orca.pages.PagesPluginCapabilityBase`
 — same mechanism as a FilamentHub-style tab. Searchable parametric objects
-with **live preview**, Monaco code editor, persistent 3D preview, and
+with **live preview**, a compact native code editor, Three.js 3D preview, and
 **Send to plate**; build123d runs in Orca's embedded Python, exports
 STL/STEP/3MF to the plugin's `exports/` folder.
 
@@ -14,9 +14,9 @@ magnet / screw holes with crush ribs, chamfers and supportless tops,
 corner-only holes, thumbscrew holes, stacking lip — verified feature by
 feature against OpenSCAD-rendered reference STLs (see `verify/`).
 
-All styling is inline (no CSS framework CDN — Orca's WebView does not
-reliably load external stylesheets); only Monaco loads from CDN, with an
-automatic textarea fallback, so the tab works with or without network.
+The UI is a compact inline app (no CSS framework dependency) designed for
+Orca's embedded WebView. Three.js is the only page dependency; the editor is
+a native textarea and the layout remains usable without external stylesheets.
 
 ## Files
 
@@ -40,9 +40,9 @@ automatic textarea fallback, so the tab works with or without network.
    (create the `orcad` folder). Or Plugins dialog → Install local plugin → pick the file.
 3. Restart OrcaSlicer. Plugins dialog should list **orcad 0.7.0** with capability **orcad** (type Pages). Enable it.
 4. An **orcad** tab appears in the top tab bar. Open it: left side switches between
-   **Objects** (searchable dropdown, Gridfinity Bin preselected, live preview as
-   you drag sliders — the Code Editor mirrors the generated code live) and **Code Editor**
-   (Monaco); right side always shows the 3D preview.
+   **Objects** (filterable model list, Gridfinity Bin preselected, live preview as
+   you drag sliders) and **Code** (native build123d editor); right side always
+   shows the Three.js preview.
 5. Try: drag a Gridfinity slider → preview updates live. Press Generate + Export,
    then **⤓ Send to plate** → model should appear on Prepare (first click asks a
    one-time OS permission — allow & remember).
