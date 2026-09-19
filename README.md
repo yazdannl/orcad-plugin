@@ -15,13 +15,14 @@ corner-only holes, thumbscrew holes, stacking lip — verified feature by
 feature against OpenSCAD-rendered reference STLs (see `verify/`).
 
 The UI is a compact local Vue app with Tailwind CSS and a bundled Three.js
-runtime. `frontend/dist/index.html` is self-contained: Orca loads it from the
-plugin folder, so end users need no Node.js, CDN, or network access.
+runtime. `frontend/dist/index.html` is self-contained and loaded beside
+`orcad.py` when present; `orcad.py` also carries a compressed fallback copy so
+single-file installs still work. End users need no Node.js, CDN, or network.
 
 ## Files
 
-- `orcad.py` — plugin entry point. It loads the compiled frontend beside it;
-  keep `frontend/dist/index.html` next to it when installing.
+- `orcad.py` — plugin entry point. It loads the compiled frontend beside it
+  when available and includes a compressed fallback for single-file installs.
 - `frontend/src/` — Vue/Tailwind source.
 - `frontend/dist/index.html` — compiled, self-contained frontend artifact.
   Build it with `cd frontend && npm ci && npm run build`; Node is needed only
@@ -40,10 +41,9 @@ plugin folder, so end users need no Node.js, CDN, or network access.
 ## Manual test (you do this in Orca)
 
 1. Use latest OrcaSlicer **Nightly** (Pages API = `main` branch; Stable 2.4.2 has no `orca.pages`).
-2. Copy `orcad.py` and the `frontend/` folder to
-   `<Orca data dir>/orca_plugins/orcad/` (the compiled
-   `frontend/dist/index.html` is required). Install the plugin folder/package
-   rather than only the Python file.
+2. Copy `orcad.py` to `<Orca data dir>/orca_plugins/orcad/orcad.py`
+   (the embedded frontend fallback makes the Python file sufficient). If
+   developing locally, you may also copy `frontend/dist/index.html` beside it.
 3. Restart OrcaSlicer. Plugins dialog should list **orcad 0.7.0** with capability **orcad** (type Pages). Enable it.
 4. An **orcad** tab appears in the top tab bar. Open it: left side switches between
    **Objects** (filterable model list, Gridfinity Bin preselected, live preview as
@@ -64,10 +64,10 @@ First run installs `build123d+numpy` via bundled `uv` — slow (100s of MB OCP w
 
 ## Plugin Hub publish
 
-OrcaCloud → Plugin Hub → Create listing → upload the plugin package
-(`orcad.py` plus `frontend/dist/index.html`), thumbnail screenshot of CAD tab,
-tags (`cad`, `build123d`, `parametric`), OS = all, compatible Orca =
-Nightly/>2.4.2, description + changelog from CHANGELOG.md.
+OrcaCloud → Plugin Hub → Create listing → upload `orcad.py` (or the package
+with `frontend/dist/index.html`), thumbnail screenshot of CAD tab, tags
+(`cad`, `build123d`, `parametric`), OS = all, compatible Orca = Nightly/>2.4.2,
+description + changelog from CHANGELOG.md.
 
 ## Limits (v0.7, honest)
 

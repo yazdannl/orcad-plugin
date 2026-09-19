@@ -9,9 +9,9 @@ carry `# spec:` comments, e.g.::
     LIP = True  # spec: bool label=Stacking lip
 
 This script extracts the UI spec from those variables, bakes per-object
-SPEC + TEMPLATE data into orcad.py, and smoke-tests every object (defaults +
-min/max extremes must stay valid python). The compiled frontend is built
-separately with `cd frontend && npm run build`.
+SPEC + TEMPLATE data into orcad.py, embeds the compiled frontend fallback,
+and smoke-tests every object (defaults + min/max extremes must stay valid
+python). The frontend is built separately with `cd frontend && npm run build`.
 
 Single source of truth: objects/*.py. Never edit the generated regions.
 
@@ -20,6 +20,8 @@ Usage:
     python3 packaging/bundle.py --check   # exit 1 when out of sync (tests)
 """
 import ast
+import base64
+import gzip
 import json
 import re
 import sys
@@ -33,6 +35,9 @@ PY_BEGIN = "# BEGIN BUNDLED OBJECTS"
 PY_END = "# END BUNDLED OBJECTS"
 FRONTEND_BEGIN = "/* BEGIN GENERATED PRIMS */"
 FRONTEND_END = "/* END GENERATED PRIMS */"
+HTML_BEGIN = "# BEGIN BUNDLED FRONTEND"
+HTML_END = "# END BUNDLED FRONTEND"
+FRONTEND_ASSET = ROOT / "frontend" / "dist" / "index.html"
 SPEC_LINE_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^#\n]*#\s*spec\s*:\s*(.+)$"
 )
@@ -198,6 +203,13 @@ def _replace_region(text, begin, end, fresh):
     return "".join(lines[:bi + 1]) + fresh + "\n" + "".join(lines[ei:])
 
 
+def build_frontend_asset():
+    compressed = gzip.compress(FRONTEND_ASSET.read_bytes(), compresslevel=9, mtime=0)
+    encoded = base64.b64encode(compressed).decode("ascii")
+    lines = "\\n".join(encoded[index:index + 96] for index in range(0, len(encoded), 96))
+    return f'_EMBEDDED_FRONTEND_GZIP = b"""\\n{lines}\\n"""'
+
+
 def build_frontend_region(objects):
     specs = {}
     for obj in objects:
@@ -215,7 +227,8 @@ def build_frontend_region(objects):
 def build_target():
     objects = _load_objects()
     text = TARGET.read_text(encoding="utf-8")
-    return _replace_region(text, PY_BEGIN, PY_END, build_py_region(objects))
+    text = _replace_region(text, PY_BEGIN, PY_END, build_py_region(objects))
+    return _replace_region(text, HTML_BEGIN, HTML_END, build_frontend_asset())
 
 
 def build_frontend_target():
@@ -230,12 +243,8 @@ def check():
 
 
 def write():
-    objects = _load_objects()
-    TARGET.write_text(_replace_region(TARGET.read_text(encoding="utf-8"),
-                                      PY_BEGIN, PY_END, build_py_region(objects)), encoding="utf-8")
-    FRONTEND_TARGET.write_text(_replace_region(FRONTEND_TARGET.read_text(encoding="utf-8"),
-                                               FRONTEND_BEGIN, FRONTEND_END,
-                                               build_frontend_region(objects)), encoding="utf-8")
+    TARGET.write_text(build_target(), encoding="utf-8")
+    FRONTEND_TARGET.write_text(build_frontend_target(), encoding="utf-8")
 
 
 if __name__ == "__main__":

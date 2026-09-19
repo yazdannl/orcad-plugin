@@ -174,6 +174,16 @@ def test_page_html_contract():
     assert not re.search(r'<(?:script|link)[^>]+https?://', html), "frontend must not load network assets"
     assert len(html) < 700_000, f"compiled frontend too large: {len(html)}"
 
+
+def test_compiled_frontend_fallback():
+    original = mod.__dict__["PAGE_ASSET"]
+    try:
+        mod.__dict__["PAGE_ASSET"] = ROOT / "missing-frontend" / "index.html"
+        assert mod._load_page_html() == mod.PAGE_HTML
+    finally:
+        mod.__dict__["PAGE_ASSET"] = original
+
+
 def test_filenames():
     assert mod.sanitize_stem("../../etc/passwd") == "etc_passwd"
     f = mod.stamped_filename("my model!", "stl")
