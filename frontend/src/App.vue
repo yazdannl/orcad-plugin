@@ -9,6 +9,7 @@ import {
   createDraftState, markDraftEdited, receiveGeneratedCode, replaceDraft,
   replaceDraftWith,
 } from './codeDraft'
+import { responseMatches } from './messageTracking'
 
 const mode = ref('objects')
 const selected = ref('gridfinity_bin')
@@ -24,11 +25,14 @@ const result = ref(null)
 const logLines = ref(['ready.'])
 const wireframe = ref(false)
 const spinning = ref(true)
-const sequence = ref(0)
+const revision = ref(0)
+let previewSequence = 0
+let requestSequence = 0
 let previewTimer
 let hydrating = false
-let codeRequestSequence = 0
-let latestCodeRequestId = null
+let latestCodeRequest = null
+let activePreview = null
+let activeOperation = null
 
 const selectedPrim = computed(() => PRIMS[selected.value] || PRIMS.box)
 const filteredPrims = computed(() => Object.entries(PRIMS).filter(([key, prim]) => {
@@ -45,13 +49,36 @@ function post(message) {
   try {
     if (!window.orca || !window.orca.postMessage) throw new Error('Orca bridge unavailable')
     window.orca.postMessage(message)
+    return true
   } catch (error) {
     log(`bridge: ${error}`)
+    return false
   }
+}
+function requestContext() {
+  return { request_id: ++requestSequence, revision_id: revision.value }
+}
+function invalidateRevision() {
+  revision.value += 1
+  activePreview = null
+  activeOperation = null
+  latestCodeRequest = null
+  preview.value = null
+  stats.value = {}
+  result.value = null
+  previewStatus.value = 'waiting for a model'
+  if (status.value === 'building…' || status.value === 'sending…') status.value = 'ready'
+}
+function accepts(message, expected, includeSeq = false) {
+  return expected?.revisionId === revision.value && responseMatches(message, expected, includeSeq)
 }
 function tolerance() {
   const value = Number(document.getElementById('tol')?.value)
   return Number.isFinite(value) ? value : 0.001
+}
+function toleranceChanged() {
+  invalidateRevision()
+  requestPreview()
 }
 function hydrateParams() {
   hydrating = true
@@ -60,11 +87,12 @@ function hydrateParams() {
   hydrating = false
 }
 function codeRequest() {
-  const requestId = ++codeRequestSequence
-  latestCodeRequestId = requestId
-  post({ command: 'code', kind: 'generate', primitive: selected.value, params: { ...params }, request_id: requestId })
+  const ids = requestContext()
+  latestCodeRequest = { requestId: ids.request_id, revisionId: ids.revision_id }
+  post({ command: 'code', kind: 'generate', primitive: selected.value, params: { ...params }, ...ids })
 }
 function editDraft(event) {
+  invalidateRevision()
   markDraftEdited(draft, event.target.value)
 }
 function confirmDraftReplacement(source) {
@@ -72,42 +100,61 @@ function confirmDraftReplacement(source) {
 }
 function replaceWithGenerated() {
   if (!confirmDraftReplacement('generated object code')) return
+  invalidateRevision()
   replaceDraft(draft)
 }
-function payload(command) {
+function payload(command, ids) {
+  const context = ids || requestContext()
   if (mode.value === 'objects') {
-    return { command, kind: 'generate', primitive: selected.value, params: { ...params }, format: 'stl', tolerance: tolerance(), filename: selected.value }
+    return { command, kind: 'generate', primitive: selected.value, params: { ...params }, format: 'stl', tolerance: tolerance(), filename: selected.value, ...context }
   }
-  return { command, kind: 'run', code: draft.codeDraft, format: document.getElementById('fmt')?.value || 'stl', tolerance: tolerance(), filename: 'model' }
+  return { command, kind: 'run', code: draft.codeDraft, format: document.getElementById('fmt')?.value || 'stl', tolerance: tolerance(), filename: 'model', ...context }
 }
 function requestPreview() {
-  if (mode.value !== 'objects') return
   clearTimeout(previewTimer)
+  if (mode.value !== 'objects') return
   previewTimer = setTimeout(() => {
-    sequence.value += 1
+    const ids = requestContext()
+    const expected = { requestId: ids.request_id, revisionId: ids.revision_id, seq: ++previewSequence }
+    activePreview = expected
     previewStatus.value = 'building preview…'
-    const message = payload('preview')
-    message.seq = sequence.value
-    post(message)
+    const message = payload('preview', ids)
+    message.seq = expected.seq
+    if (!post(message) && accepts(message, expected, true)) {
+      activePreview = null
+      previewStatus.value = 'preview failed'
+    }
   }, 420)
 }
+function startOperation(command, label) {
+  const ids = requestContext()
+  activeOperation = { requestId: ids.request_id, revisionId: ids.revision_id }
+  status.value = label
+  const sent = post(payload(command, ids))
+  if (!sent && accepts(ids, activeOperation)) {
+    activeOperation = null
+    status.value = 'failed'
+  }
+}
 function generate() {
-  status.value = 'building…'
   log(`export ${selected.value}`)
-  post(payload('generate'))
+  startOperation('generate', 'building…')
 }
 function runCode() {
-  mode.value = 'code'
-  status.value = 'building…'
+  if (mode.value !== 'code') {
+    invalidateRevision()
+    mode.value = 'code'
+  }
   log('run code')
-  post(payload('run'))
+  startOperation('run', 'building…')
 }
 function sendPlate() {
-  status.value = 'sending…'
   log('send to plate')
-  post(payload('plate'))
+  startOperation('plate', 'sending…')
 }
 function setMode(next) {
+  if (mode.value === next) return
+  invalidateRevision()
   mode.value = next
   if (next === 'code') codeRequest()
   else requestPreview()
@@ -119,11 +166,12 @@ function formatParam(param) {
 function loadExample() {
   if (example.value === 'gridfinity_bin_2x2x6') {
     selected.value = 'gridfinity_bin'
-    mode.value = 'code'
+    setMode('code')
     nextTick(codeRequest)
     return
   }
   if (!confirmDraftReplacement('this example')) return
+  invalidateRevision()
   replaceDraftWith(draft, EXAMPLES[example.value] || '')
 }
 function showResult(message) {
@@ -133,14 +181,24 @@ function showResult(message) {
 }
 function handleMessage(message) {
   if (!message) return
-  if (message.type === 'progress') { status.value = message.message || 'working…'; return }
+  if (message.type === 'progress') {
+    if (accepts(message, activeOperation)) {
+      if (message.duplicate) {
+        activeOperation = null
+        status.value = 'failed'
+      } else status.value = message.message || 'working…'
+    }
+    return
+  }
   if (message.type === 'code') {
-    if (message.ok) receiveGeneratedCode(draft, message.request_id, latestCodeRequestId, message.code)
-    else if (message.request_id === latestCodeRequestId) log(message.error || 'code generation failed')
+    if (!accepts(message, latestCodeRequest)) return
+    if (message.ok) receiveGeneratedCode(draft, message.request_id, latestCodeRequest.requestId, message.code)
+    else log(message.error || 'code generation failed')
     return
   }
   if (message.type === 'preview') {
-    if (message.seq !== sequence.value) return
+    if (!accepts(message, activePreview, true)) return
+    activePreview = null
     if (message.ok) {
       preview.value = message.preview
       stats.value = message.stats || {}
@@ -152,6 +210,8 @@ function handleMessage(message) {
     return
   }
   if (message.type === 'plate_result' || message.type === 'result') {
+    if (!accepts(message, activeOperation)) return
+    activeOperation = null
     showResult(message)
     if (message.ok) {
       preview.value = message.preview
@@ -161,7 +221,9 @@ function handleMessage(message) {
     return
   }
   if (message.type === 'error' || message.ok === false) {
-    showResult({ ok: false, error: message.error })
+    if (!accepts(message, activeOperation)) return
+    activeOperation = null
+    showResult({ ...message, ok: false })
     status.value = 'failed'
   }
 }
@@ -279,8 +341,8 @@ watch(query, () => {
     selected.value = filteredPrims.value[0][0]
   }
 })
-watch(selected, () => { hydrateParams(); codeRequest(); requestPreview() })
-watch(params, () => { if (!hydrating) { codeRequest(); requestPreview() } }, { deep: true })
+watch(selected, () => { invalidateRevision(); hydrateParams(); codeRequest(); requestPreview() }, { flush: 'sync' })
+watch(params, () => { if (!hydrating) { invalidateRevision(); codeRequest(); requestPreview() } }, { deep: true, flush: 'sync' })
 watch(preview, (value) => applyPreview(value))
 watch(wireframe, (value) => { if (mesh) mesh.material.wireframe = value })
 onMounted(() => {
@@ -302,8 +364,8 @@ onBeforeUnmount(() => {
       <div class="font-bold tracking-wide">orcad <span class="font-normal text-[var(--accent)]">build123d</span></div>
       <div class="text-xs text-[var(--muted)]">{{ status }}</div>
       <div class="flex-1" />
-      <select id="fmt" class="control w-20"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
-      <input id="tol" class="control w-20" type="number" value="0.001" step="0.001" min="0.0001" max="1" title="Tessellation tolerance">
+      <select id="fmt" class="control w-20" @change="invalidateRevision"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
+      <input id="tol" class="control w-20" type="number" value="0.001" step="0.001" min="0.0001" max="1" title="Tessellation tolerance" @input="toleranceChanged">
       <button class="btn btn-primary" @click="mode === 'objects' ? generate() : runCode()">Run / export</button>
     </header>
 

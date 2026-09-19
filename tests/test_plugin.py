@@ -241,8 +241,10 @@ def test_code_command_is_sync_codegen():
     assert res["ok"] is True and "loft(" in res["code"]
     # invalid params -> immediate error, editor keeps last good code
     res = mod._handle_message_sync(cap, {"command": "code", "kind": "generate",
-                                         "primitive": "nope", "params": {}})
+                                         "primitive": "nope", "params": {},
+                                         "request_id": 18, "revision_id": 3})
     assert res["type"] == "code" and res["ok"] is False
+    assert res["request_id"] == 18 and res["revision_id"] == 3
 
 
 def test_cad_scheduler_coalesces_and_prioritizes_exports():
@@ -288,20 +290,23 @@ def test_preview_message_routing():
     # sync validation error -> immediate preview error, no thread
     cap = FakeCap()
     res = mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
-                                         "primitive": "nope", "params": {}})
+                                         "primitive": "nope", "params": {},
+                                         "request_id": 20, "revision_id": 4, "seq": 9})
     assert res["type"] == "preview" and res["ok"] is False
+    assert res["request_id"] == 20 and res["revision_id"] == 4 and res["seq"] == 9
     assert cap.posts == []
     # async path -> worker posts preview error (no build123d here)
     cap = FakeCap()
     assert mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
                                           "primitive": "box",
                                           "params": {"L": 1, "W": 1, "H": 1},
-                                          "seq": 7}) is None
+                                          "request_id": 21, "revision_id": 5, "seq": 7}) is None
     deadline = time.time() + 5
     while time.time() < deadline and not cap.posts:
         time.sleep(0.05)
     assert cap.posts and cap.posts[-1]["type"] == "preview"
     assert cap.posts[-1].get("seq") == 7
+    assert cap.posts[-1]["request_id"] == 21 and cap.posts[-1]["revision_id"] == 5
     # stale seq -> worker stays silent (preview gated until seq moves on)
     import threading as _th
     from unittest import mock as _mock
@@ -315,10 +320,12 @@ def test_preview_message_routing():
     with _mock.patch.object(mod, "preview_shape", side_effect=slow_preview):
         mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
                                        "primitive": "box",
-                                       "params": {"L": 1, "W": 1, "H": 1}, "seq": 1})
+                                       "params": {"L": 1, "W": 1, "H": 1},
+                                       "request_id": 30, "revision_id": 6, "seq": 1})
         mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
                                        "primitive": "box",
-                                       "params": {"L": 2, "W": 2, "H": 2}, "seq": 2})
+                                       "params": {"L": 2, "W": 2, "H": 2},
+                                       "request_id": 31, "revision_id": 7, "seq": 2})
         gate.set()
         deadline = time.time() + 5
         while time.time() < deadline:
@@ -342,8 +349,10 @@ def test_plate_message_routing():
     cap = FakeCap()
     ack = mod._handle_message_sync(cap, {"command": "plate", "kind": "generate",
                                          "primitive": "box",
-                                         "params": {"L": 1, "W": 1, "H": 1}})
+                                         "params": {"L": 1, "W": 1, "H": 1},
+                                         "request_id": 40, "revision_id": 8})
     assert ack["type"] == "progress"
+    assert ack["request_id"] == 40 and ack["revision_id"] == 8
     deadline = time.time() + 6
     while time.time() < deadline:
         if any(p.get("type") == "plate_result" for p in cap.posts):
@@ -351,6 +360,7 @@ def test_plate_message_routing():
         time.sleep(0.05)
     finals = [p for p in cap.posts if p.get("type") == "plate_result"]
     assert finals and finals[-1]["ok"] is False  # no build123d in test env
+    assert finals[-1]["request_id"] == 40 and finals[-1]["revision_id"] == 8
 
 
 def test_open_with_default_app_failure(tmp_path):
