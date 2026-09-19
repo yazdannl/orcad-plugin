@@ -221,6 +221,53 @@ def test_preview_reports_missing_build123d():
         assert "build123d is not installed" in str(exc)
 
 
+def test_exports_route_formats_and_tessellation_settings(tmp_path):
+    from types import SimpleNamespace
+    from unittest import mock
+
+    calls = {}
+
+    def write_file(path):
+        Path(path).write_bytes(b"exported")
+        return True
+
+    def export_stl(shape, path, **kwargs):
+        calls["stl"] = (shape, kwargs)
+        return write_file(path)
+
+    def export_step(shape, path):
+        calls["step"] = (shape, {})
+        return write_file(path)
+
+    class FakeMesher:
+        def __init__(self):
+            self.added = None
+
+        def add_shape(self, shape, **kwargs):
+            self.added = (shape, kwargs)
+            calls["3mf"] = self.added
+
+        def write(self, path):
+            write_file(path)
+
+    fake_build123d = SimpleNamespace(
+        export_stl=export_stl, export_step=export_step, Mesher=FakeMesher,
+    )
+    with mock.patch.object(mod, "_execute_code", return_value=("shape", "result")), \
+         mock.patch.object(mod, "_shape_stats", return_value={}), \
+         mock.patch.object(mod, "_preview_payload", return_value=None), \
+         mock.patch.object(mod, "exports_dir", return_value=tmp_path), \
+         mock.patch.dict(sys.modules, {"build123d": fake_build123d}):
+        results = [mod.run_build123d_code("ignored", fmt, 0.02, fmt)
+                   for fmt in ("stl", "step", "3mf")]
+
+    assert [result["format"] for result in results] == ["stl", "step", "3mf"]
+    assert all(Path(result["file"]).read_bytes() == b"exported" for result in results)
+    assert calls["stl"][1] == {"tolerance": 0.02, "angular_tolerance": 0.1}
+    assert calls["step"][1] == {}
+    assert calls["3mf"][1] == {"linear_deflection": 0.02, "angular_deflection": 0.1}
+
+
 def test_code_command_is_sync_codegen():
     class FakeCap:
         def post_message(self, d):

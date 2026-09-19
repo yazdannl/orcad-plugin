@@ -10,6 +10,7 @@ import {
   replaceDraftWith,
 } from './codeDraft'
 import { responseMatches } from './messageTracking'
+import { buildExportPayload, formatQuality } from './exportPayload'
 
 const mode = ref('objects')
 const selected = ref('gridfinity_bin')
@@ -25,6 +26,8 @@ const result = ref(null)
 const logLines = ref(['ready.'])
 const wireframe = ref(false)
 const spinning = ref(true)
+const format = ref('stl')
+const toleranceValue = ref(0.001)
 const revision = ref(0)
 let previewSequence = 0
 let requestSequence = 0
@@ -72,9 +75,9 @@ function invalidateRevision() {
 function accepts(message, expected, includeSeq = false) {
   return expected?.revisionId === revision.value && responseMatches(message, expected, includeSeq)
 }
-function tolerance() {
-  const value = Number(document.getElementById('tol')?.value)
-  return Number.isFinite(value) ? value : 0.001
+const qualityHelp = computed(() => formatQuality(format.value))
+function formatChanged() {
+  invalidateRevision()
 }
 function toleranceChanged() {
   invalidateRevision()
@@ -103,12 +106,18 @@ function replaceWithGenerated() {
   invalidateRevision()
   replaceDraft(draft)
 }
-function payload(command, ids) {
-  const context = ids || requestContext()
-  if (mode.value === 'objects') {
-    return { command, kind: 'generate', primitive: selected.value, params: { ...params }, format: 'stl', tolerance: tolerance(), filename: selected.value, ...context }
-  }
-  return { command, kind: 'run', code: draft.codeDraft, format: document.getElementById('fmt')?.value || 'stl', tolerance: tolerance(), filename: 'model', ...context }
+function payload(command, ids, exportFormat = format.value) {
+  return buildExportPayload({
+    mode: mode.value,
+    command,
+    primitive: selected.value,
+    params,
+    code: draft.codeDraft,
+    format: exportFormat,
+    tolerance: toleranceValue.value,
+    filename: mode.value === 'objects' ? selected.value : 'model',
+    context: ids || requestContext(),
+  })
 }
 function requestPreview() {
   clearTimeout(previewTimer)
@@ -126,11 +135,11 @@ function requestPreview() {
     }
   }, 420)
 }
-function startOperation(command, label) {
+function startOperation(command, label, exportFormat = format.value) {
   const ids = requestContext()
   activeOperation = { requestId: ids.request_id, revisionId: ids.revision_id }
   status.value = label
-  const sent = post(payload(command, ids))
+  const sent = post(payload(command, ids, exportFormat))
   if (!sent && accepts(ids, activeOperation)) {
     activeOperation = null
     status.value = 'failed'
@@ -150,7 +159,7 @@ function runCode() {
 }
 function sendPlate() {
   log('send to plate')
-  startOperation('plate', 'sending…')
+  startOperation('plate', 'sending…', 'stl')
 }
 function setMode(next) {
   if (mode.value === next) return
@@ -364,8 +373,11 @@ onBeforeUnmount(() => {
       <div class="font-bold tracking-wide">orcad <span class="font-normal text-[var(--accent)]">build123d</span></div>
       <div class="text-xs text-[var(--muted)]">{{ status }}</div>
       <div class="flex-1" />
-      <select id="fmt" class="control w-20" @change="invalidateRevision"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
-      <input id="tol" class="control w-20" type="number" value="0.001" step="0.001" min="0.0001" max="1" title="Tessellation tolerance" @input="toleranceChanged">
+      <label class="sr-only" for="fmt">Export format</label>
+      <select id="fmt" v-model="format" class="control w-20" title="Export format" @change="formatChanged"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
+      <label class="sr-only" for="tol">Mesh tolerance</label>
+      <input id="tol" v-model.number="toleranceValue" class="control w-20" type="number" step="0.001" min="0.0001" max="1" :title="qualityHelp" @input="toleranceChanged">
+      <span class="max-w-64 text-[11px] text-[var(--muted)]" title="Export quality">{{ qualityHelp }}</span>
       <button class="btn btn-primary" @click="mode === 'objects' ? generate() : runCode()">Run / export</button>
     </header>
 
@@ -398,7 +410,7 @@ onBeforeUnmount(() => {
 
       <main class="grid min-w-0 gap-3.5">
         <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><button class="btn btn-small" @click="resetView">Reset</button><button class="btn btn-small" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" @click="sendPlate">Send to plate</button></div>
+          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><button class="btn btn-small" @click="resetView">Reset</button><button class="btn btn-small" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
           <div ref="viewer" class="viewer relative h-[510px] bg-[var(--bg)] max-sm:h-[330px]"><div v-if="!preview?.tris?.length" class="pointer-events-none absolute inset-0 grid place-items-center text-center text-xs text-[var(--muted)]"><span><b class="mb-1 block text-[var(--fg)]">Nothing previewed yet</b>Choose a model and adjust a parameter.</span></div></div>
           <div class="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] px-2.5 py-2 text-xs"><span v-for="([key, value]) in statEntries" :key="key" class="rounded bg-[var(--panel2)] px-1.5 py-0.5">{{ key }}: <b class="font-mono font-normal">{{ value }}</b></span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel to zoom</span></div>
         </section>
