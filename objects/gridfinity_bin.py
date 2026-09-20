@@ -7,34 +7,35 @@
 # Parameter variables carry `# spec:` comments; packaging/bundle.py extracts
 # the UI spec from them. Run standalone with build123d installed, or use
 # through the orcad tab.
-from build123d import *
 import math
 
-GX = 2  # spec: int label=Grid X unit=u min=1 max=6 step=1
-GY = 2  # spec: int label=Grid Y unit=u min=1 max=6 step=1
-HU = 6  # spec: int label=Height value min=0 max=200 step=1
-HMODE = 0  # spec: int label=Height mode options=0:Grid units|1:Interior height|2:Exterior height|3:Exterior height with lip min=0 max=3 step=1
-ZS = False  # spec: bool label=Snap height to 7mm
-FILL = 0  # spec: number label=Solid fill mm (0=auto) unit=mm min=0 max=200 step=1
-WALL = 0.95  # spec: number label=Outer wall unit=mm min=0.95 max=2.4 step=0.05
-DX = 1  # spec: int label=Divisions X (0=solid) min=0 max=6 step=1
-DY = 1  # spec: int label=Divisions Y (0=solid) min=0 max=6 step=1
-DEPTH = 0  # spec: number label=Compartment depth mm (0=full) unit=mm min=0 max=200 step=1
-SCOOPW = 1.0  # spec: number label=Scoop amount min=0 max=1 step=0.1
-TABSTYLE = 1  # spec: int label=Tab style options=0:Full|1:Auto|2:Left|3:Center|4:Right|5:None min=0 max=5 step=1
-TABPLACE = 0  # spec: int label=Tab placement options=0:Every cell|1:Top-left only min=0 max=1 step=1
-CYL = False  # spec: bool label=Cylindrical compartments
-CD = 10  # spec: number label=Cylinder dia unit=mm min=1 max=60 step=0.5
-CCHAM = 0.5  # spec: number label=Cylinder top chamfer unit=mm min=0 max=5 step=0.1
-REFINED = True  # spec: bool label=Refined holes
-MAGNETS = False  # spec: bool label=Magnet holes (6x2)
-SCREW = False  # spec: bool label=Screw holes (M3)
-CRUSH = True  # spec: bool label=Crush ribs
-CHAMFER = True  # spec: bool label=Hole chamfer
-PRINTABLE = True  # spec: bool label=Supportless hole tops
-CORNERS = False  # spec: bool label=Holes only at corners
-THUMB = False  # spec: bool label=Thumbscrew holes
-LIP = True  # spec: bool label=Stacking lip
+from build123d import Align, Box, Cone, Cylinder, Plane, Polyline, Pos, RectangleRounded, Rot, Sketch, extrude, fillet, loft, make_face
+
+GX = 2  # spec: int label=Grid X unit=u min=1 max=6 step=1 group=Size help=Grid width in 42 mm cells.
+GY = 2  # spec: int label=Grid Y unit=u min=1 max=6 step=1 group=Size help=Grid depth in 42 mm cells.
+HU = 6  # spec: int label=Height value min=0 max=200 step=1 group=Size help=Value interpreted by Height mode.
+HMODE = 0  # spec: int label=Height mode options=0:Grid units|1:Interior height|2:Exterior height|3:Exterior height with lip min=0 max=3 step=1 group=Size help=Choose how Height value is interpreted.
+ZS = False  # spec: bool label=Snap height to 7mm group=Size help=Round height up to the next 7 mm grid unit.
+FILL = 0  # spec: number label=Solid fill mm (0=auto) unit=mm min=0 max=200 step=1 group=Size help=0 means automatic fill depth; set a value to override it.
+WALL = 0.95  # spec: number label=Outer wall unit=mm min=0.95 max=2.4 step=0.05 group=Size help=Thickness of the outer wall.
+DX = 1  # spec: int label=Divisions X (0=solid) min=0 max=6 step=1 group=Compartments help=0 means solid; positive values divide the interior along X.
+DY = 1  # spec: int label=Divisions Y (0=solid) min=0 max=6 step=1 group=Compartments help=0 means solid; positive values divide the interior along Y.
+DEPTH = 0  # spec: number label=Compartment depth mm (0=full) unit=mm min=0 max=200 step=1 group=Compartments help=0 means full fill depth; set a value to stop compartments above the base.
+SCOOPW = 1.0  # spec: number label=Scoop amount min=0 max=1 step=0.1 group=Compartments help=0 means no scoop; 1 is the full scoop ramp.
+TABSTYLE = 1  # spec: int label=Tab style options=0:Full|1:Auto|2:Left|3:Center|4:Right|5:None min=0 max=5 step=1 group=Labels help=Controls label tabs on compartment walls.
+TABPLACE = 0  # spec: int label=Tab placement options=0:Every cell|1:Top-left only min=0 max=1 step=1 group=Labels help=Choose which compartments receive label tabs.
+CYL = False  # spec: bool label=Cylindrical compartments group=Compartments help=Use cylindrical compartments instead of rounded rectangles.
+CD = 10  # spec: number label=Cylinder dia unit=mm min=1 max=60 step=0.5 group=Compartments dependsOn=CYL help=Used only when cylindrical compartments is enabled.
+CCHAM = 0.5  # spec: number label=Cylinder top chamfer unit=mm min=0 max=5 step=0.1 group=Compartments dependsOn=CYL help=Used only when cylindrical compartments is enabled.
+REFINED = True  # spec: bool label=Refined holes group=Mounting exclusiveWith=MAGNETS help=Refined and magnet holes are mutually exclusive.
+MAGNETS = False  # spec: bool label=Magnet holes (6x2) group=Mounting exclusiveWith=REFINED help=Refined and magnet holes are mutually exclusive.
+SCREW = False  # spec: bool label=Screw holes (M3) group=Mounting help=Add screw holes through the bin base.
+THUMB = False  # spec: bool label=Thumbscrew holes group=Mounting help=Add thumbscrew access holes.
+CRUSH = True  # spec: bool label=Crush ribs group=Advanced dependsOn=MAGNETS help=Only applies to magnet holes.
+CHAMFER = True  # spec: bool label=Hole chamfer group=Advanced help=Chamfer enabled mounting holes.
+PRINTABLE = True  # spec: bool label=Supportless hole tops group=Advanced help=Bridge hole tops for supportless printing.
+CORNERS = False  # spec: bool label=Holes only at corners group=Advanced help=Use only the outer corner hole positions.
+LIP = True  # spec: bool label=Stacking lip group=Advanced help=Add the stacking lip around the top.
 
 # ---- height (gridfinity-rebuilt-utility.scad: height() + z_snap) ----
 _Hraw = HU * 7.0 if HMODE == 0 else (HU + 7.0 if HMODE == 1 else (HU if HMODE == 2 else HU - 4.4))
@@ -61,11 +62,11 @@ for _ix in range(GX):
         _cx = (_ix - (GX - 1) / 2) * 42.0
         _cy = (_iy - (GY - 1) / 2) * 42.0
         _secs = [Pos(_cx, _cy, 0) * (Plane.XY.offset(_z) * RectangleRounded(_w, _w, _r)) for _z, _w, _r in _prof]
-        _foot = loft(Sketch() + _secs, ruled=True)
+        _foot = loft(Sketch() + _secs, ruled=True)  # pyright: ignore[reportArgumentType]
         _feet = _foot if _feet is None else _feet + _foot
 result = _feet
 # ---- bridge slab tying the feet together ----
-result += Pos(0, 0, 4.75) * extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=2.25)
+result += Pos(0, 0, 4.75) * extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=2.25)  # pyright: ignore[reportOperatorIssue]
 # ---- base holes (magnet/screw/refined options per cell or outer corners) ----
 def _hole_positions():
     if CORNERS:
@@ -201,6 +202,6 @@ if LIP:
     _ib0 = max(H - 3.5, 6.5)
     _lo = [Plane.XY.offset(_ob0) * RectangleRounded(W, D, 3.75)] + [Plane.XY.offset(H + _dz) * RectangleRounded(W - 2 * _oi, D - 2 * _oi, _or) for _dz, _oi, _or, _vi, _vr in _lip_prof]
     _li = [Plane.XY.offset(_ib0) * RectangleRounded(W - 2 * 1.25, D - 2 * 1.25, 2.5)] + [Plane.XY.offset(H + _dz) * RectangleRounded(W - 2 * _vi, D - 2 * _vi, _vr) for _dz, _oi, _or, _vi, _vr in _lip_prof]
-    _lip_outer = loft(Sketch() + _lo + [Plane.XY.offset(H + 3.55) * RectangleRounded(W - 1.1, D - 1.1, 3.0)], ruled=True)
-    _lip_inner = loft(Sketch() + _li, ruled=True)
+    _lip_outer = loft(Sketch() + _lo + [Plane.XY.offset(H + 3.55) * RectangleRounded(W - 1.1, D - 1.1, 3.0)], ruled=True)  # pyright: ignore[reportArgumentType]
+    _lip_inner = loft(Sketch() + _li, ruled=True)  # pyright: ignore[reportArgumentType]
     result += _lip_outer - _lip_inner

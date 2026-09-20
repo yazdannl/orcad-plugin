@@ -34,6 +34,17 @@ def test_metadata_block():
     assert 'version = "0.6.0"' in text
 
 
+def test_ui_metadata_is_bundled():
+    params = {param["key"]: param for param in mod.PRIMITIVES["gridfinity_bin"]["params"]}
+    assert params["CD"]["ui"] == {
+        "group": "Compartments",
+        "dependsOn": "CYL",
+        "help": "Used only when cylindrical compartments is enabled.",
+    }
+    assert params["REFINED"]["ui"]["exclusiveWith"] == "MAGNETS"
+    assert "ui" not in mod.PRIMITIVES["box"]["params"][0]
+
+
 def test_primitives_codegen_ok():
     box = mod.generate_primitive_code("box", {"L": 20, "W": 20, "H": 20})
     assert "L = 20.0" in box and "result = Box(L, W, H)" in box
@@ -610,7 +621,7 @@ def test_objects_live_in_their_own_files():
         # parsed, never imported: object files execute CAD on import
         parsed = bundle.parse_object(ROOT / "objects" / f"{name}.py")
         assert parsed["name"] == name and parsed["label"] and parsed["params"]
-        assert "from build123d import *" in parsed["source"]
+        assert "from build123d import" in parsed["source"]
         bundle.smoke_object(parsed)  # defaults + extremes stay valid python
     if str(ROOT) not in sys.path:
         sys.path.insert(0, str(ROOT))

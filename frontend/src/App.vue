@@ -10,6 +10,7 @@ import {
   replaceDraftWith,
 } from './codeDraft'
 import { responseMatches } from './messageTracking'
+import { parameterGroups, paramUi, isParamDisabled } from './parameterUi'
 import { buildExportPayload, formatQuality } from './exportPayload'
 
 const mode = ref('objects')
@@ -38,6 +39,7 @@ let activePreview = null
 let activeOperation = null
 
 const selectedPrim = computed(() => PRIMS[selected.value] || PRIMS.box)
+const parameterSections = computed(() => parameterGroups(selectedPrim.value))
 const filteredPrims = computed(() => Object.entries(PRIMS).filter(([key, prim]) => {
   const q = query.value.trim().toLowerCase()
   return !q || key.includes(q) || prim.label.toLowerCase().includes(q)
@@ -169,8 +171,11 @@ function setMode(next) {
   else requestPreview()
 }
 function formatParam(param) {
-  const [key, label, unit, type] = param
-  return { key, label, unit, type }
+  const [key, label, unit, type, , min, max, step] = param
+  return { key, label, unit, type, min, max, step, options: Array.isArray(param[8]) ? param[8] : undefined, ...paramUi(param) }
+}
+function parameterDisabled(param) {
+  return isParamDisabled(param, params)
 }
 function loadExample() {
   if (example.value === 'gridfinity_bin_2x2x6') {
@@ -392,16 +397,20 @@ onBeforeUnmount(() => {
           <select v-model="selected" class="control w-full"><option v-for="([key, prim]) in filteredPrims" :key="key" :value="key">{{ prim.label }}</option></select>
           <p class="text-xs text-[var(--muted)]">{{ selectedPrim.blurb }}</p>
           <div class="eyebrow">Parameters</div>
-          <div v-for="param in selectedPrim.params" :key="param[0]" class="border-b border-dashed border-[var(--line)] py-2 last:border-0">
-            <div class="flex items-center justify-between gap-2"><label class="text-xs"><b>{{ formatParam(param).key }}</b> {{ formatParam(param).label }} <span class="text-[11px] text-[var(--muted)]">{{ formatParam(param).unit }}</span></label>
-              <input v-if="param[3] === 'bool'" v-model="params[param[0]]" type="checkbox" class="h-4 w-4 accent-[var(--accent)]">
-              <select v-else-if="param[8]" v-model="params[param[0]]" class="control min-w-40">
-                <option v-for="option in param[8]" :key="option.value" :value="option.value">{{ option.label }}</option>
-              </select>
-              <input v-else v-model.number="params[param[0]]" class="control w-20 text-right" type="number" :min="param[5]" :max="param[6]" :step="param[7]">
+          <details v-for="section in parameterSections" :key="section.name" open class="parameter-section">
+            <summary class="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-xs font-bold">{{ section.name }} <span class="text-[var(--muted)]">{{ section.params.length }}</span></summary>
+            <div v-for="param in section.params" :key="param[0]" class="border-b border-dashed border-[var(--line)] px-2 py-2 last:border-0" :class="{ 'opacity-50': parameterDisabled(param) }">
+              <div class="flex items-center justify-between gap-2"><label :for="`param-${param[0]}`" class="text-xs" :title="formatParam(param).help"><b>{{ formatParam(param).key }}</b> {{ formatParam(param).label }} <span class="text-[11px] text-[var(--muted)]">{{ formatParam(param).unit }}</span></label>
+                <input v-if="param[3] === 'bool'" :id="`param-${param[0]}`" v-model="params[param[0]]" type="checkbox" class="h-4 w-4 accent-[var(--accent)]" :disabled="parameterDisabled(param)" :title="formatParam(param).help">
+                <select v-else-if="formatParam(param).options" :id="`param-${param[0]}`" v-model="params[param[0]]" class="control min-w-40" :disabled="parameterDisabled(param)" :title="formatParam(param).help">
+                  <option v-for="option in formatParam(param).options" :key="option.value" :value="option.value">{{ option.label }}</option>
+                </select>
+                <input v-else :id="`param-${param[0]}`" v-model.number="params[param[0]]" class="control w-20 text-right" type="number" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)" :title="formatParam(param).help">
+              </div>
+              <p v-if="formatParam(param).help" class="mt-1 text-[11px] leading-4 text-[var(--muted)]">{{ formatParam(param).help }}</p>
+              <input v-if="param[3] !== 'bool' && !formatParam(param).options" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)">
             </div>
-            <input v-if="param[3] !== 'bool' && !param[8]" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]">
-          </div>
+          </details>
           <button class="btn btn-primary w-full" @click="generate">Generate + export</button>
         </section>
         <section v-else class="space-y-2 p-3">

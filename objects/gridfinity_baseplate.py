@@ -10,31 +10,35 @@
 # the UI spec from them. Run standalone with build123d installed, or use
 # through the orcad tab.
 # pi-lens-ignore: no-star-imports
-from build123d import *  # noqa: F403, F405, I001  # pyright: ignore[reportWildcardImportFromLibrary]
 import math
 
-GX = 4  # spec: int label=Grid X unit=u min=1 max=6 step=1
-GY = 4  # spec: int label=Grid Y unit=u min=1 max=6 step=1
-T = 5  # spec: number label=Thickness unit=mm min=4.6 max=8 step=0.2
-STYLE = 0  # spec: int label=Plate style options=0:Plain|1:Weighted|2:Skeletonized|3:Screw-together|4:Screw-together minimal min=0 max=4 step=1
-HOLESTYLE = 0  # spec: int label=Mount holes options=0:Plain|1:Countersunk|2:Counterbored min=0 max=2 step=1
-DISTX = 0  # spec: number label=Minimum X unit=mm min=0 max=300 step=1
-DISTY = 0  # spec: number label=Minimum Y unit=mm min=0 max=300 step=1
-FITX = 0  # spec: number label=Fit X min=-1 max=1 step=0.1
-FITY = 0  # spec: number label=Fit Y min=-1 max=1 step=0.1
+from build123d import (
+    Align, Box, Cone, Cylinder, Plane, Polyline, Pos, RectangleRounded, Rot,
+    Sketch, extrude, loft, make_face,
+)
+
+GX = 4  # spec: int label=Grid X unit=u min=1 max=6 step=1 group=Size help=Grid width in 42 mm cells.
+GY = 4  # spec: int label=Grid Y unit=u min=1 max=6 step=1 group=Size help=Grid depth in 42 mm cells.
+T = 5  # spec: number label=Thickness unit=mm min=4.6 max=8 step=0.2 group=Size help=Baseplate thickness.
+DISTX = 0  # spec: number label=Minimum X unit=mm min=0 max=300 step=1 group=Size help=0 means automatic grid width; increase to fit a larger plate.
+DISTY = 0  # spec: number label=Minimum Y unit=mm min=0 max=300 step=1 group=Size help=0 means automatic grid depth; increase to fit a larger plate.
+FITX = 0  # spec: number label=Fit X min=-1 max=1 step=0.1 group=Size help=0 centers the grid; -1 and 1 move it to an edge.
+FITY = 0  # spec: number label=Fit Y min=-1 max=1 step=0.1 group=Size help=0 centers the grid; -1 and 1 move it to an edge.
 # FITX: -1=left, 0=center, 1=right; FITY: -1=bottom, 0=center, 1=top.
-SCREW_D = 3.35  # spec: number label=Screw diameter unit=mm min=2 max=5 step=0.05
-SCREW_HEAD = 5  # spec: number label=Screw head diameter unit=mm min=3 max=8 step=0.1
-SCREW_SPACING = 0.5  # spec: number label=Screw spacing unit=mm min=0 max=2 step=0.1
-NSCREWS = 1  # spec: int label=Screws per seam min=1 max=3 step=1
-SOCKETS = True  # spec: bool label=Bin sockets
-REFINED = False  # spec: bool label=Refined holes
-MAGNETS = True  # spec: bool label=Magnet holes (6x2)
-SCREW = False  # spec: bool label=Screw holes (M3)
-CRUSH = True  # spec: bool label=Crush ribs
-CHAMFER = True  # spec: bool label=Hole chamfer
-PRINTABLE = False  # spec: bool label=Supportless hole tops
-CORNERS = False  # spec: bool label=Holes only at corners
+STYLE = 0  # spec: int label=Plate style options=0:Plain|1:Weighted|2:Skeletonized|3:Screw-together|4:Screw-together minimal min=0 max=4 step=1 group=Advanced help=Changes plate structure and adds weight or screw-together features.
+HOLESTYLE = 0  # spec: int label=Mount holes options=0:Plain|1:Countersunk|2:Counterbored min=0 max=2 step=1 group=Mounting help=Select the screw-hole head shape.
+SCREW_D = 3.35  # spec: number label=Screw diameter unit=mm min=2 max=5 step=0.05 group=Mounting help=Diameter of screw-together and screw holes.
+SCREW_HEAD = 5  # spec: number label=Screw head diameter unit=mm min=3 max=8 step=0.1 group=Mounting help=Head diameter for screw holes.
+SCREW_SPACING = 0.5  # spec: number label=Screw spacing unit=mm min=0 max=2 step=0.1 group=Mounting help=Extra spacing between screw-together holes.
+NSCREWS = 1  # spec: int label=Screws per seam min=1 max=3 step=1 group=Mounting help=Number of screws on each plate seam.
+SOCKETS = True  # spec: bool label=Bin sockets group=Mounting help=Cut sockets for Gridfinity bins.
+REFINED = False  # spec: bool label=Refined holes group=Mounting exclusiveWith=MAGNETS help=Refined and magnet holes are mutually exclusive.
+MAGNETS = True  # spec: bool label=Magnet holes (6x2) group=Mounting exclusiveWith=REFINED help=Refined and magnet holes are mutually exclusive.
+SCREW = False  # spec: bool label=Screw holes (M3) group=Mounting help=Add screw holes through the plate.
+CRUSH = True  # spec: bool label=Crush ribs group=Advanced dependsOn=MAGNETS help=Only applies to magnet holes.
+CHAMFER = True  # spec: bool label=Hole chamfer group=Advanced help=Chamfer enabled mounting holes.
+PRINTABLE = False  # spec: bool label=Supportless hole tops group=Advanced help=Bridge hole tops for supportless printing.
+CORNERS = False  # spec: bool label=Holes only at corners group=Advanced help=Use only the outer corner hole positions.
 
 # Slab footprint: cells tile at the 42mm pitch (BASEPLATE_DIMENSIONS, gridfinity-baseplate.scad:19).
 _W0, _D0 = GX * 42.0, GY * 42.0

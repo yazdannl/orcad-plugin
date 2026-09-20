@@ -42,7 +42,8 @@ FRONTEND_ASSET = ROOT / "frontend" / "dist" / "index.html"
 SPEC_LINE_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^#\n]*#\s*spec\s*:\s*(.+)$"
 )
-KEYVAL_RE = re.compile(r"(label|unit|min|max|step|options)\s*=\s*([^,]+?)(?=\s+(?:label|unit|min|max|step|options)\s*=|$)")
+KEYVAL_RE = re.compile(r"(label|unit|min|max|step|options|group|help|dependsOn|exclusiveWith)\s*=\s*([^,]+?)(?=\s+(?:label|unit|min|max|step|options|group|help|dependsOn|exclusiveWith)\s*=|$)")
+UI_KEYS = ("group", "help", "dependsOn", "exclusiveWith")
 
 
 def _parse_options(raw, path, var, ptype):
@@ -93,8 +94,8 @@ def _parse_spec_body(body, path, var):
                 raise ValueError(f"{path}: spec on {var} has invalid {key}") from exc
         if "options" in fields:
             fields["options"] = _parse_options(fields["options"], path, var, ptype)
-    elif set(fields) - {"label", "unit"}:
-        raise ValueError(f"{path}: bool spec on {var} takes only label=/unit=")
+    elif set(fields) - {"label", "unit", *UI_KEYS}:
+        raise ValueError(f"{path}: bool spec on {var} takes label=/unit= plus UI metadata")
     fields.setdefault("unit", "")
     return ptype, fields
 
@@ -105,17 +106,16 @@ def parse_object(path):
     if '"""' in source:
         raise ValueError(f"{path}: triple-double-quotes break TEMPLATE embedding")
     tree = ast.parse(source, filename=str(path))
-    stars = 0
+    build_imports = 0
     for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.module == "build123d" \
-                and any(a.name == "*" for a in node.names):
-            stars += 1
+        if isinstance(node, ast.ImportFrom) and node.module == "build123d":
+            build_imports += 1
         elif isinstance(node, ast.Import) and [a.name for a in node.names] == ["math"]:
             pass  # stdlib, always available (e.g. crush-rib wave polygon)
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            raise ValueError(f"{path}: only `from build123d import *` + `import math` allowed")
-    if stars != 1:
-        raise ValueError(f"{path}: exactly one `from build123d import *` required")
+            raise ValueError(f"{path}: only build123d imports + `import math` allowed")
+    if build_imports != 1:
+        raise ValueError(f"{path}: exactly one build123d import required")
     stores = {n.id for n in ast.walk(tree)
               if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)}
     if "result" not in stores:
@@ -167,6 +167,9 @@ def parse_object(path):
             param.update({k: fields[k] for k in ("min", "max", "step")})
             if "options" in fields:
                 param["options"] = fields["options"]
+        ui = {key: fields[key] for key in UI_KEYS if key in fields}
+        if ui:
+            param["ui"] = ui
         params.append(param)
     if not params:
         raise ValueError(f"{path}: no `# spec:` variables found")
@@ -257,12 +260,17 @@ def build_frontend_region(objects):
         params = []
         for p in obj["params"]:
             if p["ptype"] == "bool":
-                params.append([p["key"], p["label"], p["unit"], "bool", p["default"]])
+                param = [p["key"], p["label"], p["unit"], "bool", p["default"]]
+                if "ui" in p:
+                    param.append(p["ui"])
+                params.append(param)
             else:
                 param = [p["key"], p["label"], p["unit"], p["ptype"], p["default"],
                          p["min"], p["max"], p["step"]]
                 if "options" in p:
                     param.append(p["options"])
+                if "ui" in p:
+                    param.append(p["ui"])
                 params.append(param)
         specs[obj["name"]] = {"label": obj["label"], "blurb": obj["blurb"], "params": params}
     return "export const PRIMS = " + json.dumps(specs, separators=(",", ":")) + ";"
