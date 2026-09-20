@@ -64,7 +64,6 @@ except ImportError:  # pragma: no cover - allows unit tests without Orca
 PLUGIN_VERSION = "0.6.0"
 EXPORT_FORMATS = ("stl", "step", "3mf")
 DEFAULT_TOLERANCE = 0.001
-PREVIEW_MAX_TRIS = 3000  # cap on triangles sent to the page for preview
 
 # Gridfinity spec constants (public spec: 42mm grid, 7mm height units).
 GF_PITCH = 42.0
@@ -757,23 +756,22 @@ def _shape_stats(shape):
 
 
 def _preview_payload(shape, tolerance=DEFAULT_TOLERANCE):
-    """Decimated triangle soup for the page's 3D preview. Best-effort: None on failure.
+    """Complete triangle soup for the page's 3D preview. Best-effort: None on failure.
 
-    Returns {"tris": [x1,y1,z1, ...], "shown": n, "total": m} or None.
+    Dropping triangles by stride makes parameter changes look stale when the
+    changed surfaces are among the omitted triangles.
     """
     try:
         vertices, triangles = shape.tessellate(_num(tolerance, "tolerance"), 0.1)
         total = len(triangles)
         if total == 0:
             return None
-        step = max(1, total // PREVIEW_MAX_TRIS)
-        sample = triangles[::step]
         flat = []
-        for tri in sample:
+        for tri in triangles:
             for idx in (int(tri[0]), int(tri[1]), int(tri[2])):
                 v = vertices[idx]
                 flat.extend([round(float(v.X), 3), round(float(v.Y), 3), round(float(v.Z), 3)])
-        return {"tris": flat, "shown": len(sample), "total": total}
+        return {"tris": flat, "shown": total, "total": total}
     except Exception:
         return None
 

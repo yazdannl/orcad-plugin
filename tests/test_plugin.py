@@ -152,7 +152,23 @@ def test_preview_helper_fails_soft_without_build123d():
         def tessellate(self, *a, **k):
             raise ImportError("no OCP in test env")
     assert mod._preview_payload(FakeShape()) is None
-    assert mod.PREVIEW_MAX_TRIS == 3000
+
+
+def test_preview_payload_keeps_complete_tessellation():
+    from types import SimpleNamespace
+
+    vertices = [SimpleNamespace(X=0, Y=0, Z=0),
+                SimpleNamespace(X=1, Y=0, Z=0),
+                SimpleNamespace(X=0, Y=1, Z=0)]
+    triangles = [(0, 1, 2)] * 6001
+
+    class FakeShape:
+        def tessellate(self, *args):
+            return vertices, triangles
+
+    payload = mod._preview_payload(FakeShape())
+    assert payload["total"] == payload["shown"] == len(triangles)
+    assert len(payload["tris"]) == len(triangles) * 9
 
 
 def test_page_html_contract():
