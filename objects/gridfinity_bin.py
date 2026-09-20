@@ -13,7 +13,7 @@ import math
 GX = 2  # spec: int label=Grid X unit=u min=1 max=6 step=1
 GY = 2  # spec: int label=Grid Y unit=u min=1 max=6 step=1
 HU = 6  # spec: int label=Height value min=0 max=200 step=1
-HMODE = 0  # spec: int label=Height mode 0U 1in 2ex 3exlip min=0 max=3 step=1
+HMODE = 0  # spec: int label=Height mode options=0:Grid units|1:Interior height|2:Exterior height|3:Exterior height with lip min=0 max=3 step=1
 ZS = False  # spec: bool label=Snap height to 7mm
 FILL = 0  # spec: number label=Solid fill mm (0=auto) unit=mm min=0 max=200 step=1
 WALL = 0.95  # spec: number label=Outer wall unit=mm min=0.95 max=2.4 step=0.05
@@ -21,8 +21,8 @@ DX = 1  # spec: int label=Divisions X (0=solid) min=0 max=6 step=1
 DY = 1  # spec: int label=Divisions Y (0=solid) min=0 max=6 step=1
 DEPTH = 0  # spec: number label=Compartment depth mm (0=full) unit=mm min=0 max=200 step=1
 SCOOPW = 1.0  # spec: number label=Scoop amount min=0 max=1 step=0.1
-TABSTYLE = 1  # spec: int label=Tab 0Full 1Auto 2Left 3Center 4Right 5None min=0 max=5 step=1
-TABPLACE = 0  # spec: int label=Tabs only top-left min=0 max=1 step=1
+TABSTYLE = 1  # spec: int label=Tab style options=0:Full|1:Auto|2:Left|3:Center|4:Right|5:None min=0 max=5 step=1
+TABPLACE = 0  # spec: int label=Tab placement options=0:Every cell|1:Top-left only min=0 max=1 step=1
 CYL = False  # spec: bool label=Cylindrical compartments
 CD = 10  # spec: number label=Cylinder dia unit=mm min=1 max=60 step=0.5
 CCHAM = 0.5  # spec: number label=Cylinder top chamfer unit=mm min=0 max=5 step=0.1

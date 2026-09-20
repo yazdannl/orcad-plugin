@@ -6,6 +6,7 @@ carry `# spec:` comments, e.g.::
 
     WALL = 1.2  # spec: number label=Wall unit=mm min=0.8 max=2.4 step=0.2
     GX = 2      # spec: int label=Grid X unit=u min=1 max=6 step=1
+    MODE = 0    # spec: int label=Mode options=0:Basic|1:Advanced min=0 max=1 step=1
     LIP = True  # spec: bool label=Stacking lip
 
 This script extracts the UI spec from those variables, bakes per-object
@@ -41,7 +42,37 @@ FRONTEND_ASSET = ROOT / "frontend" / "dist" / "index.html"
 SPEC_LINE_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^#\n]*#\s*spec\s*:\s*(.+)$"
 )
-KEYVAL_RE = re.compile(r"(label|unit|min|max|step)\s*=\s*([^,]+?)(?=\s+(?:label|unit|min|max|step)\s*=|$)")
+KEYVAL_RE = re.compile(r"(label|unit|min|max|step|options)\s*=\s*([^,]+?)(?=\s+(?:label|unit|min|max|step|options)\s*=|$)")
+
+
+def _parse_options(raw, path, var, ptype):
+    options = []
+    seen = set()
+    for item in raw.split("|"):
+        if ":" not in item:
+            raise ValueError(f"{path}: spec on {var} has invalid option {item!r}")
+        value_src, label = item.split(":", 1)
+        try:
+            value = float(value_src.strip())
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{path}: spec on {var} has invalid option value") from exc
+        if ptype == "int":
+            if not value.is_integer():
+                raise ValueError(f"{path}: spec on {var} has non-integer option value")
+            try:
+                value = int(value)
+            except (OverflowError, ValueError) as exc:
+                raise ValueError(f"{path}: spec on {var} has invalid option value") from exc
+        label = label.strip()
+        if not label:
+            raise ValueError(f"{path}: spec on {var} has an empty option label")
+        if value in seen:
+            raise ValueError(f"{path}: spec on {var} repeats option value {value}")
+        seen.add(value)
+        options.append({"value": value, "label": label})
+    if not options:
+        raise ValueError(f"{path}: spec on {var} needs at least one option")
+    return options
 
 
 def _parse_spec_body(body, path, var):
@@ -60,6 +91,8 @@ def _parse_spec_body(body, path, var):
                 fields[key] = float(fields[key])
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"{path}: spec on {var} has invalid {key}") from exc
+        if "options" in fields:
+            fields["options"] = _parse_options(fields["options"], path, var, ptype)
     elif set(fields) - {"label", "unit"}:
         raise ValueError(f"{path}: bool spec on {var} takes only label=/unit=")
     fields.setdefault("unit", "")
@@ -122,10 +155,18 @@ def parse_object(path):
                 raise ValueError(f"{path}:{lineno}: int default must be whole")
         if ptype == "number" and not isinstance(default, (int, float)):
             raise ValueError(f"{path}:{lineno}: number default must be numeric")
+        if "options" in fields:
+            values = {option["value"] for option in fields["options"]}
+            if default not in values:
+                raise ValueError(f"{path}:{lineno}: default is not one of the options")
+            if any(value < fields["min"] or value > fields["max"] for value in values):
+                raise ValueError(f"{path}:{lineno}: option is outside the declared range")
         param = {"key": var, "label": fields["label"], "unit": fields.get("unit", ""),
                  "ptype": ptype, "default": default}
         if ptype in ("number", "int"):
             param.update({k: fields[k] for k in ("min", "max", "step")})
+            if "options" in fields:
+                param["options"] = fields["options"]
         params.append(param)
     if not params:
         raise ValueError(f"{path}: no `# spec:` variables found")
@@ -218,8 +259,11 @@ def build_frontend_region(objects):
             if p["ptype"] == "bool":
                 params.append([p["key"], p["label"], p["unit"], "bool", p["default"]])
             else:
-                params.append([p["key"], p["label"], p["unit"], p["ptype"], p["default"],
-                               p["min"], p["max"], p["step"]])
+                param = [p["key"], p["label"], p["unit"], p["ptype"], p["default"],
+                         p["min"], p["max"], p["step"]]
+                if "options" in p:
+                    param.append(p["options"])
+                params.append(param)
         specs[obj["name"]] = {"label": obj["label"], "blurb": obj["blurb"], "params": params}
     return "export const PRIMS = " + json.dumps(specs, separators=(",", ":")) + ";"
 

@@ -563,6 +563,43 @@ def _load_source_module(name, path):
     return module
 
 
+def test_named_mode_options_are_extracted_and_bundled():
+    bundle = _load_source_module("bundle_modes", ROOT / "packaging" / "bundle.py")
+    expected = {
+        "gridfinity_bin": {
+            "HMODE": [(0, "Grid units"), (1, "Interior height"),
+                      (2, "Exterior height"), (3, "Exterior height with lip")],
+            "TABSTYLE": [(0, "Full"), (1, "Auto"), (2, "Left"),
+                         (3, "Center"), (4, "Right"), (5, "None")],
+            "TABPLACE": [(0, "Every cell"), (1, "Top-left only")],
+        },
+        "gridfinity_baseplate": {
+            "STYLE": [(0, "Plain"), (1, "Weighted"), (2, "Skeletonized"),
+                      (3, "Screw-together"), (4, "Screw-together minimal")],
+            "HOLESTYLE": [(0, "Plain"), (1, "Countersunk"), (2, "Counterbored")],
+        },
+    }
+    for primitive, keys in expected.items():
+        parsed = bundle.parse_object(ROOT / "objects" / f"{primitive}.py")
+        params = {param["key"]: param for param in parsed["params"]}
+        for key, options in keys.items():
+            actual = [(option["value"], option["label"]) for option in params[key]["options"]]
+            assert actual == options
+            assert params[key]["default"] == {"TABSTYLE": 1}.get(key, 0)
+            bundled = next(p for p in mod.PRIMITIVES[primitive]["params"] if p["key"] == key)
+            assert bundled["options"] == params[key]["options"]
+
+    code = _gbin(HMODE=2, TABSTYLE=3, TABPLACE=1)
+    assert "HMODE = 2" in code and "TABSTYLE = 3" in code and "TABPLACE = 1" in code
+    try:
+        mod.validate_primitive_params("gridfinity_bin", dict(
+            {p["key"]: p["default"] for p in mod.PRIMITIVES["gridfinity_bin"]["params"]},
+            HMODE="Exterior height"))
+        raise AssertionError("expected ValueError for a display label submitted as a value")
+    except ValueError:
+        pass
+
+
 def test_objects_live_in_their_own_files():
     bundle = _load_source_module("bundle", ROOT / "packaging" / "bundle.py")
     expected = ["box", "bracket", "cylinder", "gridfinity_baseplate",

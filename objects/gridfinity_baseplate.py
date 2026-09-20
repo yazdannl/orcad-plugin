@@ -16,8 +16,8 @@ import math
 GX = 4  # spec: int label=Grid X unit=u min=1 max=6 step=1
 GY = 4  # spec: int label=Grid Y unit=u min=1 max=6 step=1
 T = 5  # spec: number label=Thickness unit=mm min=4.6 max=8 step=0.2
-STYLE = 0  # spec: int label=Plate style min=0 max=4 step=1
-HOLESTYLE = 0  # spec: int label=Mount holes min=0 max=2 step=1
+STYLE = 0  # spec: int label=Plate style options=0:Plain|1:Weighted|2:Skeletonized|3:Screw-together|4:Screw-together minimal min=0 max=4 step=1
+HOLESTYLE = 0  # spec: int label=Mount holes options=0:Plain|1:Countersunk|2:Counterbored min=0 max=2 step=1
 DISTX = 0  # spec: number label=Minimum X unit=mm min=0 max=300 step=1
 DISTY = 0  # spec: number label=Minimum Y unit=mm min=0 max=300 step=1
 FITX = 0  # spec: number label=Fit X min=-1 max=1 step=0.1

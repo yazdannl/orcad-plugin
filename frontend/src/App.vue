@@ -395,9 +395,12 @@ onBeforeUnmount(() => {
           <div v-for="param in selectedPrim.params" :key="param[0]" class="border-b border-dashed border-[var(--line)] py-2 last:border-0">
             <div class="flex items-center justify-between gap-2"><label class="text-xs"><b>{{ formatParam(param).key }}</b> {{ formatParam(param).label }} <span class="text-[11px] text-[var(--muted)]">{{ formatParam(param).unit }}</span></label>
               <input v-if="param[3] === 'bool'" v-model="params[param[0]]" type="checkbox" class="h-4 w-4 accent-[var(--accent)]">
+              <select v-else-if="param[8]" v-model="params[param[0]]" class="control min-w-40">
+                <option v-for="option in param[8]" :key="option.value" :value="option.value">{{ option.label }}</option>
+              </select>
               <input v-else v-model.number="params[param[0]]" class="control w-20 text-right" type="number" :min="param[5]" :max="param[6]" :step="param[7]">
             </div>
-            <input v-if="param[3] !== 'bool'" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]">
+            <input v-if="param[3] !== 'bool' && !param[8]" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]">
           </div>
           <button class="btn btn-primary w-full" @click="generate">Generate + export</button>
         </section>
