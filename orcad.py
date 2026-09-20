@@ -417,7 +417,11 @@ assert H >= 7.0, "height below 7mm base"
 assert not LIP or FILL <= 0 or FILL <= H - 1.2, "fill too tall for lipped bin"
 W = GX * 42.0 - 0.5
 D = GY * 42.0 - 0.5
-_EW = max(WALL, 0.95)
+_EW = WALL
+_inner_w = W - 2 * _EW
+_inner_d = D - 2 * _EW
+_inner_r = max(0.01, 3.75 - _EW)
+assert _inner_w > 0 and _inner_d > 0, "wall leaves no interior"
 _lip_sup = 1.2 if LIP else 0.0
 _fill = FILL if FILL > 0 else H - 7.0 - _lip_sup
 _infill_top = 7.0 + _fill
@@ -503,23 +507,25 @@ if REFINED or MAGNETS or SCREW or THUMB:
             result -= Pos(_tx, _ty, 0) * Cylinder(7.8, 4.75, align=(Align.CENTER, Align.CENTER, Align.MIN))
 # ---- walls: thin ring + infill solid ----
 if H > 7.0:
-    _wall = extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=H - 7.0) - Pos(0, 0, -0.5) * extrude(Plane.XY * RectangleRounded(W - 2 * _EW, D - 2 * _EW, 3.75), amount=H - 7.0 + 1)
+    _wall = extrude(Plane.XY * RectangleRounded(W, D, 3.75), amount=H - 7.0) - Pos(0, 0, -0.5) * extrude(Plane.XY * RectangleRounded(_inner_w, _inner_d, _inner_r), amount=H - 7.0 + 1)
     result += Pos(0, 0, 7.0) * _wall
 if _fill > 0:
-    result += Pos(0, 0, 7.0) * extrude(Plane.XY * RectangleRounded(W - 0.5, D - 0.5, 3.75), amount=_fill)
+    # Keep infill inside the requested outer wall; otherwise it would hide
+    # thicker walls when the compartment cutters are applied.
+    result += Pos(0, 0, 7.0) * extrude(Plane.XY * RectangleRounded(_inner_w, _inner_d, _inner_r), amount=_fill)
 # ---- compartments: per-division rounded cutters (element minus 0.6 total),
 # minus scoop/tab solids; cylinders replace cutters when CYL ----
 if DX > 0 and DY > 0 and _fill > 0:
-    # compartment grid spans the spec infill (total minus 2x0.95 walls),
-    # independent of our outer-wall setting; cutters inset 0.3 per side
-    _rx = (W - 1.9) / DX
-    _ry = (D - 1.9) / DY
+    # Compartments tile the requested interior; the 0.6mm subtraction leaves
+    # the fixed divider/edge web inside the wall.
+    _rx = _inner_w / DX
+    _ry = _inner_d / DY
     _ztop = _infill_top + 0.02
     _dep = DEPTH if DEPTH > 0 else _fill
     for _ix in range(DX):
         for _iy in range(DY):
-            _cx = -(W - 1.9) / 2 + (_ix + 0.5) * _rx
-            _cy = -(D - 1.9) / 2 + (_iy + 0.5) * _ry
+            _cx = -_inner_w / 2 + (_ix + 0.5) * _rx
+            _cy = -_inner_d / 2 + (_iy + 0.5) * _ry
             if CYL:
                 _ccut = Cylinder(CD / 2, _dep + 0.02, align=(Align.CENTER, Align.CENTER, Align.MIN))
                 if CCHAM > 0:
