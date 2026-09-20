@@ -49,6 +49,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import traceback
 from contextlib import suppress
@@ -698,6 +699,27 @@ def exports_dir():
     return d
 
 
+def _reserve_export_path(out_dir, stem, ext):
+    """Reserve a unique final path, even when exports start in one second."""
+    base = stamped_filename(stem, ext)
+    candidate = out_dir / base
+    suffix = 0
+    while True:
+        try:
+            fd = os.open(candidate, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:
+            suffix += 1
+            candidate = out_dir / f"{Path(base).stem}_{suffix}.{ext}"
+        else:
+            os.close(fd)
+            return candidate
+
+
+def _remove_export_file(path):
+    with suppress(FileNotFoundError):
+        path.unlink()
+
+
 # ---------------------------------------------------------------------------
 # Runner (build123d imported lazily so tests + plugin load stay light)
 # ---------------------------------------------------------------------------
@@ -860,33 +882,48 @@ def run_build123d_code(code, export_format="stl", tolerance=DEFAULT_TOLERANCE,
     shape, var = _execute_code(code)
 
     out_dir = exports_dir()
-    filename = stamped_filename(filename_stem, export_format)
-    out_path = out_dir / filename
+    out_path = _reserve_export_path(out_dir, filename_stem, export_format)
+    temp_path = None
+    installed = False
     try:
+        temp_fd, temp_name = tempfile.mkstemp(
+            prefix=f".{out_path.stem}.", suffix=f".{export_format}", dir=out_dir)
+        temp_path = Path(temp_name)
+        os.close(temp_fd)
         if export_format == "stl":
             from build123d import export_stl
-            ok = export_stl(shape, str(out_path), tolerance=tol, angular_tolerance=0.1)
+            ok = export_stl(shape, str(temp_path), tolerance=tol, angular_tolerance=0.1)
             if not ok:
                 raise RuntimeError("export_stl reported failure")
         elif export_format == "step":
             from build123d import export_step
-            ok = export_step(shape, str(out_path))
+            ok = export_step(shape, str(temp_path))
             if not ok:
                 raise RuntimeError("export_step reported failure")
         else:  # 3mf via Mesher
             from build123d import Mesher
             m = Mesher()
             m.add_shape(shape, linear_deflection=tol, angular_deflection=0.1)
-            m.write(str(out_path))
+            m.write(str(temp_path))
+
+        if not temp_path.is_file():
+            raise RuntimeError(f"Export to {export_format} produced no output")
+        size = temp_path.stat().st_size
+        if size == 0:
+            raise RuntimeError(f"Export to {export_format} produced empty output")
+        os.replace(temp_path, out_path)
+        installed = True
     except RuntimeError:
         raise
     except Exception as exc:
         raise RuntimeError(f"Export to {export_format} failed: {exc}") from exc
+    finally:
+        if not installed:
+            if temp_path is not None:
+                _remove_export_file(temp_path)
+            _remove_export_file(out_path)
 
-    try:
-        size = out_path.stat().st_size
-    except Exception:
-        size = -1
+    filename = out_path.name
     return {
         "ok": True,
         "file": str(out_path),

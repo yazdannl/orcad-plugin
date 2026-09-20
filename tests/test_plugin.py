@@ -268,6 +268,118 @@ def test_exports_route_formats_and_tessellation_settings(tmp_path):
     assert calls["3mf"][1] == {"linear_deflection": 0.02, "angular_deflection": 0.1}
 
 
+def test_exports_are_unique_within_one_timestamp(tmp_path):
+    from types import SimpleNamespace
+    from unittest import mock
+
+    fixed = mod.datetime.datetime(2026, 1, 2, 3, 4, 5)
+
+    class FixedDateTime:
+        @classmethod
+        def now(cls):
+            return fixed
+
+    def export_stl(shape, path, **kwargs):
+        Path(path).write_bytes(b"stl")
+        return True
+
+    fake_build123d = SimpleNamespace(export_stl=export_stl)
+    with (
+        mock.patch.object(mod, "_execute_code", return_value=("shape", "result")),
+        mock.patch.object(mod, "_shape_stats", return_value={}),
+        mock.patch.object(mod, "_preview_payload", return_value=None),
+        mock.patch.object(mod, "exports_dir", return_value=tmp_path),
+        mock.patch.dict(sys.modules, {"build123d": fake_build123d}),
+    ):
+        results = [mod.run_build123d_code("ignored", filename_stem="box") for _ in range(3)]
+
+    assert len({result["filename"] for result in results}) == 3
+    assert all(Path(result["file"]).read_bytes() == b"stl" for result in results)
+    assert sorted(path.name for path in tmp_path.iterdir()) == sorted(
+        result["filename"] for result in results)
+
+
+def test_concurrent_exports_do_not_overwrite(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from types import SimpleNamespace
+    from unittest import mock
+
+    barrier = __import__("threading").Barrier(6)
+
+    def export_stl(shape, path, **kwargs):
+        barrier.wait(5)
+        Path(path).write_bytes(b"stl")
+        return True
+
+    fake_build123d = SimpleNamespace(export_stl=export_stl)
+    with (
+        mock.patch.object(mod, "_execute_code", return_value=("shape", "result")),
+        mock.patch.object(mod, "_shape_stats", return_value={}),
+        mock.patch.object(mod, "_preview_payload", return_value=None),
+        mock.patch.object(mod, "exports_dir", return_value=tmp_path),
+        mock.patch.dict(sys.modules, {"build123d": fake_build123d}),
+        ThreadPoolExecutor(max_workers=6) as pool,
+    ):
+        results = list(pool.map(
+            lambda _: mod.run_build123d_code("ignored", filename_stem="same"),
+            range(6)))
+
+    assert len({result["filename"] for result in results}) == 6
+    assert len(list(tmp_path.iterdir())) == 6
+    assert all(result["size_bytes"] == 3 for result in results)
+
+
+def test_failed_exporters_clean_up_partial_files(tmp_path):
+    from types import SimpleNamespace
+    from unittest import mock
+
+    def export_stl(shape, path, **kwargs):
+        Path(path).write_bytes(b"partial")
+        raise OSError("writer failed")
+
+    def export_step(shape, path):
+        Path(path).write_bytes(b"partial")
+        return False
+
+    fake_build123d = SimpleNamespace(export_stl=export_stl, export_step=export_step)
+    with (
+        mock.patch.object(mod, "_execute_code", return_value=("shape", "result")),
+        mock.patch.object(mod, "exports_dir", return_value=tmp_path),
+        mock.patch.dict(sys.modules, {"build123d": fake_build123d}),
+    ):
+        for export_format in ("stl", "step"):
+            try:
+                mod.run_build123d_code("ignored", export_format, filename_stem="failed")
+                raise AssertionError("expected RuntimeError")
+            except RuntimeError:
+                pass
+            assert not list(tmp_path.iterdir())
+
+
+def test_missing_or_empty_export_is_failure_and_cleans_up(tmp_path):
+    from types import SimpleNamespace
+    from unittest import mock
+
+    for payload in (None, b""):
+        def export_stl(shape, path, payload=payload, **kwargs):
+            if payload is not None:
+                Path(path).write_bytes(payload)
+            return True
+
+        fake_build123d = SimpleNamespace(export_stl=export_stl)
+        with (
+            mock.patch.object(mod, "_execute_code", return_value=("shape", "result")),
+            mock.patch.object(mod, "exports_dir", return_value=tmp_path),
+            mock.patch.dict(sys.modules, {"build123d": fake_build123d}),
+        ):
+            try:
+                mod.run_build123d_code("ignored", filename_stem="missing")
+                raise AssertionError("expected RuntimeError")
+            except RuntimeError:
+                pass
+        assert not list(tmp_path.iterdir())
+
+
 def test_code_command_is_sync_codegen():
     class FakeCap:
         def post_message(self, d):
