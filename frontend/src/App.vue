@@ -10,6 +10,7 @@ import {
   replaceDraftWith,
 } from './codeDraft'
 import { responseMatches } from './messageTracking'
+import { copyPath, handoffMessage } from './handoff'
 import { parameterGroups, paramUi, isParamDisabled, validationMessages } from './parameterUi'
 import { buildExportPayload, formatQuality } from './exportPayload'
 import {
@@ -34,6 +35,7 @@ const stats = ref({})
 const result = ref(null)
 const validationErrors = reactive({})
 const logLines = ref(['ready.'])
+const notice = ref('')
 const wireframe = ref(Boolean(initialSettings.wireframe))
 const spinning = ref(initialSettings.spinning !== false)
 const format = ref(['stl', 'step', '3mf'].includes(initialSettings.format) ? initialSettings.format : 'stl')
@@ -46,6 +48,8 @@ let hydrating = false
 let latestCodeRequest = null
 let activePreview = null
 let activeOperation = null
+let folderRequest = null
+let noticeTimer
 
 const selectedPrim = computed(() => PRIMS[selected.value] || PRIMS.box)
 const parameterSections = computed(() => parameterGroups(selectedPrim.value))
@@ -229,14 +233,36 @@ function loadExample() {
   invalidateRevision()
   replaceDraftWith(draft, EXAMPLES[example.value] || '')
 }
+function notify(message) {
+  notice.value = String(message)
+  clearTimeout(noticeTimer)
+  noticeTimer = setTimeout(() => { notice.value = '' }, 5000)
+}
+async function copyResultPath() {
+  const path = result.value?.file
+  if (!path) return
+  if (await copyPath(path)) notify('path copied')
+  else notify('Copy unavailable; select the path and copy it manually.')
+}
+function openExportsFolder() {
+  const ids = requestContext()
+  folderRequest = { requestId: ids.request_id, revisionId: ids.revision_id }
+  if (!post({ command: 'open_exports', ...ids })) {
+    folderRequest = null
+    notify('Open exports folder unavailable; use the exported path below.')
+  }
+}
 function showResult(message) {
   result.value = message
+  const stateMessage = handoffMessage(message)
   if (message.ok) {
     clearValidationErrors()
-    log(`ok ${message.filename || 'model'}`)
+    log(stateMessage || `ok ${message.filename || 'model'}`)
+    if (stateMessage) notify(stateMessage)
   } else {
     setValidationErrors(message)
-    log(message.error || 'operation failed')
+    log(stateMessage || message.error || 'operation failed')
+    if (stateMessage) notify(stateMessage)
   }
 }
 function handleMessage(message) {
@@ -276,15 +302,23 @@ function handleMessage(message) {
     }
     return
   }
+  if (message.type === 'folder_result') {
+    if (!accepts(message, folderRequest)) return
+    folderRequest = null
+    if (message.ok) notify('open request sent for exports folder')
+    else notify('Open exports folder unavailable; use the exported path below.')
+    return
+  }
   if (message.type === 'plate_result' || message.type === 'result') {
     if (!accepts(message, activeOperation)) return
     activeOperation = null
     showResult(message)
-    if (message.ok) {
-      preview.value = message.preview
-      stats.value = message.stats || {}
-      status.value = message.type === 'plate_result' ? 'sent' : 'done'
-    } else status.value = 'failed'
+    if (message.preview) preview.value = message.preview
+    if (message.stats) stats.value = message.stats
+    if (message.type === 'plate_result') {
+      status.value = message.open_request_sent ? 'open request sent'
+        : message.export_ok ? 'exported; open request failed' : 'failed'
+    } else status.value = message.ok ? 'done' : 'failed'
     return
   }
   if (message.type === 'error' || message.ok === false) {
@@ -434,11 +468,13 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(frameId)
   window.removeEventListener('resize', resizeViewer)
   renderer?.dispose()
+  clearTimeout(noticeTimer)
 })
 </script>
 
 <template>
   <div class="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
+    <div v-if="notice" class="fixed right-3 top-3 z-10 rounded-lg border border-[var(--accent)] bg-[var(--panel)] px-3 py-2 text-xs shadow-lg" role="status">{{ notice }}</div>
     <header class="flex h-13 items-center gap-3 border-b border-[var(--line)] bg-[var(--panel)] px-4">
       <div class="font-bold tracking-wide">orcad <span class="font-normal text-[var(--accent)]">build123d</span></div>
       <div class="text-xs text-[var(--muted)]">{{ status }}</div>
@@ -498,7 +534,7 @@ onBeforeUnmount(() => {
           <div ref="viewer" class="viewer relative h-[510px] bg-[var(--bg)] max-sm:h-[330px]"><div v-if="!preview?.tris?.length" class="pointer-events-none absolute inset-0 grid place-items-center text-center text-xs text-[var(--muted)]"><span><b class="mb-1 block text-[var(--fg)]">Nothing previewed yet</b>Choose a model and adjust a parameter.</span></div></div>
           <div class="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] px-2.5 py-2 text-xs"><span v-for="([key, value]) in statEntries" :key="key" class="rounded bg-[var(--panel2)] px-1.5 py-0.5">{{ key }}: <b class="font-mono font-normal">{{ value }}</b></span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel to zoom</span></div>
         </section>
-        <div class="grid gap-3.5 md:grid-cols-2"><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Last export</h2><div v-if="!result" class="min-h-19 text-xs text-[var(--muted)]">Nothing exported yet.</div><div v-else-if="!result.ok" class="whitespace-pre-wrap font-mono text-xs text-[var(--danger)]">{{ result.error }}</div><div v-else class="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1 text-xs"><span class="text-[var(--muted)]">file</span><span class="break-all font-mono">{{ result.file }}</span><span class="text-[var(--muted)]">size</span><span class="font-mono">{{ result.size_bytes }} bytes</span></div></section><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Activity</h2><pre class="h-19 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2 font-mono text-[11px] leading-4">{{ logLines.join('\n') }}</pre></section></div>
+        <div class="grid gap-3.5 md:grid-cols-2"><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Last export</h2><div v-if="!result" class="min-h-19 text-xs text-[var(--muted)]">Nothing exported yet.</div><div v-else class="space-y-2 text-xs"><p v-if="result.message" class="whitespace-pre-wrap" :class="result.ok ? 'text-[var(--muted)]' : 'text-[var(--danger)]'">{{ result.message }}</p><p v-if="result.error" class="whitespace-pre-wrap text-[var(--danger)]">{{ result.error }}</p><div v-if="result.file" class="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1"><span class="text-[var(--muted)]">file</span><span class="break-all font-mono">{{ result.file }}</span><span class="text-[var(--muted)]">size</span><span class="font-mono">{{ result.size_bytes }} bytes</span></div><div v-if="result.file" class="flex flex-wrap gap-1.5"><button class="btn btn-small" type="button" @click="copyResultPath">Copy path</button><button class="btn btn-small" type="button" @click="openExportsFolder">Open exports folder</button></div><p v-if="result.file" class="text-[var(--muted)]">If it is not on the plate, drag the file above into OrcaSlicer Prepare.</p></div></section><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Activity</h2><pre class="h-19 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2 font-mono text-[11px] leading-4">{{ logLines.join('\n') }}</pre></section></div>
       </main>
     </div>
   </div>

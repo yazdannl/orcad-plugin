@@ -245,7 +245,8 @@ def test_page_html_contract():
     assert '<div id="app"></div>' in html
     assert "Vue" in html and "Three.js" in html and ".min-h-screen" in html
     for needle in ("Objects", "Code", "objectSearch", "plate_result", "Run / export",
-                   "Wireframe", "Spin", "Send to plate", "drag to rotate"):
+                   "Wireframe", "Spin", "Send to plate", "Copy path",
+                   "Open exports folder", "drag the file", "drag to rotate"):
         assert needle in html, f"PAGE_HTML missing frontend feature {needle!r}"
     for key in mod.PRIMITIVES:
         assert key in html, f"object {key} missing from frontend"
@@ -603,20 +604,164 @@ def test_plate_message_routing():
     assert finals[-1]["request_id"] == 40 and finals[-1]["revision_id"] == 8
 
 
-def test_open_with_default_app_failure(tmp_path):
+def test_open_with_default_app_selects_linux_macos_windows_and_reports_denials(tmp_path):
     from unittest import mock
-    missing = tmp_path / "nonexistent_dir" / "x.stl"
-    existing = tmp_path / "x.stl"
-    with mock.patch.object(mod.subprocess, "Popen", side_effect=OSError("no opener")):
+    from unittest.mock import MagicMock
+
+    path = tmp_path / "model.stl"
+    with mock.patch.object(mod.sys, "platform", "linux"), \
+         mock.patch.object(mod.subprocess, "Popen", return_value=MagicMock()) as popen:
+        assert mod._open_with_default_app(path) is True
+        assert popen.call_args.args[0] == ["xdg-open", str(path)]
+
+    with mock.patch.object(mod.sys, "platform", "linux"), \
+         mock.patch.object(mod.subprocess, "Popen", side_effect=[FileNotFoundError(), MagicMock()]) as popen:
+        assert mod._open_with_default_app(path) is True
+        assert popen.call_args.args[0] == ["gio", "open", str(path)]
+
+    with mock.patch.object(mod.sys, "platform", "darwin"), \
+         mock.patch.object(mod.subprocess, "Popen", return_value=MagicMock()) as popen:
+        mod._open_with_default_app(path)
+        assert popen.call_args.args[0] == ["open", str(path)]
+
+    with mock.patch.object(mod.sys, "platform", "win32"), \
+         mock.patch.object(mod.os, "startfile", create=True) as startfile:
+        mod._open_with_default_app(path)
+        startfile.assert_called_once_with(str(path))
+
+    with mock.patch.object(mod.sys, "platform", "darwin"), \
+         mock.patch.object(mod.subprocess, "Popen", side_effect=PermissionError("denied")):
         try:
-            mod._open_with_default_app(str(missing))
+            mod._open_with_default_app(path)
             raise AssertionError("expected RuntimeError")
         except RuntimeError as exc:
-            assert "Could not hand" in str(exc)
+            assert "Could not hand" in str(exc) and "denied" in str(exc)
 
-    from unittest.mock import MagicMock
-    with mock.patch.object(mod.subprocess, "Popen", return_value=MagicMock()):
-        mod._open_with_default_app(str(existing))  # must not raise
+
+def test_plate_result_separates_export_and_open_request_and_retains_path(tmp_path):
+    import time
+    from unittest import mock
+
+    class FakeCap:
+        def __init__(self):
+            self.posts = []
+
+        def post_message(self, message):
+            self.posts.append(message)
+
+    def wait_for_result(cap):
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            results = [post for post in cap.posts if post.get("type") == "plate_result"]
+            if results:
+                return results[-1]
+            time.sleep(0.02)
+        raise AssertionError(f"no plate result: {cap.posts}")
+
+    path = tmp_path / "box.stl"
+    path.write_bytes(b"valid stl")
+    exported = {"file": str(path), "filename": path.name, "format": "stl",
+                "size_bytes": path.stat().st_size, "stats": {}, "preview": None,
+                "var": "result"}
+    message = {"command": "plate", "kind": "code", "code": "result = 1",
+               "filename": "box", "tolerance": 0.01, "request_id": 51,
+               "revision_id": 9}
+
+    cap = FakeCap()
+    with mock.patch.object(mod, "run_build123d_code", return_value=exported), \
+         mock.patch.object(mod, "_open_with_default_app", side_effect=PermissionError("denied")):
+        mod._handle_message_sync(cap, message)
+        failed = wait_for_result(cap)
+    assert failed["ok"] is False
+    assert failed["export_ok"] is True
+    assert failed["open_request_sent"] is False
+    assert failed["handoff_status"] == "open_request_failed"
+    assert failed["file"] == str(path)
+    assert "denied" in failed["open_request_error"]
+
+    cap = FakeCap()
+    with mock.patch.object(mod, "run_build123d_code", return_value=exported), \
+         mock.patch.object(mod, "_open_with_default_app", return_value=True):
+        mod._handle_message_sync(cap, {**message, "request_id": 52})
+        sent = wait_for_result(cap)
+    assert sent["ok"] is True and sent["export_ok"] is True
+    assert sent["open_request_sent"] is True
+    assert sent["message"] == "open request sent"
+    assert "import" not in sent["message"].lower()
+
+
+def test_plate_reuses_only_unchanged_valid_stl(tmp_path):
+    import time
+    from unittest import mock
+
+    class FakeCap:
+        def __init__(self):
+            self.posts = []
+
+        def post_message(self, message):
+            self.posts.append(message)
+
+    def wait_for_result(cap, count=1):
+        deadline = time.time() + 5
+        while time.time() < deadline:
+            results = [post for post in cap.posts if post.get("type") == "plate_result"]
+            if len(results) >= count:
+                return results[-1]
+            time.sleep(0.02)
+        raise AssertionError(f"no plate result: {cap.posts}")
+
+    path = tmp_path / "box.stl"
+    path.write_bytes(b"valid stl")
+    exported = {"file": str(path), "filename": path.name, "format": "stl",
+                "size_bytes": path.stat().st_size, "stats": {}, "preview": None,
+                "var": "result"}
+    base = {"command": "plate", "kind": "code", "code": "result = 1",
+            "filename": "box", "tolerance": 0.01, "revision_id": 10}
+    cap = FakeCap()
+    with mock.patch.object(mod, "run_build123d_code", return_value=exported) as build, \
+         mock.patch.object(mod, "_open_with_default_app", return_value=True):
+        mod._handle_message_sync(cap, {**base, "request_id": 61})
+        first = wait_for_result(cap)
+        mod._handle_message_sync(cap, {**base, "request_id": 62})
+        second = wait_for_result(cap, 2)
+        assert build.call_count == 1
+        assert first["reused"] is False and second["reused"] is True
+
+        mod._handle_message_sync(cap, {**base, "request_id": 63, "code": "result = 2"})
+        wait_for_result(cap, 3)
+        assert build.call_count == 2
+        mod._handle_message_sync(cap, {**base, "request_id": 64, "tolerance": 0.02})
+        wait_for_result(cap, 4)
+        assert build.call_count == 3
+        path.unlink()
+        mod._handle_message_sync(cap, {**base, "request_id": 65, "tolerance": 0.02})
+        wait_for_result(cap, 5)
+        assert build.call_count == 4
+
+
+def test_plate_export_failure_is_distinct_from_open_failure():
+    import time
+    from unittest import mock
+
+    class FakeCap:
+        def __init__(self):
+            self.posts = []
+
+        def post_message(self, message):
+            self.posts.append(message)
+
+    cap = FakeCap()
+    with mock.patch.object(mod, "run_build123d_code", side_effect=PermissionError("exports denied")):
+        mod._handle_message_sync(cap, {"command": "plate", "kind": "code", "code": "result = 1",
+                                       "filename": "box", "request_id": 65, "revision_id": 11})
+        deadline = time.time() + 5
+        while time.time() < deadline and not any(p.get("type") == "plate_result" for p in cap.posts):
+            time.sleep(0.02)
+    result = next(p for p in cap.posts if p.get("type") == "plate_result")
+    assert result["ok"] is False and result["export_ok"] is False
+    assert result["open_request_sent"] is False
+    assert result["handoff_status"] == "export_failed"
+    assert "exports denied" in result["error"]
 
 
 def _load_source_module(name, path):
