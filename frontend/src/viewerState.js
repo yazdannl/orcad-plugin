@@ -1,3 +1,7 @@
+export function initialSpinEnabled(savedValue, reducedMotion = false) {
+  return savedValue === true && !reducedMotion
+}
+
 const VIEW_DIRECTIONS = Object.freeze({
   iso: Object.freeze({ direction: [1, 1, 1], up: [0, 0, 1] }),
   front: Object.freeze({ direction: [0, -1, 0], up: [0, 0, 1] }),

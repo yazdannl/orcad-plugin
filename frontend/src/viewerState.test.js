@@ -1,6 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { fitCameraDistance, viewCameraState, zoomCameraDistance } from './viewerState.js'
+import { fitCameraDistance, initialSpinEnabled, viewCameraState, zoomCameraDistance } from './viewerState.js'
+
+test('preview spin is opt-in and disabled for reduced motion', () => {
+  assert.equal(initialSpinEnabled(undefined, false), false)
+  assert.equal(initialSpinEnabled(true, false), true)
+  assert.equal(initialSpinEnabled(true, true), false)
+})
 
 test('standard views preserve build123d Z-up orientation', () => {
   assert.deepEqual(viewCameraState('front', 4), {

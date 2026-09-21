@@ -22,7 +22,7 @@ import {
   defaultParams, filterPrimitiveEntries, loadSettings, persistedParams,
   restoreParams, saveObjectParams, saveSettings, selectPrimitive,
 } from './objectState'
-import { fitCameraDistance, viewCameraState, zoomCameraDistance } from './viewerState'
+import { fitCameraDistance, initialSpinEnabled, viewCameraState, zoomCameraDistance } from './viewerState'
 
 const initialSettings = loadSettings()
 const mode = ref('objects')
@@ -36,6 +36,7 @@ const draft = reactive(createDraftState())
 const example = ref('calibration_cube')
 const status = ref('ready')
 const previewStatus = ref('waiting for a model')
+const liveStatus = ref('')
 const preview = ref(null)
 const stats = ref({})
 const result = ref(null)
@@ -51,7 +52,9 @@ const protocolError = ref(null)
 const lastOperationAttempt = ref(null)
 const lastRetryKind = ref('preview')
 const wireframe = ref(Boolean(initialSettings.wireframe))
-const spinning = ref(initialSettings.spinning !== false)
+const reducedMotionQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  ? window.matchMedia('(prefers-reduced-motion: reduce)') : null
+const spinning = ref(initialSpinEnabled(initialSettings.spinning, reducedMotionQuery?.matches))
 const format = ref(['stl', 'step', '3mf'].includes(initialSettings.format) ? initialSettings.format : 'stl')
 const toleranceValue = ref(Number.isFinite(initialSettings.tolerance) ? initialSettings.tolerance : 0.001)
 const revision = ref(0)
@@ -89,9 +92,14 @@ function log(message) {
   logLines.value.push(String(message))
   if (logLines.value.length > 60) logLines.value.shift()
 }
+function announceStatus(message) {
+  const text = String(message || '').trim()
+  if (text && liveStatus.value !== text) liveStatus.value = text
+}
 function setBridgeUnavailable(error = null) {
   bridgeState.value = 'unavailable'
   bridgeDetail.value = error ? errorTechnicalDetail(error) : 'Orca did not provide the bridge API.'
+  announceStatus('Bridge unavailable')
 }
 function bridgeError(kind, detail, retry = kind) {
   return {
@@ -141,6 +149,7 @@ function registerBridge() {
     if (typeof cleanup === 'function') bridgeCleanup = cleanup
     bridgeState.value = 'ready'
     bridgeDetail.value = ''
+    announceStatus('Bridge ready')
     return true
   } catch (error) {
     setBridgeUnavailable(error)
@@ -320,6 +329,7 @@ function startOperation(command, label, exportFormat = format.value) {
   const ids = requestContext()
   activeOperation.value = createOperation('operation', ids)
   status.value = label
+  announceStatus(label)
   const sent = post(payload(command, ids, exportFormat))
   if (!sent && acceptsOperation(ids, activeOperation.value)) {
     activeOperation.value = null
@@ -332,6 +342,7 @@ function cancelBusy() {
     clearTimeout(previewTimer)
     previewPending.value = false
     previewStatus.value = 'preview cancelled'
+    announceStatus('Preview cancelled')
     return
   }
   if (activePreview.value) {
@@ -339,6 +350,7 @@ function cancelBusy() {
     cancelBackend(activePreview.value, 'preview')
     activePreview.value = null
     previewStatus.value = 'preview cancellation requested…'
+    announceStatus('Preview cancellation requested')
     return
   }
   if (activeOperation.value) {
@@ -346,6 +358,7 @@ function cancelBusy() {
     cancelBackend(activeOperation.value, 'operation')
     activeOperation.value = null
     status.value = 'cancellation requested…'
+    announceStatus('Cancellation requested')
   }
 }
 function generate() {
@@ -539,6 +552,7 @@ function processBridgeMessage(rawMessage) {
       status.value = message.open_request_sent ? 'open request sent'
         : message.export_ok ? 'exported; open request failed' : 'failed'
     } else status.value = message.ok ? 'done' : 'failed'
+    announceStatus(status.value)
     return
   }
   if (message.type === 'error') {
@@ -546,6 +560,7 @@ function processBridgeMessage(rawMessage) {
     activeOperation.value = null
     showResult({ ...message, ok: false })
     status.value = 'failed'
+    announceStatus(status.value)
   }
 }
 
@@ -559,7 +574,12 @@ let frameId
 const viewer = ref(null)
 let drag
 let resizeObserver
+let viewerVisibilityObserver
 let viewerHandlers
+let visibilityHandler
+let motionHandler
+let viewerVisible = true
+let documentVisible = typeof document === 'undefined' || document.visibilityState === 'visible'
 
 function disposeMaterial(material) {
   for (const item of Array.isArray(material) ? material : [material]) item?.dispose?.()
@@ -584,16 +604,19 @@ function fitView() {
   const distance = fitCameraDistance(modelSize, camera.aspect, camera.fov)
   camera.position.copy(direction.multiplyScalar(distance))
   camera.lookAt(0, 0, 0)
+  requestRender()
 }
 function zoomView(factor) {
   if (!camera || !modelSize) return
   camera.position.setLength(zoomCameraDistance(camera.position.length(), modelSize, factor))
   camera.lookAt(0, 0, 0)
+  requestRender()
 }
 function setStandardView(view) {
   if (!camera) return
   modelRoot?.rotation.set(0, 0, 0)
   setCameraView(view, camera.position.length() || (modelSize ? fitCameraDistance(modelSize, camera.aspect, camera.fov) : 3))
+  requestRender()
 }
 function applyPreview(payload) {
   const hadMesh = Boolean(mesh)
@@ -601,10 +624,13 @@ function applyPreview(payload) {
   if (!payload?.tris?.length) {
     modelSize = 0
     previewStatus.value = 'no mesh returned'
+    announceStatus('Preview returned no mesh')
+    requestRender()
     return
   }
   if (!renderer || !modelRoot) {
     previewStatus.value = 'WebGL unavailable'
+    announceStatus('Preview unavailable')
     return
   }
   const geometry = new BufferGeometry()
@@ -620,6 +646,8 @@ function applyPreview(payload) {
   // Keep the root rotation and camera distance when a replacement preview arrives.
   if (!hadMesh) fitView()
   previewStatus.value = `mesh ready · ${payload.total || payload.tris.length / 9} triangles`
+  announceStatus('Preview ready')
+  requestRender()
 }
 function resizeViewer() {
   if (!renderer || !viewer.value || !camera) return
@@ -628,6 +656,7 @@ function resizeViewer() {
   renderer.setSize(width, height, false)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
+  requestRender()
 }
 function initViewer() {
   try {
@@ -650,6 +679,7 @@ function initViewer() {
     viewerHandlers = {
       finishDrag,
       pointerdown: (event) => {
+        requestRender()
         drag = { x: event.clientX, y: event.clientY }
         viewer.value.setPointerCapture?.(event.pointerId)
         viewer.value.style.cursor = 'grabbing'
@@ -659,10 +689,12 @@ function initViewer() {
         modelRoot.rotation.y += (event.clientX - drag.x) * 0.01
         modelRoot.rotation.x = Math.max(-1.45, Math.min(1.45, modelRoot.rotation.x + (event.clientY - drag.y) * 0.01))
         drag = { x: event.clientX, y: event.clientY }
+        requestRender()
       },
       wheel: (event) => {
         event.preventDefault()
         zoomView(event.deltaY > 0 ? 1.1 : 0.9)
+        requestRender()
       },
     }
     viewer.value.addEventListener('pointerdown', viewerHandlers.pointerdown)
@@ -684,25 +716,52 @@ function initViewer() {
     } else {
       window.addEventListener('resize', resizeViewer)
     }
-    frameId = requestAnimationFrame(renderFrame)
+    if (typeof IntersectionObserver === 'function') {
+      try {
+        viewerVisibilityObserver = new IntersectionObserver(([entry]) => {
+          viewerVisible = entry.isIntersecting
+          if (viewerVisible) requestRender()
+          else stopRender()
+        })
+        viewerVisibilityObserver.observe(viewer.value)
+      } catch {
+        viewerVisibilityObserver?.disconnect()
+        viewerVisibilityObserver = null
+      }
+    }
+    requestRender()
   } catch (error) {
     previewStatus.value = 'preview unavailable'
     log(error)
   }
 }
+function canRender() {
+  return Boolean(renderer && scene && camera && viewerVisible && documentVisible)
+}
+function requestRender() {
+  if (canRender() && frameId == null) frameId = requestAnimationFrame(renderFrame)
+}
+function stopRender() {
+  if (frameId != null) cancelAnimationFrame(frameId)
+  frameId = null
+}
 function renderFrame() {
-  frameId = requestAnimationFrame(renderFrame)
+  frameId = null
+  if (!canRender()) return
   if (modelRoot && spinning.value) modelRoot.rotation.y += 0.005
-  renderer?.render(scene, camera)
+  renderer.render(scene, camera)
+  if (spinning.value) requestRender()
 }
 function resetView() {
   if (!camera) return
   modelRoot?.rotation.set(0, 0, 0)
   setCameraView('iso', modelSize ? fitCameraDistance(modelSize, camera.aspect, camera.fov) : 3)
+  requestRender()
 }
 function toggleWireframe() {
   wireframe.value = !wireframe.value
   if (mesh) mesh.material.wireframe = wireframe.value
+  requestRender()
 }
 
 watch(query, persistSettings)
@@ -724,8 +783,12 @@ watch(params, () => {
   }
 }, { deep: true, flush: 'sync' })
 watch(preview, (value) => applyPreview(value))
-watch(wireframe, (value) => { if (mesh) mesh.material.wireframe = value; persistSettings() })
-watch(spinning, persistSettings)
+watch(wireframe, (value) => { if (mesh) mesh.material.wireframe = value; persistSettings(); requestRender() })
+watch(spinning, (value) => {
+  persistSettings()
+  if (value && reducedMotionQuery?.matches) spinning.value = false
+  requestRender()
+})
 watch(busy, (value) => {
   clearInterval(elapsedTimer)
   if (value) {
@@ -735,14 +798,35 @@ watch(busy, (value) => {
 })
 onMounted(() => {
   hydrateParams()
+  documentVisible = document.visibilityState === 'visible'
+  visibilityHandler = () => {
+    documentVisible = document.visibilityState === 'visible'
+    if (documentVisible) requestRender()
+    else stopRender()
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
+  motionHandler = () => {
+    if (reducedMotionQuery?.matches) spinning.value = false
+    requestRender()
+  }
+  if (reducedMotionQuery) {
+    if (reducedMotionQuery.addEventListener) reducedMotionQuery.addEventListener('change', motionHandler)
+    else reducedMotionQuery.addListener?.(motionHandler)
+  }
   registerBridge()
   nextTick(() => { initViewer(); codeRequest(); requestPreview() })
 })
 onBeforeUnmount(() => {
   clearTimeout(previewTimer)
   clearInterval(elapsedTimer)
-  cancelAnimationFrame(frameId)
+  stopRender()
   resizeObserver?.disconnect()
+  viewerVisibilityObserver?.disconnect()
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler)
+  if (reducedMotionQuery) {
+    if (reducedMotionQuery.removeEventListener) reducedMotionQuery.removeEventListener('change', motionHandler)
+    else reducedMotionQuery.removeListener?.(motionHandler)
+  }
   if (!resizeObserver) window.removeEventListener('resize', resizeViewer)
   if (viewer.value && viewerHandlers) {
     viewer.value.removeEventListener('pointerdown', viewerHandlers.pointerdown)
@@ -753,7 +837,13 @@ onBeforeUnmount(() => {
     }
   }
   removeMesh()
+  renderer?.renderLists?.dispose?.()
   renderer?.dispose()
+  renderer?.domElement?.remove()
+  scene = null
+  camera = null
+  modelRoot = null
+  renderer = null
   bridgeCleanup?.()
   bridgeCleanup = null
   clearTimeout(noticeTimer)
@@ -762,11 +852,12 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
+    <div class="sr-only" aria-live="polite" aria-atomic="true">{{ liveStatus }}</div>
     <div v-if="notice" class="fixed right-3 top-3 z-10 rounded-lg border border-[var(--accent)] bg-[var(--panel)] px-3 py-2 text-xs shadow-lg" role="status">{{ notice }}</div>
     <header class="flex h-13 items-center gap-3 border-b border-[var(--line)] bg-[var(--panel)] px-4">
       <div class="font-bold tracking-wide">orcad <span class="font-normal text-[var(--accent)]">build123d</span></div>
-      <div class="text-xs text-[var(--muted)]" aria-live="polite">{{ busy ? busyStatus : status }}</div>
-      <span class="rounded border px-1.5 py-0.5 text-[11px]" :class="bridgeState === 'ready' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-[var(--danger)] text-[var(--danger)]'" role="status" :title="bridgeDetail">{{ bridgeStatus }}</span>
+      <div class="text-xs text-[var(--muted)]">{{ busy ? busyStatus : status }}</div>
+      <span class="rounded border px-1.5 py-0.5 text-[11px]" :class="bridgeState === 'ready' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-[var(--danger)] text-[var(--danger)]'" role="status" aria-live="polite" :title="bridgeDetail">{{ bridgeStatus }}</span>
       <button v-if="bridgeState === 'unavailable'" class="btn btn-small" type="button" @click="retryProtocol">Retry bridge</button>
       <button v-if="busy" class="btn btn-small" type="button" @click="cancelBusy">Cancel</button>
       <div class="flex-1" />
@@ -775,67 +866,70 @@ onBeforeUnmount(() => {
       <label class="sr-only" for="tol">Mesh tolerance</label>
       <input id="tol" v-model.number="toleranceValue" class="control w-20" type="number" step="0.001" min="0.0001" max="1" :title="qualityHelp" @input="toleranceChanged">
       <span class="max-w-64 text-[11px] text-[var(--muted)]" title="Export quality">{{ qualityHelp }}</span>
-      <button class="btn btn-primary" :disabled="busy" @click="mode === 'objects' ? generate() : runCode()">Run / export</button>
+      <button class="btn btn-primary" type="button" :disabled="busy" @click="mode === 'objects' ? generate() : runCode()">Run / export</button>
     </header>
 
     <div v-if="protocolError" class="mx-auto max-w-[1500px] px-3.5 pt-3.5">
-      <div class="rounded-lg border border-[var(--danger)] bg-[var(--panel)] p-3 text-xs" role="alert"><b>{{ protocolError.title }}</b><p class="mt-1">{{ protocolError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ protocolError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ protocolError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retryProtocol">Retry</button></div>
+      <div class="rounded-lg border border-[var(--danger)] bg-[var(--panel)] p-3 text-xs" role="alert" aria-live="assertive"><b>{{ protocolError.title }}</b><p class="mt-1">{{ protocolError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ protocolError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ protocolError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retryProtocol">Retry</button></div>
     </div>
 
     <div v-if="codeError && mode !== 'code'" class="mx-auto max-w-[1500px] px-3.5 pt-3.5">
-      <div class="rounded-lg border border-[var(--danger)] bg-[var(--panel)] p-3 text-xs" role="alert"><b>{{ codeError.title }}</b><p class="mt-1">{{ codeError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ codeError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ codeError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('code')">Retry code generation</button></div>
+      <div class="rounded-lg border border-[var(--danger)] bg-[var(--panel)] p-3 text-xs" role="alert" aria-live="assertive"><b>{{ codeError.title }}</b><p class="mt-1">{{ codeError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ codeError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ codeError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('code')">Retry code generation</button></div>
     </div>
 
     <div class="mx-auto grid max-w-[1500px] gap-3.5 p-3.5 lg:grid-cols-[310px_minmax(0,1fr)]">
       <aside class="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)] lg:self-start">
-        <nav class="grid grid-cols-2 gap-1 border-b border-[var(--line)] p-1.5">
-          <button class="tab" :class="{ active: mode === 'objects' }" @click="setMode('objects')">Objects</button>
-          <button class="tab" :class="{ active: mode === 'code' }" @click="setMode('code')">Code</button>
+        <nav class="grid grid-cols-2 gap-1 border-b border-[var(--line)] p-1.5" role="tablist" aria-label="Build mode">
+          <button class="tab" type="button" role="tab" :aria-selected="mode === 'objects'" aria-controls="objects-panel" :class="{ active: mode === 'objects' }" @click="setMode('objects')">Objects</button>
+          <button class="tab" type="button" role="tab" :aria-selected="mode === 'code'" aria-controls="code-panel" :class="{ active: mode === 'code' }" @click="setMode('code')">Code</button>
         </nav>
-        <section v-if="mode === 'objects'" class="space-y-3 p-3">
+        <section v-if="mode === 'objects'" id="objects-panel" role="tabpanel" aria-label="Objects" class="space-y-3 p-3">
           <div>
-            <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="objectSearch">Model</label><button v-if="query" class="btn btn-small" type="button" @click="query = ''">Clear search</button></div>
+            <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="objectSearch">Model filter</label><button v-if="query" class="btn btn-small" type="button" @click="query = ''">Clear search</button></div>
             <input id="objectSearch" v-model="query" class="control mt-1 w-full" placeholder="Filter objects…">
           </div>
           <div v-if="!filteredPrims.length" class="rounded-lg border border-dashed border-[var(--line)] p-3 text-xs text-[var(--muted)]" role="status">
             <p>No objects match “{{ query }}”.</p><button class="btn btn-small mt-2" type="button" @click="query = ''">Clear search</button>
           </div>
-          <select v-else :value="selected" class="control w-full" @change="selectObject"><option v-for="([key, prim]) in filteredPrims" :key="key" :value="key">{{ prim.label }}</option></select>
+          <template v-else>
+            <label class="sr-only" for="objectSelect">Object</label>
+            <select id="objectSelect" :value="selected" class="control w-full" @change="selectObject"><option v-for="([key, prim]) in filteredPrims" :key="key" :value="key">{{ prim.label }}</option></select>
+          </template>
           <p class="text-xs text-[var(--muted)]">{{ selectedPrim.blurb }}</p>
           <div class="flex items-center justify-between gap-2"><div class="eyebrow">Parameters</div><button class="btn btn-small" type="button" @click="resetDefaults">Reset defaults</button></div>
           <details v-for="section in parameterSections" :key="section.name" open class="parameter-section">
             <summary class="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-xs font-bold">{{ section.name }} <span class="text-[var(--muted)]">{{ section.params.length }}</span></summary>
             <div v-for="param in section.params" :key="param[0]" class="border-b border-dashed border-[var(--line)] px-2 py-2 last:border-0" :class="{ 'opacity-50': parameterDisabled(param) }">
-              <div class="flex items-center justify-between gap-2"><label :for="`param-${param[0]}`" class="text-xs" :title="formatParam(param).help"><b>{{ formatParam(param).key }}</b> {{ formatParam(param).label }} <span class="text-[11px] text-[var(--muted)]">{{ formatParam(param).unit }}</span></label>
-                <input v-if="param[3] === 'bool'" :id="`param-${param[0]}`" v-model="params[param[0]]" type="checkbox" class="h-4 w-4 accent-[var(--accent)]" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])">
-                <select v-else-if="formatParam(param).options" :id="`param-${param[0]}`" v-model="params[param[0]]" class="control min-w-40" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])">
+              <div class="flex items-center justify-between gap-2"><label :id="`param-label-${param[0]}`" :for="`param-control-${param[0]}`" class="text-xs" :title="formatParam(param).help"><b>{{ formatParam(param).key }}</b> {{ formatParam(param).label }} <span class="text-[11px] text-[var(--muted)]">{{ formatParam(param).unit }}</span></label>
+                <input v-if="param[3] === 'bool'" :id="`param-control-${param[0]}`" :aria-labelledby="`param-label-${param[0]}`" v-model="params[param[0]]" type="checkbox" class="h-4 w-4 accent-[var(--accent)]" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])" :aria-describedby="validationErrors[param[0]] ? `param-error-${param[0]}` : undefined">
+                <select v-else-if="formatParam(param).options" :id="`param-control-${param[0]}`" :aria-labelledby="`param-label-${param[0]}`" v-model="params[param[0]]" class="control min-w-40" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])" :aria-describedby="validationErrors[param[0]] ? `param-error-${param[0]}` : undefined">
                   <option v-for="option in formatParam(param).options" :key="option.value" :value="option.value">{{ option.label }}</option>
                 </select>
-                <input v-else :id="`param-${param[0]}`" v-model.number="params[param[0]]" class="control w-20 text-right" type="number" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])">
+                <input v-else :id="`param-control-${param[0]}`" :aria-labelledby="`param-label-${param[0]}`" v-model.number="params[param[0]]" class="control w-20 text-right" type="number" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])" :aria-describedby="validationErrors[param[0]] ? `param-error-${param[0]}` : undefined">
               </div>
               <p v-if="formatParam(param).help" class="mt-1 text-[11px] leading-4 text-[var(--muted)]">{{ formatParam(param).help }}</p>
-              <p v-if="validationErrors[param[0]]" class="mt-1 text-[11px] leading-4 text-[var(--danger)]" role="alert">{{ validationErrors[param[0]] }}</p>
-              <input v-if="param[3] !== 'bool' && !formatParam(param).options" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)">
+              <p v-if="validationErrors[param[0]]" :id="`param-error-${param[0]}`" class="mt-1 text-[11px] leading-4 text-[var(--danger)]" role="alert" aria-live="assertive">{{ validationErrors[param[0]] }}</p>
+              <input v-if="param[3] !== 'bool' && !formatParam(param).options" :id="`param-range-${param[0]}`" :aria-labelledby="`param-label-${param[0]}`" :aria-describedby="validationErrors[param[0]] ? `param-error-${param[0]}` : undefined" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)">
             </div>
           </details>
-          <button class="btn btn-primary w-full" :disabled="busy" @click="generate">Generate + export</button>
+          <button class="btn btn-primary w-full" type="button" :disabled="busy" @click="generate">Generate + export</button>
         </section>
-        <section v-else class="space-y-2 p-3">
-          <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="code">build123d code <span v-if="draft.dirty" class="text-[var(--accent)]">· edited</span></label><button v-if="draft.generatedCode" class="btn btn-small" @click="replaceWithGenerated">Replace draft</button></div>
+        <section v-else id="code-panel" role="tabpanel" aria-label="Code" class="space-y-2 p-3">
+          <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="code">build123d code <span v-if="draft.dirty" class="text-[var(--accent)]">· edited</span></label><button v-if="draft.generatedCode" class="btn btn-small" type="button" @click="replaceWithGenerated">Replace draft</button></div>
           <textarea id="code" :value="draft.codeDraft" @input="editDraft" class="h-[410px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2.5 font-mono text-xs leading-5 outline-none" spellcheck="false"></textarea>
-          <div v-if="codeError" class="rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert"><b>{{ codeError.title }}</b><p class="mt-1">{{ codeError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ codeError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ codeError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('code')">Retry code generation</button></div>
-          <div class="flex gap-1.5"><select v-model="example" class="control min-w-0 flex-1"><option v-for="(_, key) in EXAMPLES" :key="key" :value="key">{{ key }}</option></select><button class="btn" @click="loadExample">Load</button><button class="btn btn-primary" :disabled="busy" @click="runCode">Run</button></div>
+          <div v-if="codeError" class="rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert" aria-live="assertive"><b>{{ codeError.title }}</b><p class="mt-1">{{ codeError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ codeError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ codeError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('code')">Retry code generation</button></div>
+          <div class="flex gap-1.5"><label class="sr-only" for="example">Example</label><select id="example" v-model="example" class="control min-w-0 flex-1"><option v-for="(_, key) in EXAMPLES" :key="key" :value="key">{{ key }}</option></select><button class="btn" type="button" @click="loadExample">Load</button><button class="btn btn-primary" type="button" :disabled="busy" @click="runCode">Run</button></div>
         </section>
       </aside>
 
       <main class="grid min-w-0 gap-3.5">
         <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><div class="flex items-center gap-1" role="group" aria-label="Camera views (build123d Z-up)"><button class="btn btn-small" type="button" title="Front view: look along build123d -Y, Z up" aria-label="Front view, build123d negative Y with Z up" @click="setStandardView('front')">Front</button><button class="btn btn-small" type="button" title="Top view: look down build123d +Z" aria-label="Top view, build123d positive Z" @click="setStandardView('top')">Top</button><button class="btn btn-small" type="button" title="Side view: look along build123d +X, Z up" aria-label="Side view, build123d positive X with Z up" @click="setStandardView('side')">Side</button></div><div class="flex items-center gap-1" role="group" aria-label="Zoom controls"><button class="btn btn-small" type="button" title="Zoom out" aria-label="Zoom out" @click="zoomView(1.15)">−</button><button class="btn btn-small" type="button" title="Fit model in preview" aria-label="Fit model in preview" @click="fitView">Fit</button><button class="btn btn-small" type="button" title="Zoom in" aria-label="Zoom in" @click="zoomView(0.87)">+</button></div><button v-if="previewError" class="btn btn-small" type="button" @click="retry('preview')">Retry preview</button><button class="btn btn-small" type="button" @click="resetView">Reset</button><button class="btn btn-small" type="button" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" type="button" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" :disabled="busy" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
-          <div ref="viewer" class="viewer relative h-[510px] bg-[var(--bg)] max-sm:h-[330px]"><div v-if="!preview?.tris?.length" class="pointer-events-none absolute inset-0 grid place-items-center text-center text-xs text-[var(--muted)]"><span><b class="mb-1 block text-[var(--fg)]">Nothing previewed yet</b>Choose a model and adjust a parameter.</span></div></div>
-          <div v-if="previewError" class="border-t border-[var(--danger)] px-2.5 py-2 text-xs" role="alert"><b>{{ previewError.title }}</b><p class="mt-1">{{ previewError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ previewError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ previewError.detail }}</pre></details></div>
+          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b id="preview-heading" class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><div class="flex items-center gap-1" role="group" aria-label="Camera views (build123d Z-up)"><button class="btn btn-small" type="button" title="Front view: look along build123d -Y, Z up" aria-label="Front view, build123d negative Y with Z up" @click="setStandardView('front')">Front</button><button class="btn btn-small" type="button" title="Top view: look down build123d +Z" aria-label="Top view, build123d positive Z" @click="setStandardView('top')">Top</button><button class="btn btn-small" type="button" title="Side view: look along build123d +X, Z up" aria-label="Side view, build123d positive X with Z up" @click="setStandardView('side')">Side</button></div><div class="flex items-center gap-1" role="group" aria-label="Zoom controls"><button class="btn btn-small" type="button" title="Zoom out" aria-label="Zoom out" @click="zoomView(1.15)">−</button><button class="btn btn-small" type="button" title="Fit model in preview" aria-label="Fit model in preview" @click="fitView">Fit</button><button class="btn btn-small" type="button" title="Zoom in" aria-label="Zoom in" @click="zoomView(0.87)">+</button></div><button v-if="previewError" class="btn btn-small" type="button" @click="retry('preview')">Retry preview</button><button class="btn btn-small" type="button" @click="resetView">Reset</button><button class="btn btn-small" type="button" role="switch" :aria-checked="wireframe" aria-label="Toggle wireframe" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" type="button" role="switch" :aria-checked="spinning" aria-label="Toggle preview spin" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" type="button" :disabled="busy" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
+          <div ref="viewer" class="viewer relative h-[510px] bg-[var(--bg)] max-sm:h-[330px]" role="img" aria-label="Interactive 3D model preview. Use the view and zoom controls to inspect the model."><div v-if="!preview?.tris?.length" class="pointer-events-none absolute inset-0 grid place-items-center text-center text-xs text-[var(--muted)]"><span><b class="mb-1 block text-[var(--fg)]">Nothing previewed yet</b>Choose a model and adjust a parameter.</span></div></div>
+          <div v-if="previewError" class="border-t border-[var(--danger)] px-2.5 py-2 text-xs" role="alert" aria-live="assertive"><b>{{ previewError.title }}</b><p class="mt-1">{{ previewError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ previewError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ previewError.detail }}</pre></details></div>
           <div class="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] px-2.5 py-2 text-xs"><span v-for="([key, value]) in statEntries" :key="key" class="rounded bg-[var(--panel2)] px-1.5 py-0.5">{{ key }}: <b class="font-mono font-normal">{{ value }}</b></span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel or buttons to zoom · build123d Z-up</span></div>
         </section>
-        <div class="grid gap-3.5 md:grid-cols-2"><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Last export</h2><div v-if="operationError" class="mb-3 rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert"><b>{{ operationError.title }}</b><p class="mt-1">{{ operationError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ operationError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ operationError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('operation')">Retry export</button></div><div v-if="!result" class="min-h-19 text-xs text-[var(--muted)]">Nothing exported yet.</div><div v-else class="space-y-2 text-xs"><p v-if="result.message" class="whitespace-pre-wrap text-[var(--muted)]">{{ result.message }}</p><p v-if="result.error" class="whitespace-pre-wrap text-[var(--danger)]">{{ result.error }}</p><div v-if="result.file" class="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1"><span class="text-[var(--muted)]">file</span><span class="break-all font-mono">{{ result.file }}</span><span class="text-[var(--muted)]">size</span><span class="font-mono">{{ result.size_bytes }} bytes</span></div><div v-if="result.file" class="flex flex-wrap gap-1.5"><button class="btn btn-small" type="button" @click="copyResultPath">Copy path</button><button class="btn btn-small" type="button" @click="openExportsFolder">Open exports folder</button></div><p v-if="result.file" class="text-[var(--muted)]">If it is not on the plate, drag the file above into OrcaSlicer Prepare.</p></div></section><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Activity</h2><pre class="h-19 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2 font-mono text-[11px] leading-4">{{ logLines.join('\n') }}</pre></section></div>
+        <div class="grid gap-3.5 md:grid-cols-2"><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Last export</h2><div v-if="operationError" class="mb-3 rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert" aria-live="assertive"><b>{{ operationError.title }}</b><p class="mt-1">{{ operationError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ operationError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ operationError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('operation')">Retry export</button></div><div v-if="!result" class="min-h-19 text-xs text-[var(--muted)]">Nothing exported yet.</div><div v-else class="space-y-2 text-xs"><p v-if="result.message" class="whitespace-pre-wrap text-[var(--muted)]">{{ result.message }}</p><p v-if="result.error" class="whitespace-pre-wrap text-[var(--danger)]">{{ result.error }}</p><div v-if="result.file" class="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1"><span class="text-[var(--muted)]">file</span><span class="break-all font-mono">{{ result.file }}</span><span class="text-[var(--muted)]">size</span><span class="font-mono">{{ result.size_bytes }} bytes</span></div><div v-if="result.file" class="flex flex-wrap gap-1.5"><button class="btn btn-small" type="button" @click="copyResultPath">Copy path</button><button class="btn btn-small" type="button" @click="openExportsFolder">Open exports folder</button></div><p v-if="result.file" class="text-[var(--muted)]">If it is not on the plate, drag the file above into OrcaSlicer Prepare.</p></div></section><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Activity</h2><pre class="h-19 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2 font-mono text-[11px] leading-4">{{ logLines.join('\n') }}</pre></section></div>
       </main>
     </div>
   </div>

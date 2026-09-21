@@ -29,6 +29,14 @@
 
 html, body, #app { min-height: 100%; margin: 0; }
 body { background: var(--bg); -webkit-font-smoothing: antialiased; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+  }
+}
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -47,4 +55,4 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .parameter-section > summary::marker { color: var(--accent); }
 input[type='range'] { accent-color: var(--accent); }
 input:disabled, select:disabled { cursor: not-allowed; }
-.viewer canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+.viewer canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
