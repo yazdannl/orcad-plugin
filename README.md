@@ -29,6 +29,9 @@ Python dependencies.
 - `frontend/dist/index.html` — compiled, self-contained frontend artifact.
   Build it with `cd frontend && npm ci && npm run build`; Node is needed only
   by contributors, never by plugin users.
+- `frontend/src/*.test.js` — Node built-in frontend tests, including the
+  mocked-bridge App behavior harness. Run them with `cd frontend && npm test`;
+  they do not require OrcaSlicer, WebGL, build123d, or network access.
 - `objects/<name>.py` — one RUNNABLE build123d program per predefined object.
   Parameter variables carry `# spec:` comments that declare the UI
   (e.g. `WALL = 1.2  # spec: number label=Wall unit=mm min=0.8 max=2.4 step=0.2`).
