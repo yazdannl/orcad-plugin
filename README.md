@@ -80,6 +80,47 @@ files owned by this pipeline are `frontend/src/primitives.js`,
 `--write`/`--check` options remain available for targeted synchronization but
 `--write` refuses to embed a stale frontend.
 
+## Supported versions and compatibility
+
+`compatibility.json` is the machine-readable source for the constraints and
+local verification matrix. The declarations distinguish the runtime installed
+for the plugin from tools used only by contributors:
+
+- **Plugin runtime:** Python `>=3.12,<3.15`, `build123d==0.12.0`,
+  `cadquery-ocp-novtk==7.9.3.1.1` (the OCP distribution), and NumPy `>=2,<3`.
+  The exact tested environment here is Python 3.14.4, build123d 0.12.0,
+  cadquery-ocp-novtk 7.9.3.1.1, and NumPy 2.5.3. Orca's bundled `uv`
+  resolves the runtime dependencies on the first CAD operation; an environment
+  outside these constraints is not silently accepted.
+- **Contributor tools:** Python `>=3.12,<3.15` with pytest `>=9.1,<10`, and
+  Node.js `>=20.19.0,<25` with npm `>=10,<12`. The tested tool versions are
+  Python 3.14.4, pytest 9.1.1, Node 24.21.0, and npm 11.19.0. End users do
+  not need Node.js or npm. Run `python3 verify/compatibility.py` to check the
+  local versions; add `--run` to execute the matrix in order.
+- **OrcaSlicer host:** the supported target is a Nightly exposing
+  `orca.pages.PagesPluginCapabilityBase` from the `main` API branch. Stable
+  2.4.2 is explicitly unsupported because it has no `orca.pages`; the plugin
+  registers an upgrade-hint Script capability instead of a CAD tab there. Other
+  stable or nightly builds are not claimed unless they expose the required Pages
+  API and bridge behavior. The compatibility target is Linux, macOS, and
+  Windows (the OS-specific file-open paths are implemented), but this checkout
+  has only exercised Linux x86_64. Non-Linux operation is therefore expected,
+  not verified here; a failed file handoff still has the documented drag-and-drop
+  fallback.
+
+The deterministic local matrix is:
+
+| Check | Command | Status / scope |
+| --- | --- | --- |
+| Pure Python tests | `python3 -m pytest tests/ -q` | Required; no CAD dependency |
+| Frontend tests + build | `cd frontend && npm test && npm run build` | Required; locked npm tree |
+| Bundle synchronization | `python3 packaging/bundle.py --check` | Required; generated artifacts and embedded page |
+| Geometry integration | `python3 verify/geometry.py` | Optional; `.venv` with the declared CAD versions |
+
+No CI provider is configured. `verify/compatibility.py --run` is the local
+replacement and fails on declared tool drift; the optional geometry stage
+skips with repair guidance when `.venv` is absent.
+
 ## Manual test (you do this in Orca)
 
 1. Use latest OrcaSlicer **Nightly** (Pages API = `main` branch; Stable 2.4.2 has no `orca.pages`).

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Supported versions
+
+- Declared the tested Python, build123d, OCP, NumPy, Node.js, npm, and pytest
+  constraints in `orcad.py`, `frontend/package.json`, and `compatibility.json`.
+- Documented the Nightly `main` Pages API target, the stable 2.4.2 limitation,
+  OS verification scope, and the deterministic local compatibility matrix.
+
 ## Unreleased — Local Vue frontend
 
 - Moved the UI into `frontend/src` as a Vue + Tailwind app and committed the

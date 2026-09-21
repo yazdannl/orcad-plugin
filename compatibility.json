@@ -1,0 +1,90 @@
+{
+  "schema": 1,
+  "plugin": {
+    "version": "0.7.0",
+    "manifest": "orcad.py (PEP 723 script metadata)"
+  },
+  "runtime": {
+    "python": {
+      "constraint": ">=3.12,<3.15",
+      "tested": ["3.14.4"]
+    },
+    "build123d": {
+      "constraint": "==0.12.0",
+      "tested": ["0.12.0"]
+    },
+    "ocp": {
+      "distribution": "cadquery-ocp-novtk",
+      "constraint": "==7.9.3.1.1",
+      "tested": ["7.9.3.1.1"]
+    },
+    "numpy": {
+      "constraint": ">=2,<3",
+      "tested": ["2.5.3"]
+    },
+    "resolution": "OrcaSlicer's bundled uv resolves these runtime dependencies on the first CAD operation."
+  },
+  "contributor": {
+    "python": {
+      "constraint": ">=3.12,<3.15",
+      "tested": ["3.14.4"]
+    },
+    "pytest": {
+      "constraint": ">=9.1,<10",
+      "tested": ["9.1.1"]
+    },
+    "node": {
+      "constraint": ">=20.19.0,<25",
+      "tested": ["24.21.0"]
+    },
+    "npm": {
+      "constraint": ">=10,<12",
+      "tested": ["11.19.0"]
+    },
+    "frontend_lockfile": "frontend/package-lock.json"
+  },
+  "host": {
+    "orcaslicer": {
+      "api_branch": "main",
+      "required_api": "orca.pages.PagesPluginCapabilityBase",
+      "tested_build": "Nightly exposing the main-branch Pages API",
+      "stable_2_4_2": {
+        "supported": false,
+        "reason": "The stable 2.4.2 build has no orca.pages API."
+      },
+      "other_builds": "Not claimed unless the required Pages API and bridge behavior are present.",
+      "unsupported_behavior": "Without orca.pages the plugin registers an upgrade-hint Script capability instead of a CAD tab."
+    },
+    "operating_systems": {
+      "scope": ["Linux", "macOS", "Windows"],
+      "tested": ["Linux x86_64"],
+      "status": "The plugin uses the host API and has platform-specific open/gio/xdg-open handoff paths, but non-Linux hosts are expected rather than verified in this checkout."
+    }
+  },
+  "matrix": [
+    {
+      "name": "pure Python tests",
+      "command": "python3 -m pytest tests/ -q",
+      "status": "required",
+      "scope": "No build123d/OCP; CAD modules skip when run outside the project virtualenv."
+    },
+    {
+      "name": "frontend tests and build",
+      "command": "cd frontend && npm test && npm run build",
+      "status": "required",
+      "scope": "Uses the locked npm dependency tree; Node/npm are contributor-only."
+    },
+    {
+      "name": "bundle synchronization",
+      "command": "python3 packaging/bundle.py --check",
+      "status": "required",
+      "scope": "Checks generated specs, the compiled page fingerprint, and the embedded page."
+    },
+    {
+      "name": "geometry integration",
+      "command": "python3 verify/geometry.py",
+      "status": "optional",
+      "scope": "Uses .venv with the declared build123d/OCP versions; skips with repair guidance when absent."
+    }
+  ]
+}

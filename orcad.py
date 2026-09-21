@@ -1,12 +1,16 @@
 # /// script
-# requires-python = ">=3.12"
-# dependencies = ["build123d", "numpy"]
+# requires-python = ">=3.12,<3.15"
+# dependencies = [
+#   "build123d==0.12.0",
+#   "cadquery-ocp-novtk==7.9.3.1.1",
+#   "numpy>=2,<3",
+# ]
 #
 # [tool.orcaslicer.plugin]
 # name = "orcad"
 # description = "build123d CAD tab for OrcaSlicer: searchable parametric objects incl. Gridfinity bins/baseplates, compact Three.js preview, code editor, and STL/STEP/3MF export."
 # author = "orcad"
-# version = "0.6.0"
+# version = "0.7.0"
 # ///
 """orcad — build123d CAD tab (Pages capability).
 
@@ -34,9 +38,10 @@ The UI is a compiled local Vue/Tailwind app loaded from
 single-file installs. The asset includes Three.js and renders the server
 tessellation with native pointer rotation and wheel zoom.
 
-Tested target: OrcaSlicer Nightly / >2.4.2 with `orca.pages` (main branch).
-On older builds without orca.pages, falls back to a Script capability that
-shows an upgrade message.
+Supported target: OrcaSlicer Nightly exposing `orca.pages` from the `main`
+branch API. Stable 2.4.2 is not supported because it has no `orca.pages`;
+older builds fall back to a Script capability that shows an upgrade message.
+See `compatibility.json` for the tested dependency and host matrix.
 """
 
 import base64
@@ -60,7 +65,7 @@ try:
 except ImportError:  # pragma: no cover - allows unit tests without Orca
     orca = None
 
-PLUGIN_VERSION = "0.6.0"
+PLUGIN_VERSION = "0.7.0"
 EXPORT_FORMATS = ("stl", "step", "3mf")
 DEFAULT_TOLERANCE = 0.001
 

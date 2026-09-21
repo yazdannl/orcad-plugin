@@ -90,9 +90,11 @@ def _wait_for_type(capability, message_type, count=1, timeout=5):
 def test_metadata_block():
     text = PLUGIN.read_text(encoding="utf-8")
     assert "# /// script" in text
-    assert 'dependencies = ["build123d", "numpy"]' in text
+    assert '"build123d==0.12.0"' in text
+    assert '"cadquery-ocp-novtk==7.9.3.1.1"' in text
+    assert '"numpy>=2,<3"' in text
     assert 'name = "orcad"' in text
-    assert 'version = "0.6.0"' in text
+    assert 'version = "0.7.0"' in text
 
 
 def test_ui_metadata_is_bundled():
