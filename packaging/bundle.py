@@ -121,11 +121,16 @@ def parse_object(path):
     if "result" not in stores:
         raise ValueError(f"{path}: must assign `result`")
     label = blurb = None
+    warnings = []
     for line in source.splitlines()[:15]:
         if line.startswith("# object:"):
             label = line.split(":", 1)[1].strip()
         elif line.startswith("# blurb:"):
             blurb = line.split(":", 1)[1].strip()
+        elif line.startswith("# approximation:"):
+            warning = line.split(":", 1)[1].strip()
+            if warning:
+                warnings.append(warning)
     if not label or not blurb:
         raise ValueError(f"{path}: need `# object:` + `# blurb:` header comments")
     params = []
@@ -174,7 +179,7 @@ def parse_object(path):
     if not params:
         raise ValueError(f"{path}: no `# spec:` variables found")
     return {"name": path.stem, "label": label, "blurb": blurb,
-            "params": params, "source": source}
+            "params": params, "warnings": warnings, "source": source}
 
 
 def bake_template(template, values):
@@ -205,7 +210,10 @@ def build_py_region(objects):
     chunks = []
     for obj in objects:
         smoke_object(obj)
-        spec = {"label": obj["label"], "blurb": obj["blurb"], "params": obj["params"]}
+        spec = {"label": obj["label"], "blurb": obj["blurb"],
+                "params": obj["params"]}
+        if obj["warnings"]:
+            spec["warnings"] = obj["warnings"]
         chunks.append(f"{obj['name']}_SPEC = {spec!r}")
         chunks.append(f'{obj["name"]}_TEMPLATE = r"""\n{obj["source"].rstrip()}\n"""')
     entries = ",\n".join(f'    "{o["name"]}": {o["name"]}_SPEC' for o in objects)
@@ -272,7 +280,10 @@ def build_frontend_region(objects):
                 if "ui" in p:
                     param.append(p["ui"])
                 params.append(param)
-        specs[obj["name"]] = {"label": obj["label"], "blurb": obj["blurb"], "params": params}
+        spec = {"label": obj["label"], "blurb": obj["blurb"], "params": params}
+        if obj["warnings"]:
+            spec["warnings"] = obj["warnings"]
+        specs[obj["name"]] = spec
     return "export const PRIMS = " + json.dumps(specs, separators=(",", ":")) + ";"
 
 

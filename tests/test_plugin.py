@@ -219,6 +219,22 @@ def test_preview_helper_fails_soft_without_build123d():
     assert mod._preview_payload(FakeShape()) is None
 
 
+def test_shape_stats_expose_named_dimensions_and_units_without_changing_legacy_fields():
+    from types import SimpleNamespace
+
+    shape = SimpleNamespace(
+        volume=123.4567,
+        area=lambda: 89.1234,
+        bounding_box=lambda: SimpleNamespace(
+            min=(0, -2, 1), max=(20, 28, 41), size=(20, 30, 40)))
+    stats = mod._shape_stats(shape)
+    assert stats["volume_mm"] == 123.457 and stats["area_mm"] == 89.123
+    assert stats["volume_mm3"] == 123.457 and stats["area_mm2"] == 89.123
+    assert stats["dimensions_mm"] == {"width": 20, "depth": 30, "height": 40}
+    assert stats["width_mm"] == 20 and stats["depth_mm"] == 30 and stats["height_mm"] == 40
+    assert stats["bbox_size"] == [20, 30, 40]
+
+
 def test_preview_payload_keeps_complete_tessellation():
     from types import SimpleNamespace
 
@@ -859,6 +875,18 @@ def _load_source_module(name, path):
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def test_approximation_metadata_is_bundled_and_only_predefined_objects_warn():
+    bundle = _load_source_module("bundle_warnings", ROOT / "packaging" / "bundle.py")
+    parsed = bundle.parse_object(ROOT / "objects" / "gridfinity_bin.py")
+    assert parsed["warnings"] == [
+        "Thumbscrew threads are represented as plain holes; position is exact.",
+        "M3 screw threads are not modeled; holes are clearance holes.",
+    ]
+    assert mod._warnings_for_msg({"kind": "generate", "primitive": "gridfinity_bin"}) == parsed["warnings"]
+    assert mod._warnings_for_msg({"kind": "run", "primitive": "gridfinity_bin"}) == []
+    assert mod._warnings_for_msg({"kind": "generate", "primitive": "box"}) == []
 
 
 def test_named_mode_options_are_extracted_and_bundled():

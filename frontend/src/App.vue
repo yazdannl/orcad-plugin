@@ -18,6 +18,7 @@ import {
 import { copyPath, handoffMessage } from './handoff'
 import { parameterGroups, paramUi, isParamDisabled, validationMessages } from './parameterUi'
 import { buildExportPayload, formatQuality } from './exportPayload'
+import { statsCards, statsStatus, warningList } from './stats'
 import {
   defaultParams, filterPrimitiveEntries, loadSettings, persistedParams,
   restoreParams, saveObjectParams, saveSettings, selectPrimitive,
@@ -38,8 +39,13 @@ const status = ref('ready')
 const previewStatus = ref('waiting for a model')
 const liveStatus = ref('')
 const preview = ref(null)
-const stats = ref({})
+const previewStats = ref({})
+const previewStatsContext = ref(null)
+const previewWarnings = ref([])
 const result = ref(null)
+const exportStats = ref({})
+const exportStatsContext = ref(null)
+const exportWarnings = ref([])
 const validationErrors = reactive({})
 const logLines = ref(['ready.'])
 const notice = ref('')
@@ -86,7 +92,10 @@ const bridgeStatus = computed(() => ({
 const selectedPrim = computed(() => PRIMS[selected.value] || PRIMS.box)
 const parameterSections = computed(() => parameterGroups(selectedPrim.value))
 const filteredPrims = computed(() => filterPrimitiveEntries(PRIMS, query.value))
-const statEntries = computed(() => Object.entries(stats.value || {}).slice(0, 6))
+const previewStatCards = computed(() => statsCards(previewStats.value))
+const exportStatCards = computed(() => statsCards(exportStats.value))
+const previewStatsState = computed(() => statsStatus(previewStatsContext.value, revision.value, 'preview'))
+const exportStatsState = computed(() => statsStatus(exportStatsContext.value, revision.value, 'export'))
 
 function log(message) {
   logLines.value.push(String(message))
@@ -426,6 +435,9 @@ function showResult(message) {
   const exportSucceeded = message.type === 'plate_result' ? message.export_ok === true : message.ok === true
   if (exportSucceeded) {
     result.value = message
+    exportStats.value = message.stats || {}
+    exportStatsContext.value = { requestId: message.request_id, revisionId: message.revision_id }
+    exportWarnings.value = warningList(message.warnings)
     operationError.value = null
     clearValidationErrors()
     log(stateMessage || `ok ${message.filename || 'model'}`)
@@ -524,7 +536,9 @@ function processBridgeMessage(rawMessage) {
       clearError('preview')
       clearValidationErrors()
       preview.value = preserveOnFailure(preview.value, message.preview, true)
-      stats.value = message.stats || stats.value
+      previewStats.value = message.stats || previewStats.value
+      previewStatsContext.value = { requestId: message.request_id, revisionId: message.revision_id, seq: message.seq }
+      previewWarnings.value = warningList(message.warnings)
       previewStatus.value = message.preview ? 'preview ready' : 'preview returned no mesh; showing last preview'
     } else {
       previewError.value = bridgeError('preview', message.error || 'The backend rejected the preview.')
@@ -547,7 +561,6 @@ function processBridgeMessage(rawMessage) {
     activeOperation.value = null
     showResult(message)
     if (message.preview) preview.value = message.preview
-    if (message.stats) stats.value = message.stats
     if (message.type === 'plate_result') {
       status.value = message.open_request_sent ? 'open request sent'
         : message.export_ok ? 'exported; open request failed' : 'failed'
@@ -927,9 +940,14 @@ onBeforeUnmount(() => {
           <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b id="preview-heading" class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><div class="flex items-center gap-1" role="group" aria-label="Camera views (build123d Z-up)"><button class="btn btn-small" type="button" title="Front view: look along build123d -Y, Z up" aria-label="Front view, build123d negative Y with Z up" @click="setStandardView('front')">Front</button><button class="btn btn-small" type="button" title="Top view: look down build123d +Z" aria-label="Top view, build123d positive Z" @click="setStandardView('top')">Top</button><button class="btn btn-small" type="button" title="Side view: look along build123d +X, Z up" aria-label="Side view, build123d positive X with Z up" @click="setStandardView('side')">Side</button></div><div class="flex items-center gap-1" role="group" aria-label="Zoom controls"><button class="btn btn-small" type="button" title="Zoom out" aria-label="Zoom out" @click="zoomView(1.15)">−</button><button class="btn btn-small" type="button" title="Fit model in preview" aria-label="Fit model in preview" @click="fitView">Fit</button><button class="btn btn-small" type="button" title="Zoom in" aria-label="Zoom in" @click="zoomView(0.87)">+</button></div><button v-if="previewError" class="btn btn-small" type="button" @click="retry('preview')">Retry preview</button><button class="btn btn-small" type="button" @click="resetView">Reset</button><button class="btn btn-small" type="button" role="switch" :aria-checked="wireframe" aria-label="Toggle wireframe" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" type="button" role="switch" :aria-checked="spinning" aria-label="Toggle preview spin" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" type="button" :disabled="busy" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
           <div ref="viewer" class="viewer relative h-[510px] bg-[var(--bg)] max-sm:h-[330px]" role="img" aria-label="Interactive 3D model preview. Use the view and zoom controls to inspect the model."><div v-if="!preview?.tris?.length" class="pointer-events-none absolute inset-0 grid place-items-center text-center text-xs text-[var(--muted)]"><span><b class="mb-1 block text-[var(--fg)]">Nothing previewed yet</b>Choose a model and adjust a parameter.</span></div></div>
           <div v-if="previewError" class="border-t border-[var(--danger)] px-2.5 py-2 text-xs" role="alert" aria-live="assertive"><b>{{ previewError.title }}</b><p class="mt-1">{{ previewError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ previewError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ previewError.detail }}</pre></details></div>
-          <div class="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] px-2.5 py-2 text-xs"><span v-for="([key, value]) in statEntries" :key="key" class="rounded bg-[var(--panel2)] px-1.5 py-0.5">{{ key }}: <b class="font-mono font-normal">{{ value }}</b></span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel or buttons to zoom · build123d Z-up</span></div>
+          <section class="border-t border-[var(--line)] px-2.5 py-2" aria-labelledby="preview-stats-heading">
+            <div class="flex flex-wrap items-center gap-2 text-xs"><h2 id="preview-stats-heading" class="font-bold">Preview stats</h2><span :class="previewStatsState.state === 'stale' ? 'text-[var(--danger)]' : 'text-[var(--muted)]'">{{ previewStatsState.label }}</span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel or buttons to zoom · build123d Z-up</span></div>
+            <dl v-if="previewStatCards.length" class="mt-2 flex flex-wrap gap-1.5 text-xs"><div v-for="card in previewStatCards" :key="card.key" class="rounded bg-[var(--panel2)] px-2 py-1"><dt class="text-[var(--muted)]">{{ card.label }}</dt><dd class="font-mono">{{ card.value }}</dd></div></dl>
+            <p v-else class="mt-1 text-xs text-[var(--muted)]">Dimensions and measurements are not available.</p>
+            <div v-if="previewWarnings.length" class="mt-2 rounded border border-[var(--line)] px-2 py-1.5 text-xs" role="note" aria-label="Known approximations"><b>Known approximations</b><ul class="mt-1 list-disc pl-4"><li v-for="warning in previewWarnings" :key="warning">{{ warning }}</li></ul></div>
+          </section>
         </section>
-        <div class="grid gap-3.5 md:grid-cols-2"><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Last export</h2><div v-if="operationError" class="mb-3 rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert" aria-live="assertive"><b>{{ operationError.title }}</b><p class="mt-1">{{ operationError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ operationError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ operationError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('operation')">Retry export</button></div><div v-if="!result" class="min-h-19 text-xs text-[var(--muted)]">Nothing exported yet.</div><div v-else class="space-y-2 text-xs"><p v-if="result.message" class="whitespace-pre-wrap text-[var(--muted)]">{{ result.message }}</p><p v-if="result.error" class="whitespace-pre-wrap text-[var(--danger)]">{{ result.error }}</p><div v-if="result.file" class="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1"><span class="text-[var(--muted)]">file</span><span class="break-all font-mono">{{ result.file }}</span><span class="text-[var(--muted)]">size</span><span class="font-mono">{{ result.size_bytes }} bytes</span></div><div v-if="result.file" class="flex flex-wrap gap-1.5"><button class="btn btn-small" type="button" @click="copyResultPath">Copy path</button><button class="btn btn-small" type="button" @click="openExportsFolder">Open exports folder</button></div><p v-if="result.file" class="text-[var(--muted)]">If it is not on the plate, drag the file above into OrcaSlicer Prepare.</p></div></section><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Activity</h2><pre class="h-19 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2 font-mono text-[11px] leading-4">{{ logLines.join('\n') }}</pre></section></div>
+        <div class="grid gap-3.5 md:grid-cols-2"><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Last export</h2><div v-if="operationError" class="mb-3 rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert" aria-live="assertive"><b>{{ operationError.title }}</b><p class="mt-1">{{ operationError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ operationError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ operationError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('operation')">Retry export</button></div><div v-if="!result" class="min-h-19 text-xs text-[var(--muted)]">Nothing exported yet.</div><div v-else class="space-y-2 text-xs"><p v-if="result.message" class="whitespace-pre-wrap text-[var(--muted)]">{{ result.message }}</p><p v-if="result.error" class="whitespace-pre-wrap text-[var(--danger)]">{{ result.error }}</p><div v-if="result.file" class="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1"><span class="text-[var(--muted)]">file</span><span class="break-all font-mono">{{ result.file }}</span><span class="text-[var(--muted)]">size</span><span class="font-mono">{{ result.size_bytes }} bytes</span></div><section v-if="exportStatCards.length" class="rounded border border-[var(--line)] p-2" aria-labelledby="export-stats-heading"><div class="flex flex-wrap items-center gap-2"><h3 id="export-stats-heading" class="font-bold">Final stats</h3><span :class="exportStatsState.state === 'stale' ? 'text-[var(--danger)]' : 'text-[var(--muted)]'">{{ exportStatsState.label }}</span></div><dl class="mt-1 flex flex-wrap gap-1.5"><div v-for="card in exportStatCards" :key="card.key"><dt class="inline text-[var(--muted)]">{{ card.label }}: </dt><dd class="inline font-mono">{{ card.value }}</dd></div></dl></section><div v-if="exportWarnings.length" class="rounded border border-[var(--line)] px-2 py-1.5" role="note" aria-label="Known approximations"><b>Known approximations</b><ul class="mt-1 list-disc pl-4"><li v-for="warning in exportWarnings" :key="warning">{{ warning }}</li></ul></div><div v-if="result.file" class="flex flex-wrap gap-1.5"><button class="btn btn-small" type="button" @click="copyResultPath">Copy path</button><button class="btn btn-small" type="button" @click="openExportsFolder">Open exports folder</button></div><p v-if="result.file" class="text-[var(--muted)]">If it is not on the plate, drag the file above into OrcaSlicer Prepare.</p></div></section><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Activity</h2><pre class="h-19 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2 font-mono text-[11px] leading-4">{{ logLines.join('\n') }}</pre></section></div>
       </main>
     </div>
   </div>

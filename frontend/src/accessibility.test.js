@@ -42,6 +42,15 @@ test('status and errors use live regions without making progress timers live', (
   assert.doesNotMatch(app, /busy \? busyStatus : status[^<]*aria-live/)
 })
 
+test('stats cards expose named units and current or stale association', () => {
+  assert.match(app, /Preview stats/)
+  assert.match(app, /previewStatCards/)
+  assert.match(app, /previewStatsState\.label/)
+  assert.match(app, /exportStatsState\.label/)
+  assert.match(app, /Final stats/)
+  assert.match(app, /Known approximations/)
+})
+
 test('reduced motion disables default spin and pauses inactive rendering', () => {
   assert.match(css, /@media \(prefers-reduced-motion: reduce\)/)
   assert.match(css, /animation-duration:/)

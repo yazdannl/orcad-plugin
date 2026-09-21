@@ -1,5 +1,7 @@
 # object: Gridfinity Bin
 # blurb: Full Rebuilt port: compartments, tabs, scoop, holes, lip, height modes.
+# approximation: Thumbscrew threads are represented as plain holes; position is exact.
+# approximation: M3 screw threads are not modeled; holes are clearance holes.
 # Faithful port of kennetek/gridfinity-rebuilt-openscad
 # (gridfinity-rebuilt-bins.scad). Construction mirrors the original CSG tree:
 # tapered feet + bridge + base holes, wall ring, infill solid, per-compartment
