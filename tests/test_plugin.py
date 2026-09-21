@@ -1,14 +1,19 @@
-"""Unit tests for orcad — run WITHOUT OrcaSlicer or build123d installed.
+"""Unit tests for orcad, independent of OrcaSlicer and CAD availability.
 
 Covers pure logic in orcad.py: param validation (number/int/bool), object
 programs (spec extraction, value baking), live-preview + plate routing,
 filename hygiene, examples syntax, preview helper, PAGE_HTML bridge contract.
+Missing-dependency paths explicitly block the lazy build123d import.
 """
 import ast
+import builtins
 import importlib.util
 import re
 import sys
+import threading
+import time
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 PLUGIN = ROOT / "orcad.py"
@@ -24,6 +29,62 @@ def load_plugin():
 
 
 mod = load_plugin()
+
+
+_REAL_IMPORT = builtins.__import__
+
+
+def _import_without_build123d(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == "build123d" or name.startswith("build123d."):
+        raise ModuleNotFoundError("No module named 'build123d' (test isolation)")
+    return _REAL_IMPORT(name, globals, locals, fromlist, level)
+
+
+def _without_build123d():
+    """Force the lazy CAD import to exercise its missing-dependency path."""
+    return mock.patch.object(
+        builtins, "__import__", side_effect=_import_without_build123d)
+
+
+class _MessageCapture:
+    """Thread-safe message sink with event-driven, bounded waits."""
+
+    def __init__(self):
+        self.posts = []
+        self._lock = threading.Lock()
+        self._message = threading.Event()
+
+    def post_message(self, message):
+        with self._lock:
+            self.posts.append(message)
+        self._message.set()
+
+    def snapshot(self):
+        with self._lock:
+            return list(self.posts)
+
+    def wait_for(self, predicate, timeout=5):
+        deadline = time.monotonic() + timeout
+        while True:
+            with self._lock:
+                posts = list(self.posts)
+                if predicate(posts):
+                    return posts
+                # Keep the clear under the same lock as post_message's append;
+                # a post after this point always sets the event again.
+                self._message.clear()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise AssertionError(f"timed out waiting for message: {posts}")
+            self._message.wait(remaining)
+
+
+def _wait_for_type(capability, message_type, count=1, timeout=5):
+    posts = capability.wait_for(
+        lambda current: sum(post.get("type") == message_type for post in current) >= count,
+        timeout,
+    )
+    return [post for post in posts if post.get("type") == message_type][-1]
 
 
 def test_metadata_block():
@@ -312,16 +373,18 @@ def test_runner_rejects_bad_input_without_build123d():
 
 
 def test_preview_reports_missing_build123d():
-    try:
-        mod.preview_shape("result = Box(1, 1, 1)")
-        raise AssertionError("expected RuntimeError without build123d")
-    except RuntimeError as exc:
-        message = str(exc)
-        assert "build123d/OCP is not ready" in message
-        assert "hundreds of MB" in message
-        assert "network and write access" in message
-        assert "restart OrcaSlicer" in message
-        assert "retry dependency setup" in message
+    # Do not inherit dependency availability from the interpreter running pytest.
+    with _without_build123d():
+        try:
+            mod.preview_shape("result = Box(1, 1, 1)")
+            raise AssertionError("expected RuntimeError without build123d")
+        except RuntimeError as exc:
+            message = str(exc)
+            assert "build123d/OCP is not ready" in message
+            assert "hundreds of MB" in message
+            assert "network and write access" in message
+            assert "restart OrcaSlicer" in message
+            assert "retry dependency setup" in message
 
 
 def test_setup_trust_and_result_guidance_stays_consistent():
@@ -605,46 +668,33 @@ def test_runner_reports_build_tessellation_and_export_stages(tmp_path):
 
 
 def test_preview_message_routing():
-    import time
-
-    class FakeCap:
-        def __init__(self):
-            self.posts = []
-
-        def post_message(self, d):
-            self.posts.append(d)
-
     # sync validation error -> immediate preview error, no thread
-    cap = FakeCap()
+    cap = _MessageCapture()
     res = mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
                                          "primitive": "nope", "params": {},
                                          "request_id": 20, "revision_id": 4, "seq": 9})
     assert res["type"] == "preview" and res["ok"] is False
     assert res["request_id"] == 20 and res["revision_id"] == 4 and res["seq"] == 9
     assert cap.posts == []
-    # async path -> worker posts preview error (no build123d here)
-    cap = FakeCap()
-    assert mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
-                                          "primitive": "box",
-                                          "params": {"L": 1, "W": 1, "H": 1},
-                                          "request_id": 21, "revision_id": 5, "seq": 7}) is None
-    deadline = time.time() + 5
-    while time.time() < deadline and not cap.posts:
-        time.sleep(0.05)
-    assert cap.posts and cap.posts[-1]["type"] == "preview"
-    assert cap.posts[-1].get("seq") == 7
-    assert cap.posts[-1]["request_id"] == 21 and cap.posts[-1]["revision_id"] == 5
+    # async path -> worker posts preview error with an explicitly blocked import
+    cap = _MessageCapture()
+    with _without_build123d():
+        assert mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
+                                              "primitive": "box",
+                                              "params": {"L": 1, "W": 1, "H": 1},
+                                              "request_id": 21, "revision_id": 5, "seq": 7}) is None
+        preview = _wait_for_type(cap, "preview")
+    assert preview.get("seq") == 7
+    assert preview["request_id"] == 21 and preview["revision_id"] == 5
     # stale seq -> worker stays silent (preview gated until seq moves on)
-    import threading as _th
-    from unittest import mock as _mock
-    gate = _th.Event()
+    gate = threading.Event()
 
     def slow_preview(code, tolerance=0.001):
         assert gate.wait(5)
         return {"ok": True, "var": "result", "stats": {}, "preview": None}
 
-    cap = FakeCap()
-    with _mock.patch.object(mod, "preview_shape", side_effect=slow_preview):
+    cap = _MessageCapture()
+    with mock.patch.object(mod, "preview_shape", side_effect=slow_preview):
         mod._handle_message_sync(cap, {"command": "preview", "kind": "generate",
                                        "primitive": "box",
                                        "params": {"L": 1, "W": 1, "H": 1},
@@ -654,36 +704,25 @@ def test_preview_message_routing():
                                        "params": {"L": 2, "W": 2, "H": 2},
                                        "request_id": 31, "revision_id": 7, "seq": 2})
         gate.set()
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            if any(p.get("type") == "preview" for p in cap.posts):
-                break
-            time.sleep(0.05)
-    seqs = [p.get("seq") for p in cap.posts if p.get("type") == "preview"]
+        cap.wait_for(lambda posts: any(p.get("type") == "preview" for p in posts))
+    seqs = [p.get("seq") for p in cap.snapshot() if p.get("type") == "preview"]
     assert seqs == [2], seqs
 
 
 def test_canceled_running_preview_discards_its_response():
-    import threading
-    import time
-    from unittest import mock
-
-    class FakeCap:
-        def __init__(self):
-            self.posts = []
-
-        def post_message(self, d):
-            self.posts.append(d)
-
     started = threading.Event()
     release = threading.Event()
+    finished = threading.Event()
 
     def slow_preview(code, tolerance=0.001):
         started.set()
-        assert release.wait(5)
-        return {"ok": True, "var": "result", "stats": {}, "preview": None}
+        try:
+            assert release.wait(5)
+            return {"ok": True, "var": "result", "stats": {}, "preview": None}
+        finally:
+            finished.set()
 
-    cap = FakeCap()
+    cap = _MessageCapture()
     message = {"command": "preview", "kind": "generate", "primitive": "box",
                "params": {"L": 1, "W": 1, "H": 1}, "request_id": 35,
                "revision_id": 7, "seq": 4}
@@ -697,36 +736,23 @@ def test_canceled_running_preview_discards_its_response():
         assert canceled["type"] == "cancelled"
         assert canceled["pending"] is False
         release.set()
-        time.sleep(0.1)
+        assert finished.wait(2)
 
-    assert not [post for post in cap.posts if post.get("type") == "preview"]
+    assert not [post for post in cap.snapshot() if post.get("type") == "preview"]
 
 
 def test_plate_message_routing():
-    import time
-
-    class FakeCap:
-        def __init__(self):
-            self.posts = []
-
-        def post_message(self, d):
-            self.posts.append(d)
-
-    cap = FakeCap()
+    cap = _MessageCapture()
     ack = mod._handle_message_sync(cap, {"command": "plate", "kind": "generate",
                                          "primitive": "box",
                                          "params": {"L": 1, "W": 1, "H": 1},
                                          "request_id": 40, "revision_id": 8})
     assert ack["type"] == "progress"
     assert ack["request_id"] == 40 and ack["revision_id"] == 8
-    deadline = time.time() + 6
-    while time.time() < deadline:
-        if any(p.get("type") == "plate_result" for p in cap.posts):
-            break
-        time.sleep(0.05)
-    finals = [p for p in cap.posts if p.get("type") == "plate_result"]
-    assert finals and finals[-1]["ok"] is False  # no build123d in test env
-    assert finals[-1]["request_id"] == 40 and finals[-1]["revision_id"] == 8
+    with _without_build123d():
+        final = _wait_for_type(cap, "plate_result", timeout=6)
+    assert final["ok"] is False  # dependency absence is explicitly mocked
+    assert final["request_id"] == 40 and final["revision_id"] == 8
 
 
 def test_open_with_default_app_selects_linux_macos_windows_and_reports_denials(tmp_path):
@@ -751,7 +777,7 @@ def test_open_with_default_app_selects_linux_macos_windows_and_reports_denials(t
 
     with mock.patch.object(mod.sys, "platform", "win32"), \
          mock.patch.object(mod.os, "startfile", create=True) as startfile:
-        mod._open_with_default_app(path)
+        assert mod._open_with_default_app(path) is True
         startfile.assert_called_once_with(str(path))
 
     with mock.patch.object(mod.sys, "platform", "darwin"), \
@@ -764,24 +790,8 @@ def test_open_with_default_app_selects_linux_macos_windows_and_reports_denials(t
 
 
 def test_plate_result_separates_export_and_open_request_and_retains_path(tmp_path):
-    import time
-    from unittest import mock
-
-    class FakeCap:
-        def __init__(self):
-            self.posts = []
-
-        def post_message(self, message):
-            self.posts.append(message)
-
     def wait_for_result(cap):
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            results = [post for post in cap.posts if post.get("type") == "plate_result"]
-            if results:
-                return results[-1]
-            time.sleep(0.02)
-        raise AssertionError(f"no plate result: {cap.posts}")
+        return _wait_for_type(cap, "plate_result")
 
     path = tmp_path / "box.stl"
     path.write_bytes(b"valid stl")
@@ -792,7 +802,7 @@ def test_plate_result_separates_export_and_open_request_and_retains_path(tmp_pat
                "filename": "box", "tolerance": 0.01, "request_id": 51,
                "revision_id": 9}
 
-    cap = FakeCap()
+    cap = _MessageCapture()
     with mock.patch.object(mod, "run_build123d_code", return_value=exported), \
          mock.patch.object(mod, "_open_with_default_app", side_effect=PermissionError("denied")):
         mod._handle_message_sync(cap, message)
@@ -804,7 +814,7 @@ def test_plate_result_separates_export_and_open_request_and_retains_path(tmp_pat
     assert failed["file"] == str(path)
     assert "denied" in failed["open_request_error"]
 
-    cap = FakeCap()
+    cap = _MessageCapture()
     with mock.patch.object(mod, "run_build123d_code", return_value=exported), \
          mock.patch.object(mod, "_open_with_default_app", return_value=True):
         mod._handle_message_sync(cap, {**message, "request_id": 52})
@@ -816,24 +826,8 @@ def test_plate_result_separates_export_and_open_request_and_retains_path(tmp_pat
 
 
 def test_plate_reuses_only_unchanged_valid_stl(tmp_path):
-    import time
-    from unittest import mock
-
-    class FakeCap:
-        def __init__(self):
-            self.posts = []
-
-        def post_message(self, message):
-            self.posts.append(message)
-
     def wait_for_result(cap, count=1):
-        deadline = time.time() + 5
-        while time.time() < deadline:
-            results = [post for post in cap.posts if post.get("type") == "plate_result"]
-            if len(results) >= count:
-                return results[-1]
-            time.sleep(0.02)
-        raise AssertionError(f"no plate result: {cap.posts}")
+        return _wait_for_type(cap, "plate_result", count)
 
     path = tmp_path / "box.stl"
     path.write_bytes(b"valid stl")
@@ -842,7 +836,7 @@ def test_plate_reuses_only_unchanged_valid_stl(tmp_path):
                 "var": "result"}
     base = {"command": "plate", "kind": "code", "code": "result = 1",
             "filename": "box", "tolerance": 0.01, "revision_id": 10}
-    cap = FakeCap()
+    cap = _MessageCapture()
     with mock.patch.object(mod, "run_build123d_code", return_value=exported) as build, \
          mock.patch.object(mod, "_open_with_default_app", return_value=True):
         mod._handle_message_sync(cap, {**base, "request_id": 61})
@@ -865,24 +859,11 @@ def test_plate_reuses_only_unchanged_valid_stl(tmp_path):
 
 
 def test_plate_export_failure_is_distinct_from_open_failure():
-    import time
-    from unittest import mock
-
-    class FakeCap:
-        def __init__(self):
-            self.posts = []
-
-        def post_message(self, message):
-            self.posts.append(message)
-
-    cap = FakeCap()
+    cap = _MessageCapture()
     with mock.patch.object(mod, "run_build123d_code", side_effect=PermissionError("exports denied")):
         mod._handle_message_sync(cap, {"command": "plate", "kind": "code", "code": "result = 1",
                                        "filename": "box", "request_id": 65, "revision_id": 11})
-        deadline = time.time() + 5
-        while time.time() < deadline and not any(p.get("type") == "plate_result" for p in cap.posts):
-            time.sleep(0.02)
-    result = next(p for p in cap.posts if p.get("type") == "plate_result")
+        result = _wait_for_type(cap, "plate_result")
     assert result["ok"] is False and result["export_ok"] is False
     assert result["open_request_sent"] is False
     assert result["handoff_status"] == "export_failed"

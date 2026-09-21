@@ -10,6 +10,8 @@ from unittest import mock
 
 import pytest
 
+pytestmark = pytest.mark.cad
+
 from tests.geometry_support import require_project_build123d
 
 build123d = require_project_build123d()

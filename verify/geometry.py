@@ -58,6 +58,8 @@ def main():
         sys.executable,
         "-m",
         "pytest",
+        "-m",
+        "cad",
         "tests/test_geometry_integration.py",
         "tests/test_baseplate_geometry.py",
         "tests/test_gridfinity_bin_geometry.py",
