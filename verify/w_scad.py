@@ -13,7 +13,8 @@ import re
 import sys
 from pathlib import Path
 
-UPSTREAM = Path("/tmp/opencode/gridfinity-rebuilt-openscad")
+REPO_ROOT = Path(__file__).resolve().parents[1]
+UPSTREAM = REPO_ROOT / "upstream"
 ENTRIES = {
     "bins": "gridfinity-rebuilt-bins.scad",
     "baseplate": "gridfinity-rebuilt-baseplate.scad",

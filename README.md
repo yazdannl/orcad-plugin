@@ -131,10 +131,23 @@ description + changelog from CHANGELOG.md.
   metrics: bbox/volume/z-profiles/hole loops), `batch_ref.py` + `matrix.py`
   (feature matrix, 27 cases).
 - Reference renders need OpenSCAD (dev snapshot ≥2023; 2021.01 cannot evaluate
-  the library's `$`-scoped grid machinery) + the sources at
-  `/tmp/opencode/gridfinity-rebuilt-openscad` (see Matrix paths).
-- build123d runs in `.venv` (not committed). STLs land in `.verify-cache/`
-  (not committed); comparison JSON is printed to stdout.
+  the library's `$`-scoped grid machinery) and an explicit checkout of
+  `gridfinity-rebuilt-openscad`. Set `ORCAD_UPSTREAM=/path/to/checkout` and
+  `ORCAD_OPENSCAD=/path/to/openscad` (or pass `--upstream`/`--openscad`). A full
+  upstream git revision can be pinned with `ORCAD_UPSTREAM_REVISION=<commit>`;
+  otherwise the harness records the checkout's HEAD plus a source fingerprint.
+  It never falls back to the old machine-specific `/tmp` path.
+- Generate all 27 pinned references with:
+  `python3 verify/batch_ref.py --upstream /path/to/upstream --openscad /path/to/openscad`
+  (use `--dry-run` or `--only name1,name2` to inspect a run). Then compare with
+  `python3 verify/matrix.py --cache .verify-cache --upstream /path/to/upstream`.
+  `--help` documents `ORCAD_VERIFY_CACHE`, `ORCAD_PYTHON`, and
+  `ORCAD_SUBPROCESS_TIMEOUT`. STLs and JSON sidecars land in `.verify-cache/`
+  (not committed); sidecars invalidate output when source, case parameters,
+  feature identity, tool version/options, or harness version changes.
+- `w_compare.py` uses explicit bbox/volume/profile tolerances and one-to-one
+  hole matching, including center and equivalent-radius limits. It reports the
+  exact command and timeout when a bounded subprocess fails.
 - Run the optional geometry regressions with `python3 verify/geometry.py`. The
   harness uses `.venv` for build123d/OCP, keeps exports in pytest temporary
   directories, and skips with install instructions when the optional dependency

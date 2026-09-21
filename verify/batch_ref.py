@@ -1,77 +1,156 @@
 #!/usr/bin/env python3
-"""Batch-render reference STLs from entry-file drivers. Sequential, backgroundable.
+"""Render the pinned upstream reference for all 27 geometry cases.
 
-Usage: python3 verify/batch_ref.py  (runs all cases; skips finished ones)
-Each case: {name: {var: openscad-literal}}. Renders with the snapshot build.
+OpenSCAD and the upstream checkout are intentionally explicit inputs.  No
+machine-specific checkout path is assumed and an existing STL is used only
+when its sidecar metadata still matches the source, revision, parameters,
+tool version, options, and harness version.
 """
+from __future__ import annotations
+
+import argparse
 import json
-import subprocess
+import os
+import shutil
 import sys
 from pathlib import Path
 
-UPSTREAM = Path("/tmp/opencode/gridfinity-rebuilt-openscad")
-SNAP = Path("/tmp/opencode/oscad-snap/squashfs-root/AppRun")
-OUT = Path("/home/agent/OrcaCadPlugin/.verify-cache")
-DRIVERS = UPSTREAM
-VERIFY = Path("/home/agent/OrcaCadPlugin/verify")
+try:
+    from .matrix import (CASE_MATRIX, REFERENCE_OPTIONS, ROOT, atomic_write,
+                         cache_valid, canonical, command_text,
+                         make_reference_metadata, metadata_key, run_command,
+                         selected_cases)
+except ImportError:  # Running this file directly puts verify/ on sys.path.
+    from matrix import (CASE_MATRIX, REFERENCE_OPTIONS, ROOT, atomic_write,
+                        cache_valid, canonical, command_text,
+                        make_reference_metadata, metadata_key, run_command,
+                        selected_cases)
 
-BASE = {"gridx": 2, "gridy": 2, "gridz": 6, "divx": 1, "divy": 1,
-        "style_tab": 5, "place_tab": 0, "scoop": 0,
-        "refined_holes": "false", "magnet_holes": "false",
-        "screw_holes": "false", "crush_ribs": "false",
-        "chamfer_holes": "false", "printable_hole_top": "false",
-        "only_corners": "false", "enable_thumbscrew": "false",
-        "include_lip": "true"}
-
-CASES = {
-    "t_plain": {},
-    "t_nolip": {"include_lip": "false"},
-    "t_div": {"divx": 2, "divy": 2, "magnet_holes": "true"},
-    "t_tabs_full": {"divx": 2, "divy": 2, "style_tab": 0},
-    "t_tabs_center": {"divx": 2, "divy": 2, "style_tab": 3},
-    "t_tabs_auto": {"divx": 3, "divy": 1, "gridx": 3, "style_tab": 1},
-    "t_tabs_tl": {"divx": 2, "divy": 2, "style_tab": 1, "place_tab": 1},
-    "t_scoop05": {"divx": 2, "divy": 2, "scoop": 0.5},
-    "t_scoop1": {"divx": 2, "divy": 2, "scoop": 1},
-    "t_cyl": {"divx": 2, "divy": 2, "cut_cylinders": "true", "cd": 10, "c_chamfer": 0.5},
-    "t_depth": {"divx": 2, "divy": 2, "depth": 10},
-    "t_magnet": {"magnet_holes": "true"},
-    "t_screw": {"screw_holes": "true", "chamfer_holes": "true"},
-    "t_screw_print": {"screw_holes": "true", "printable_hole_top": "true"},
-    "t_refined": {"divx": 2, "divy": 2, "refined_holes": "true"},
-    "t_crush": {"magnet_holes": "true", "crush_ribs": "true"},
-    "t_chamfer": {"magnet_holes": "true", "chamfer_holes": "true"},
-    "t_printable": {"magnet_holes": "true", "printable_hole_top": "true"},
-    "t_corners": {"gridx": 3, "magnet_holes": "true", "only_corners": "true"},
-    "t_thumbscrew": {"enable_thumbscrew": "true"},
-    "t_default": {"gridx": 3, "style_tab": 1, "scoop": 1, "refined_holes": "true"},
-    "t_hmode1": {"gridz_define": 1, "gridz": 35},
-    "t_fill": {"height_internal": 10, "divx": 2, "divy": 2},
-}
+# Compatibility for scripts that imported the old reference-only mapping.
+CASES = {name: case["reference"] for name, case in CASE_MATRIX.items()}
+DEFAULT_CACHE = ROOT / ".verify-cache"
+DEFAULT_TIMEOUT = 300.0
 
 
-def main():
-    OUT.mkdir(parents=True, exist_ok=True)
-    for name, over in CASES.items():
-        stl = OUT / f"ref_{name}.stl"
-        if stl.exists():
-            print(f"skip {name} (done)", flush=True)
-            continue
-        params = dict(BASE)
-        params.update(over)
-        drv = DRIVERS / f"case_{name}.scad"
-        subprocess.run([sys.executable, str(VERIFY / "w_scad.py"), "bins",
-                        json.dumps(params), str(drv),
-                        "--root", str(UPSTREAM)], check=True)
-        print(f"render {name} ...", flush=True)
-        r = subprocess.run([str(SNAP), "-o", str(stl), str(drv)],
-                           capture_output=True, text=True, cwd=str(UPSTREAM))
-        (OUT / f"{name}.log").write_text(r.stdout + r.stderr)
-        if not stl.exists():
-            print(f"FAILED {name}", flush=True)
-        else:
-            print(f"done {name}", flush=True)
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--upstream", type=Path,
+                        default=Path(os.environ["ORCAD_UPSTREAM"]) if os.environ.get("ORCAD_UPSTREAM") else None,
+                        help="upstream OpenSCAD source checkout (or ORCAD_UPSTREAM)")
+    parser.add_argument("--openscad",
+                        default=os.environ.get("ORCAD_OPENSCAD"),
+                        help="OpenSCAD executable (or ORCAD_OPENSCAD; PATH lookup is allowed)")
+    parser.add_argument("--upstream-revision", default=os.environ.get("ORCAD_UPSTREAM_REVISION"),
+                        help="expected upstream git HEAD; otherwise HEAD/fingerprint is recorded")
+    parser.add_argument("--cache", type=Path,
+                        default=Path(os.environ.get("ORCAD_VERIFY_CACHE", DEFAULT_CACHE)))
+    parser.add_argument("--only", help="comma-separated case names")
+    parser.add_argument("--timeout", type=float,
+                        default=float(os.environ.get("ORCAD_SUBPROCESS_TIMEOUT", DEFAULT_TIMEOUT)))
+    parser.add_argument("--force", action="store_true", help="rerender even when metadata matches")
+    parser.add_argument("--dry-run", action="store_true", help="validate selection and print commands only")
+    return parser.parse_args(argv)
+
+
+def resolve_executable(value):
+    if not value:
+        value = shutil.which("openscad")
+    else:
+        if Path(value).parent == Path("."):
+            value = shutil.which(value)
+    if not value:
+        raise SystemExit("OpenSCAD executable not found; supply --openscad PATH or ORCAD_OPENSCAD")
+    path = Path(value).expanduser()
+    if not path.is_file() or not os.access(path, os.X_OK):
+        raise SystemExit(f"OpenSCAD executable is not executable: {path}")
+    return path.resolve()
+
+
+def validate_upstream(upstream):
+    if not upstream.is_dir():
+        raise SystemExit(f"upstream directory not found: {upstream}; supply --upstream PATH")
+    entry = upstream / "gridfinity-rebuilt-bins.scad"
+    if not entry.is_file():
+        raise SystemExit(f"upstream entry file not found: {entry}; wrong checkout?")
+
+
+def atomic_move(source, destination):
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(source, destination)
+
+
+def render_case(case, upstream, openscad, cache, timeout, force, upstream_revision):
+    name = case["name"]
+    stl = cache / f"ref_{name}.stl"
+    sidecar = cache / f"ref_{name}.json"
+    expected = make_reference_metadata(case, upstream, openscad, REFERENCE_OPTIONS,
+                                       upstream_revision)
+    if not force and cache_valid(stl, sidecar, expected):
+        print(f"skip {name} (metadata matches)", flush=True)
+        return True
+
+    cache.mkdir(parents=True, exist_ok=True)
+    driver = cache / f"driver_{name}.scad"
+    temporary_stl = cache / f".ref_{name}.stl.tmp"
+    command = [sys.executable, str(ROOT / "verify" / "w_scad.py"), "bins",
+               canonical(case["reference"]), str(driver), "--root", str(upstream),
+               "--fa", str(REFERENCE_OPTIONS["fa"]), "--fs", str(REFERENCE_OPTIONS["fs"])]
+    completed = run_command(command, cwd=ROOT, timeout=timeout)
+    if completed.returncode:
+        raise RuntimeError(f"driver generation failed (exit {completed.returncode}): "
+                           f"{command_text(command)}\n{completed.stderr[-1000:]}")
+
+    render_command = [str(openscad), "-o", str(temporary_stl), str(driver)]
+    print(f"render {name} ...", flush=True)
+    completed = run_command(render_command, cwd=upstream, timeout=timeout)
+    log = (completed.stdout + completed.stderr)
+    atomic_write(cache / f"{name}.log", log)
+    if completed.returncode or not temporary_stl.is_file():
+        temporary_stl.unlink(missing_ok=True)
+        raise RuntimeError(f"OpenSCAD failed for {name} (exit {completed.returncode}): "
+                           f"{command_text(render_command)} (timeout {timeout}s)\n{log[-1000:]}")
+    atomic_move(temporary_stl, stl)
+    atomic_write(sidecar, json.dumps(
+        {**expected, "cache_key": metadata_key(expected)}, indent=2) + "\n")
+    print(f"done {name}", flush=True)
+    return True
+
+
+def main(argv=None):
+    args = parse_args(argv)
+    if args.timeout <= 0:
+        raise SystemExit("--timeout must be greater than zero")
+    cases = selected_cases(args.only)
+    args.cache = args.cache.expanduser().resolve()
+    if args.upstream:
+        args.upstream = args.upstream.expanduser().resolve()
+    if args.dry_run:
+        print(f"dry-run: {len(cases)}/{len(CASE_MATRIX)} cases selected")
+        for case in cases:
+            print(f"render {case['name']}: openscad -o {args.cache}/ref_{case['name']}.stl <driver>")
+        return 0
+    if not args.upstream:
+        raise SystemExit("upstream source is required; supply --upstream PATH or ORCAD_UPSTREAM")
+    validate_upstream(args.upstream)
+    openscad = resolve_executable(args.openscad)
+    failures = []
+    for case in cases:
+        try:
+            render_case(case, args.upstream, openscad, args.cache, args.timeout,
+                        args.force, args.upstream_revision)
+        except RuntimeError as exc:
+            failures.append(f"{case['name']}: {exc}")
+            print(f"ERROR: {failures[-1]}", file=sys.stderr, flush=True)
+    if failures:
+        print(f"{len(cases) - len(failures)}/{len(cases)} references ready")
+        return 1
+    print(f"{len(cases)}/{len(cases)} references ready")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        raise SystemExit(main())
+    except (RuntimeError, ValueError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        raise SystemExit(2)

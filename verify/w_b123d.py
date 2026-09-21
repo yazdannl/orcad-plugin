@@ -8,8 +8,10 @@ orcad.run_build123d_code, i.e. the exact plugin code path.
 import json
 import shutil
 import sys
+from pathlib import Path
 
-sys.path.insert(0, "/home/agent/OrcaCadPlugin")
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 import orcad
 
 obj, params_json, tol, out = sys.argv[1], sys.argv[2], float(sys.argv[3]), sys.argv[4]
