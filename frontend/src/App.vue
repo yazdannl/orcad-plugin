@@ -10,6 +10,7 @@ import {
   replaceDraftWith,
 } from './codeDraft'
 import { responseMatches } from './messageTracking'
+import { createOperation, elapsedText, operationMatches, stageText, updateOperation } from './operationState'
 import { copyPath, handoffMessage } from './handoff'
 import { parameterGroups, paramUi, isParamDisabled, validationMessages } from './parameterUi'
 import { buildExportPayload, formatQuality } from './exportPayload'
@@ -46,10 +47,21 @@ let requestSequence = 0
 let previewTimer
 let hydrating = false
 let latestCodeRequest = null
-let activePreview = null
-let activeOperation = null
+const activePreview = ref(null)
+const activeOperation = ref(null)
+const previewPending = ref(false)
+const cancellation = ref(null)
+const elapsedNow = ref(Date.now())
+let elapsedTimer
 let folderRequest = null
 let noticeTimer
+
+const busy = computed(() => Boolean(activePreview.value || activeOperation.value || previewPending.value))
+const activeBusyOperation = computed(() => activeOperation.value || activePreview.value)
+const busyStage = computed(() => stageText(activeBusyOperation.value?.stage, activePreview.value ? 'building preview…' : 'working…'))
+const busyElapsed = computed(() => activeBusyOperation.value
+  ? elapsedText(elapsedNow.value - activeBusyOperation.value.startedAt) : '')
+const busyStatus = computed(() => `${busyStage.value} · ${busyElapsed.value}`)
 
 const selectedPrim = computed(() => PRIMS[selected.value] || PRIMS.box)
 const parameterSections = computed(() => parameterGroups(selectedPrim.value))
@@ -80,20 +92,33 @@ function setValidationErrors(message) {
   clearValidationErrors()
   Object.assign(validationErrors, validationMessages(message?.errors))
 }
+function cancelBackend(operation, kind) {
+  if (!operation) return
+  post({ command: 'cancel', target_type: kind === 'preview' ? 'preview' : 'export',
+    target_request_id: operation.requestId, target_revision_id: operation.revisionId,
+    ...(kind === 'preview' ? { target_seq: operation.seq } : {}) })
+}
 function invalidateRevision() {
   revision.value += 1
-  activePreview = null
-  activeOperation = null
+  cancelBackend(activePreview.value, 'preview')
+  cancelBackend(activeOperation.value, 'operation')
+  activePreview.value = null
+  activeOperation.value = null
+  previewPending.value = false
+  cancellation.value = null
   latestCodeRequest = null
   preview.value = null
   stats.value = {}
   result.value = null
   clearValidationErrors()
   previewStatus.value = 'waiting for a model'
-  if (status.value === 'building…' || status.value === 'sending…') status.value = 'ready'
+  if (status.value === 'building…' || status.value === 'sending…' || status.value === 'cancellation requested…') status.value = 'ready'
 }
 function accepts(message, expected, includeSeq = false) {
   return expected?.revisionId === revision.value && responseMatches(message, expected, includeSeq)
+}
+function acceptsOperation(message, expected, includeSeq = false) {
+  return expected?.revisionId === revision.value && operationMatches(message, expected, includeSeq)
 }
 const qualityHelp = computed(() => formatQuality(format.value))
 function persistSettings() {
@@ -168,28 +193,53 @@ function payload(command, ids, exportFormat = format.value) {
 }
 function requestPreview() {
   clearTimeout(previewTimer)
+  previewPending.value = false
   if (mode.value !== 'objects') return
+  previewPending.value = true
   previewTimer = setTimeout(() => {
+    previewPending.value = false
     const ids = requestContext()
-    const expected = { requestId: ids.request_id, revisionId: ids.revision_id, seq: ++previewSequence }
-    activePreview = expected
-    previewStatus.value = 'building preview…'
+    const expected = createOperation('preview', { ...ids, seq: ++previewSequence })
+    activePreview.value = expected
+    previewStatus.value = `${busyStatus.value}`
     const message = payload('preview', ids)
     message.seq = expected.seq
     if (!post(message) && accepts(message, expected, true)) {
-      activePreview = null
+      activePreview.value = null
       previewStatus.value = 'preview failed'
     }
   }, 420)
 }
 function startOperation(command, label, exportFormat = format.value) {
+  if (busy.value) return
   const ids = requestContext()
-  activeOperation = { requestId: ids.request_id, revisionId: ids.revision_id }
+  activeOperation.value = createOperation('operation', ids)
   status.value = label
   const sent = post(payload(command, ids, exportFormat))
-  if (!sent && accepts(ids, activeOperation)) {
-    activeOperation = null
+  if (!sent && acceptsOperation(ids, activeOperation.value)) {
+    activeOperation.value = null
     status.value = 'failed'
+  }
+}
+function cancelBusy() {
+  if (previewPending.value) {
+    clearTimeout(previewTimer)
+    previewPending.value = false
+    previewStatus.value = 'preview cancelled'
+    return
+  }
+  if (activePreview.value) {
+    cancellation.value = { ...activePreview.value, kind: 'preview' }
+    cancelBackend(activePreview.value, 'preview')
+    activePreview.value = null
+    previewStatus.value = 'preview cancellation requested…'
+    return
+  }
+  if (activeOperation.value) {
+    cancellation.value = { ...activeOperation.value, kind: 'operation' }
+    cancelBackend(activeOperation.value, 'operation')
+    activeOperation.value = null
+    status.value = 'cancellation requested…'
   }
 }
 function generate() {
@@ -268,11 +318,35 @@ function showResult(message) {
 function handleMessage(message) {
   if (!message) return
   if (message.type === 'progress') {
-    if (accepts(message, activeOperation)) {
+    if (acceptsOperation(message, activeOperation.value)) {
       if (message.duplicate) {
-        activeOperation = null
-        status.value = 'failed'
-      } else status.value = message.message || 'working…'
+        activeOperation.value = null
+        status.value = 'already running'
+      } else {
+        updateOperation(activeOperation.value, message)
+        status.value = `${message.message || busyStage.value} · ${busyElapsed.value}`
+      }
+    } else if (accepts(message, activePreview.value, true)) {
+      updateOperation(activePreview.value, message)
+      previewStatus.value = `${message.message || busyStage.value} · ${busyElapsed.value}`
+    }
+    return
+  }
+  if (message.type === 'cancelled') {
+    if (acceptsOperation(message, activeOperation.value)) {
+      activeOperation.value = null
+      status.value = message.pending ? 'cancelled' : 'cancel requested; result will be discarded'
+    } else if (accepts(message, activePreview.value, true)) {
+      activePreview.value = null
+      previewStatus.value = message.pending ? 'preview cancelled' : 'preview cancellation requested'
+    } else if (cancellation.value?.kind === 'operation'
+        && operationMatches(message, cancellation.value)) {
+      status.value = message.pending ? 'cancelled' : 'cancel requested; result will be discarded'
+      cancellation.value = null
+    } else if (cancellation.value?.kind === 'preview'
+        && accepts(message, cancellation.value, true)) {
+      previewStatus.value = message.pending ? 'preview cancelled' : 'preview cancellation requested'
+      cancellation.value = null
     }
     return
   }
@@ -288,8 +362,8 @@ function handleMessage(message) {
     return
   }
   if (message.type === 'preview') {
-    if (!accepts(message, activePreview, true)) return
-    activePreview = null
+    if (!accepts(message, activePreview.value, true)) return
+    activePreview.value = null
     if (message.ok) {
       clearValidationErrors()
       preview.value = message.preview
@@ -310,8 +384,8 @@ function handleMessage(message) {
     return
   }
   if (message.type === 'plate_result' || message.type === 'result') {
-    if (!accepts(message, activeOperation)) return
-    activeOperation = null
+    if (!acceptsOperation(message, activeOperation.value)) return
+    activeOperation.value = null
     showResult(message)
     if (message.preview) preview.value = message.preview
     if (message.stats) stats.value = message.stats
@@ -322,8 +396,8 @@ function handleMessage(message) {
     return
   }
   if (message.type === 'error' || message.ok === false) {
-    if (!accepts(message, activeOperation)) return
-    activeOperation = null
+    if (!acceptsOperation(message, activeOperation.value)) return
+    activeOperation.value = null
     showResult({ ...message, ok: false })
     status.value = 'failed'
   }
@@ -458,6 +532,13 @@ watch(params, () => {
 watch(preview, (value) => applyPreview(value))
 watch(wireframe, (value) => { if (mesh) mesh.material.wireframe = value; persistSettings() })
 watch(spinning, persistSettings)
+watch(busy, (value) => {
+  clearInterval(elapsedTimer)
+  if (value) {
+    elapsedNow.value = Date.now()
+    elapsedTimer = setInterval(() => { elapsedNow.value = Date.now() }, 100)
+  }
+})
 onMounted(() => {
   hydrateParams()
   window.orca?.onMessage?.(handleMessage)
@@ -465,6 +546,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   clearTimeout(previewTimer)
+  clearInterval(elapsedTimer)
   cancelAnimationFrame(frameId)
   window.removeEventListener('resize', resizeViewer)
   renderer?.dispose()
@@ -477,14 +559,15 @@ onBeforeUnmount(() => {
     <div v-if="notice" class="fixed right-3 top-3 z-10 rounded-lg border border-[var(--accent)] bg-[var(--panel)] px-3 py-2 text-xs shadow-lg" role="status">{{ notice }}</div>
     <header class="flex h-13 items-center gap-3 border-b border-[var(--line)] bg-[var(--panel)] px-4">
       <div class="font-bold tracking-wide">orcad <span class="font-normal text-[var(--accent)]">build123d</span></div>
-      <div class="text-xs text-[var(--muted)]">{{ status }}</div>
+      <div class="text-xs text-[var(--muted)]" aria-live="polite">{{ busy ? busyStatus : status }}</div>
+      <button v-if="busy" class="btn btn-small" type="button" @click="cancelBusy">Cancel</button>
       <div class="flex-1" />
       <label class="sr-only" for="fmt">Export format</label>
       <select id="fmt" v-model="format" class="control w-20" title="Export format" @change="formatChanged"><option value="stl">STL</option><option value="step">STEP</option><option value="3mf">3MF</option></select>
       <label class="sr-only" for="tol">Mesh tolerance</label>
       <input id="tol" v-model.number="toleranceValue" class="control w-20" type="number" step="0.001" min="0.0001" max="1" :title="qualityHelp" @input="toleranceChanged">
       <span class="max-w-64 text-[11px] text-[var(--muted)]" title="Export quality">{{ qualityHelp }}</span>
-      <button class="btn btn-primary" @click="mode === 'objects' ? generate() : runCode()">Run / export</button>
+      <button class="btn btn-primary" :disabled="busy" @click="mode === 'objects' ? generate() : runCode()">Run / export</button>
     </header>
 
     <div class="mx-auto grid max-w-[1500px] gap-3.5 p-3.5 lg:grid-cols-[310px_minmax(0,1fr)]">
@@ -519,18 +602,18 @@ onBeforeUnmount(() => {
               <input v-if="param[3] !== 'bool' && !formatParam(param).options" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)">
             </div>
           </details>
-          <button class="btn btn-primary w-full" @click="generate">Generate + export</button>
+          <button class="btn btn-primary w-full" :disabled="busy" @click="generate">Generate + export</button>
         </section>
         <section v-else class="space-y-2 p-3">
           <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="code">build123d code <span v-if="draft.dirty" class="text-[var(--accent)]">· edited</span></label><button v-if="draft.generatedCode" class="btn btn-small" @click="replaceWithGenerated">Replace draft</button></div>
           <textarea id="code" :value="draft.codeDraft" @input="editDraft" class="h-[410px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2.5 font-mono text-xs leading-5 outline-none" spellcheck="false"></textarea>
-          <div class="flex gap-1.5"><select v-model="example" class="control min-w-0 flex-1"><option v-for="(_, key) in EXAMPLES" :key="key" :value="key">{{ key }}</option></select><button class="btn" @click="loadExample">Load</button><button class="btn btn-primary" @click="runCode">Run</button></div>
+          <div class="flex gap-1.5"><select v-model="example" class="control min-w-0 flex-1"><option v-for="(_, key) in EXAMPLES" :key="key" :value="key">{{ key }}</option></select><button class="btn" @click="loadExample">Load</button><button class="btn btn-primary" :disabled="busy" @click="runCode">Run</button></div>
         </section>
       </aside>
 
       <main class="grid min-w-0 gap-3.5">
         <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><button class="btn btn-small" @click="resetView">Reset</button><button class="btn btn-small" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
+          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><button class="btn btn-small" @click="resetView">Reset</button><button class="btn btn-small" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" :disabled="busy" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
           <div ref="viewer" class="viewer relative h-[510px] bg-[var(--bg)] max-sm:h-[330px]"><div v-if="!preview?.tris?.length" class="pointer-events-none absolute inset-0 grid place-items-center text-center text-xs text-[var(--muted)]"><span><b class="mb-1 block text-[var(--fg)]">Nothing previewed yet</b>Choose a model and adjust a parameter.</span></div></div>
           <div class="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] px-2.5 py-2 text-xs"><span v-for="([key, value]) in statEntries" :key="key" class="rounded bg-[var(--panel2)] px-1.5 py-0.5">{{ key }}: <b class="font-mono font-normal">{{ value }}</b></span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel to zoom</span></div>
         </section>

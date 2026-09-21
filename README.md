@@ -84,7 +84,7 @@ description + changelog from CHANGELOG.md.
   `model` + dirty flags), so Send to plate works via OS file-open → OrcaSlicer's
   single-instance handling. Depends on file association; drag-and-drop fallback kept.
 - Algebra mode only; assign final solid to `result`.
-- Heavy models run in a daemon worker thread; no cancel button yet.
+- Busy operations report queued/building/tessellating/exporting/handoff stages and elapsed time. Cancel removes pending work; running build123d/native CAD work is not hard-stopped safely, so it finishes in the worker and its result is discarded.
 - License recommendation for Hub: AGPL-3.0 (Orca is AGPL-3.0).
 
 ## Verification (reproduce it)

@@ -488,7 +488,7 @@ def test_code_command_is_sync_codegen():
     assert res["request_id"] == 18 and res["revision_id"] == 3
 
 
-def test_cad_scheduler_coalesces_and_prioritizes_exports():
+def test_cad_scheduler_coalesces_prioritizes_exports_and_cancels_exact_pending_job():
     import threading
 
     scheduler = mod._CadJobScheduler()
@@ -516,6 +516,55 @@ def test_cad_scheduler_coalesces_and_prioritizes_exports():
     release_first.set()
     assert finished.wait(2)
     assert events == ["preview-1", "export", "preview-3"]
+
+    scheduler = mod._CadJobScheduler()
+    started = threading.Event()
+    release = threading.Event()
+    finished = threading.Event()
+    events = []
+
+    def active_export():
+        started.set()
+        assert release.wait(2)
+        events.append("active")
+        finished.set()
+
+    assert scheduler.submit_export(("same",), active_export, ("export", 1, 1))
+    assert started.wait(2)
+    assert scheduler.submit_export(("later",), lambda: events.append("later"), ("export", 2, 1))
+    assert scheduler.cancel(("export", 2, 1)) == "pending"
+    assert scheduler.cancel(("export", 1, 1)) == "running"
+    release.set()
+    assert finished.wait(2)
+    assert scheduler.cancel(("export", 2, 1)) is None
+    assert events == ["active"]
+
+
+def test_runner_reports_build_tessellation_and_export_stages(tmp_path):
+    from types import SimpleNamespace
+    from unittest import mock
+
+    stages = []
+
+    def export_stl(shape, path, **kwargs):
+        Path(path).write_bytes(b"stl")
+        return True
+
+    fake_build123d = SimpleNamespace(export_stl=export_stl)
+    with (
+        mock.patch.object(mod, "_execute_code", return_value=("shape", "result")),
+        mock.patch.object(mod, "_shape_stats", return_value={}),
+        mock.patch.object(mod, "_preview_payload", return_value=None),
+        mock.patch.object(mod, "exports_dir", return_value=tmp_path),
+        mock.patch.dict(sys.modules, {"build123d": fake_build123d}),
+    ):
+        result = mod.run_build123d_code(
+            "ignored", progress=lambda stage, message: stages.append((stage, message)))
+
+    assert result["ok"] is True
+    assert [stage for stage, _message in stages] == [
+        "building", "tessellating", "exporting", "tessellating"]
+    assert not any("%" in message for _stage, message in stages)
 
 
 def test_preview_message_routing():
@@ -575,6 +624,45 @@ def test_preview_message_routing():
             time.sleep(0.05)
     seqs = [p.get("seq") for p in cap.posts if p.get("type") == "preview"]
     assert seqs == [2], seqs
+
+
+def test_canceled_running_preview_discards_its_response():
+    import threading
+    import time
+    from unittest import mock
+
+    class FakeCap:
+        def __init__(self):
+            self.posts = []
+
+        def post_message(self, d):
+            self.posts.append(d)
+
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_preview(code, tolerance=0.001):
+        started.set()
+        assert release.wait(5)
+        return {"ok": True, "var": "result", "stats": {}, "preview": None}
+
+    cap = FakeCap()
+    message = {"command": "preview", "kind": "generate", "primitive": "box",
+               "params": {"L": 1, "W": 1, "H": 1}, "request_id": 35,
+               "revision_id": 7, "seq": 4}
+    with mock.patch.object(mod, "preview_shape", side_effect=slow_preview):
+        mod._handle_message_sync(cap, message)
+        assert started.wait(2)
+        canceled = mod._handle_message_sync(cap, {
+            "command": "cancel", "target_type": "preview",
+            "target_request_id": 35, "target_revision_id": 7, "target_seq": 4,
+            "request_id": 36, "revision_id": 7})
+        assert canceled["type"] == "cancelled"
+        assert canceled["pending"] is False
+        release.set()
+        time.sleep(0.1)
+
+    assert not [post for post in cap.posts if post.get("type") == "preview"]
 
 
 def test_plate_message_routing():
