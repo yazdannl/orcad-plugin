@@ -110,6 +110,60 @@ def _gbin(**over):
     return mod.generate_primitive_code("gridfinity_bin", params)
 
 
+def _expect_parameter_error(call, fields, phrase):
+    try:
+        call()
+    except mod.ParameterValidationError as exc:
+        assert {error["field"] for error in exc.errors} >= set(fields)
+        assert phrase in str(exc)
+        return exc
+    raise AssertionError("expected parameter validation error")
+
+
+def test_cross_field_geometry_boundaries_and_errors():
+    # Equality leaves the documented divider/base clearances intact.
+    _gbin(FILL=33.8, DEPTH=33.8, CYL=True, CD=39, CCHAM=0.5)
+    plate = {key: value for key, value in mod._defaults("gridfinity_baseplate").items()}
+    plate.update(SCREW=True, CHAMFER=True, SCREW_D=5, SCREW_HEAD=5)
+    mod.validate_primitive_params("gridfinity_baseplate", plate)
+
+    _expect_parameter_error(
+        lambda: _gbin(FILL=10, DEPTH=10.1), ("DEPTH", "FILL"),
+        "does not remove the base wall")
+    _expect_parameter_error(
+        lambda: _gbin(GX=1, GY=1, FILL=10, CYL=True, CD=39.5, CCHAM=0.5), ("CD", "CCHAM"),
+        "cylindrical opening")
+    _expect_parameter_error(
+        lambda: _gbin(HU=1, FILL=1, LIP=True), ("FILL", "HU", "LIP"),
+        "increase height")
+    plate.update(SCREW_D=5, SCREW_HEAD=4.9)
+    _expect_parameter_error(
+        lambda: mod.validate_primitive_params("gridfinity_baseplate", plate),
+        ("SCREW_HEAD", "SCREW_D"), "at least the screw diameter")
+
+
+def test_invalid_object_messages_reject_before_cad_for_all_object_commands():
+    from unittest import mock
+
+    class FakeCap:
+        def post_message(self, message):
+            raise AssertionError(f"CAD work must not post: {message}")
+
+    invalid = {"HU": 1, "FILL": 1, "LIP": True}
+    for command in ("generate", "preview", "plate"):
+        message = {"command": command, "kind": "generate", "primitive": "gridfinity_bin",
+                   "params": dict(mod._defaults("gridfinity_bin"), **invalid),
+                   "request_id": 101, "revision_id": 7, "seq": 3}
+        with (mock.patch.object(mod, "run_build123d_code") as build,
+              mock.patch.object(mod, "preview_shape") as preview):
+            result = mod._handle_message_sync(FakeCap(), message)
+        assert result is not None and result["ok"] is False
+        assert result["errors"]
+        assert {error["field"] for error in result["errors"]} >= {"FILL", "HU", "LIP"}
+        build.assert_not_called()
+        preview.assert_not_called()
+
+
 def test_gridfinity_codegen():
     code = _gbin()
     for needle in ("RectangleRounded", "extrude", "GX * 42", "result =", "Pos(",

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { PRIMS } from './primitives.js'
-import { isParamDisabled, parameterGroups } from './parameterUi.js'
+import { isParamDisabled, parameterGroups, validationMessages } from './parameterUi.js'
 
 const param = (name) => PRIMS.gridfinity_bin.params.find(([key]) => key === name)
 
@@ -32,4 +32,11 @@ test('refined and magnet controls prevent selecting both modes', () => {
   assert.equal(isParamDisabled(refined, values({ REFINED: false, MAGNETS: true })), true)
   assert.equal(isParamDisabled(magnets, values({ REFINED: true, MAGNETS: false })), true)
   assert.equal(isParamDisabled(refined, values({ REFINED: true, MAGNETS: false })), false)
+})
+
+test('structured validation errors map to their associated controls', () => {
+  assert.deepEqual(validationMessages([
+    { field: 'FILL', message: 'reduce fill' },
+    { field: 'LIP', message: 'disable lip' },
+  ]), { FILL: 'reduce fill', LIP: 'disable lip' })
 })

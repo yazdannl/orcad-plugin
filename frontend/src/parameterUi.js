@@ -22,3 +22,9 @@ export function isParamDisabled(param, values) {
   if (ui.dependsOn && !values[ui.dependsOn]) return true
   return Boolean(ui.exclusiveWith && values[ui.exclusiveWith] && !values[param[0]])
 }
+
+export function validationMessages(errors = []) {
+  return Object.fromEntries(errors
+    .filter((error) => error?.field && error?.message)
+    .map((error) => [error.field, error.message]))
+}

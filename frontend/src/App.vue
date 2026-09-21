@@ -10,7 +10,7 @@ import {
   replaceDraftWith,
 } from './codeDraft'
 import { responseMatches } from './messageTracking'
-import { parameterGroups, paramUi, isParamDisabled } from './parameterUi'
+import { parameterGroups, paramUi, isParamDisabled, validationMessages } from './parameterUi'
 import { buildExportPayload, formatQuality } from './exportPayload'
 
 const mode = ref('objects')
@@ -24,6 +24,7 @@ const previewStatus = ref('waiting for a model')
 const preview = ref(null)
 const stats = ref({})
 const result = ref(null)
+const validationErrors = reactive({})
 const logLines = ref(['ready.'])
 const wireframe = ref(false)
 const spinning = ref(true)
@@ -63,6 +64,13 @@ function post(message) {
 function requestContext() {
   return { request_id: ++requestSequence, revision_id: revision.value }
 }
+function clearValidationErrors() {
+  Object.keys(validationErrors).forEach((key) => delete validationErrors[key])
+}
+function setValidationErrors(message) {
+  clearValidationErrors()
+  Object.assign(validationErrors, validationMessages(message?.errors))
+}
 function invalidateRevision() {
   revision.value += 1
   activePreview = null
@@ -71,6 +79,7 @@ function invalidateRevision() {
   preview.value = null
   stats.value = {}
   result.value = null
+  clearValidationErrors()
   previewStatus.value = 'waiting for a model'
   if (status.value === 'building…' || status.value === 'sending…') status.value = 'ready'
 }
@@ -190,8 +199,13 @@ function loadExample() {
 }
 function showResult(message) {
   result.value = message
-  if (message.ok) log(`ok ${message.filename || 'model'}`)
-  else log(message.error || 'operation failed')
+  if (message.ok) {
+    clearValidationErrors()
+    log(`ok ${message.filename || 'model'}`)
+  } else {
+    setValidationErrors(message)
+    log(message.error || 'operation failed')
+  }
 }
 function handleMessage(message) {
   if (!message) return
@@ -206,18 +220,25 @@ function handleMessage(message) {
   }
   if (message.type === 'code') {
     if (!accepts(message, latestCodeRequest)) return
-    if (message.ok) receiveGeneratedCode(draft, message.request_id, latestCodeRequest.requestId, message.code)
-    else log(message.error || 'code generation failed')
+    if (message.ok) {
+      clearValidationErrors()
+      receiveGeneratedCode(draft, message.request_id, latestCodeRequest.requestId, message.code)
+    } else {
+      setValidationErrors(message)
+      log(message.error || 'code generation failed')
+    }
     return
   }
   if (message.type === 'preview') {
     if (!accepts(message, activePreview, true)) return
     activePreview = null
     if (message.ok) {
+      clearValidationErrors()
       preview.value = message.preview
       stats.value = message.stats || {}
       previewStatus.value = 'preview ready'
     } else {
+      setValidationErrors(message)
       previewStatus.value = 'preview failed'
       log(message.error || 'preview failed')
     }
@@ -401,13 +422,14 @@ onBeforeUnmount(() => {
             <summary class="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-xs font-bold">{{ section.name }} <span class="text-[var(--muted)]">{{ section.params.length }}</span></summary>
             <div v-for="param in section.params" :key="param[0]" class="border-b border-dashed border-[var(--line)] px-2 py-2 last:border-0" :class="{ 'opacity-50': parameterDisabled(param) }">
               <div class="flex items-center justify-between gap-2"><label :for="`param-${param[0]}`" class="text-xs" :title="formatParam(param).help"><b>{{ formatParam(param).key }}</b> {{ formatParam(param).label }} <span class="text-[11px] text-[var(--muted)]">{{ formatParam(param).unit }}</span></label>
-                <input v-if="param[3] === 'bool'" :id="`param-${param[0]}`" v-model="params[param[0]]" type="checkbox" class="h-4 w-4 accent-[var(--accent)]" :disabled="parameterDisabled(param)" :title="formatParam(param).help">
-                <select v-else-if="formatParam(param).options" :id="`param-${param[0]}`" v-model="params[param[0]]" class="control min-w-40" :disabled="parameterDisabled(param)" :title="formatParam(param).help">
+                <input v-if="param[3] === 'bool'" :id="`param-${param[0]}`" v-model="params[param[0]]" type="checkbox" class="h-4 w-4 accent-[var(--accent)]" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])">
+                <select v-else-if="formatParam(param).options" :id="`param-${param[0]}`" v-model="params[param[0]]" class="control min-w-40" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])">
                   <option v-for="option in formatParam(param).options" :key="option.value" :value="option.value">{{ option.label }}</option>
                 </select>
-                <input v-else :id="`param-${param[0]}`" v-model.number="params[param[0]]" class="control w-20 text-right" type="number" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)" :title="formatParam(param).help">
+                <input v-else :id="`param-${param[0]}`" v-model.number="params[param[0]]" class="control w-20 text-right" type="number" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)" :title="formatParam(param).help" :aria-invalid="Boolean(validationErrors[param[0]])">
               </div>
               <p v-if="formatParam(param).help" class="mt-1 text-[11px] leading-4 text-[var(--muted)]">{{ formatParam(param).help }}</p>
+              <p v-if="validationErrors[param[0]]" class="mt-1 text-[11px] leading-4 text-[var(--danger)]" role="alert">{{ validationErrors[param[0]] }}</p>
               <input v-if="param[3] !== 'bool' && !formatParam(param).options" v-model.number="params[param[0]]" class="mt-1.5 w-full accent-[var(--accent)]" type="range" :min="param[5]" :max="param[6]" :step="param[7]" :disabled="parameterDisabled(param)">
             </div>
           </details>

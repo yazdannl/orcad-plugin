@@ -42,15 +42,12 @@ _Hraw = HU * 7.0 if HMODE == 0 else (HU + 7.0 if HMODE == 1 else (HU if HMODE ==
 if ZS:
     _Hraw = _Hraw if _Hraw % 7 == 0 else _Hraw + 7 - _Hraw % 7
 H = max(_Hraw, 7.0)
-assert H >= 7.0, "height below 7mm base"
-assert not LIP or FILL <= 0 or FILL <= H - 1.2, "fill too tall for lipped bin"
 W = GX * 42.0 - 0.5
 D = GY * 42.0 - 0.5
 _EW = WALL
 _inner_w = W - 2 * _EW
 _inner_d = D - 2 * _EW
 _inner_r = max(0.01, 3.75 - _EW)
-assert _inner_w > 0 and _inner_d > 0, "wall leaves no interior"
 _lip_sup = 1.2 if LIP else 0.0
 _fill = FILL if FILL > 0 else H - 7.0 - _lip_sup
 _infill_top = 7.0 + _fill
