@@ -38,6 +38,9 @@ Python dependencies.
   frontend parameter spec in sync (`--write` to regenerate, `--check` to verify;
   tests enforce sync).
 - `tests/test_plugin.py` — pure-logic tests, run without Orca/build123d.
+- `tests/test_geometry_integration.py` — optional build123d/OCP regression suite for
+  default solids, cross-sections, and export success/failure paths.
+- `verify/geometry.py` — bounded integration-test entry point using `.venv`.
 - `README.md`, `CHANGELOG.md`
 
 ## Manual test (you do this in Orca)
@@ -129,3 +132,7 @@ description + changelog from CHANGELOG.md.
   `/tmp/opencode/gridfinity-rebuilt-openscad` (see Matrix paths).
 - build123d runs in `.venv` (not committed). STLs land in `.verify-cache/`
   (not committed); comparison JSON is printed to stdout.
+- Run the optional geometry regressions with `python3 verify/geometry.py`. The
+  harness uses `.venv` for build123d/OCP, keeps exports in pytest temporary
+  directories, and skips with install instructions when the optional dependency
+  is unavailable. Pure tests remain independent: `python3 -m pytest tests/ -q`.
