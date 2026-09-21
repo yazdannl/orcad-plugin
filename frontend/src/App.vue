@@ -12,10 +12,18 @@ import {
 import { responseMatches } from './messageTracking'
 import { parameterGroups, paramUi, isParamDisabled, validationMessages } from './parameterUi'
 import { buildExportPayload, formatQuality } from './exportPayload'
+import {
+  defaultParams, filterPrimitiveEntries, loadSettings, persistedParams,
+  restoreParams, saveObjectParams, saveSettings, selectPrimitive,
+} from './objectState'
 
+const initialSettings = loadSettings()
 const mode = ref('objects')
-const selected = ref('gridfinity_bin')
-const query = ref('')
+const selected = ref(PRIMS[initialSettings.selected] ? initialSettings.selected : 'gridfinity_bin')
+const query = ref(typeof initialSettings.query === 'string' ? initialSettings.query : '')
+const paramsByObject = reactive(initialSettings.paramsByObject && typeof initialSettings.paramsByObject === 'object'
+  ? initialSettings.paramsByObject
+  : {})
 const params = reactive({})
 const draft = reactive(createDraftState())
 const example = ref('calibration_cube')
@@ -26,10 +34,10 @@ const stats = ref({})
 const result = ref(null)
 const validationErrors = reactive({})
 const logLines = ref(['ready.'])
-const wireframe = ref(false)
-const spinning = ref(true)
-const format = ref('stl')
-const toleranceValue = ref(0.001)
+const wireframe = ref(Boolean(initialSettings.wireframe))
+const spinning = ref(initialSettings.spinning !== false)
+const format = ref(['stl', 'step', '3mf'].includes(initialSettings.format) ? initialSettings.format : 'stl')
+const toleranceValue = ref(Number.isFinite(initialSettings.tolerance) ? initialSettings.tolerance : 0.001)
 const revision = ref(0)
 let previewSequence = 0
 let requestSequence = 0
@@ -41,10 +49,7 @@ let activeOperation = null
 
 const selectedPrim = computed(() => PRIMS[selected.value] || PRIMS.box)
 const parameterSections = computed(() => parameterGroups(selectedPrim.value))
-const filteredPrims = computed(() => Object.entries(PRIMS).filter(([key, prim]) => {
-  const q = query.value.trim().toLowerCase()
-  return !q || key.includes(q) || prim.label.toLowerCase().includes(q)
-}))
+const filteredPrims = computed(() => filterPrimitiveEntries(PRIMS, query.value))
 const statEntries = computed(() => Object.entries(stats.value || {}).slice(0, 6))
 
 function log(message) {
@@ -87,18 +92,45 @@ function accepts(message, expected, includeSeq = false) {
   return expected?.revisionId === revision.value && responseMatches(message, expected, includeSeq)
 }
 const qualityHelp = computed(() => formatQuality(format.value))
+function persistSettings() {
+  saveSettings({
+    selected: selected.value,
+    query: query.value,
+    paramsByObject: persistedParams(PRIMS, paramsByObject),
+    format: format.value,
+    tolerance: toleranceValue.value,
+    wireframe: wireframe.value,
+    spinning: spinning.value,
+  })
+}
+function saveCurrentParams(key = selected.value) {
+  if (PRIMS[key]) saveObjectParams(paramsByObject, key, PRIMS[key], params)
+}
 function formatChanged() {
+  persistSettings()
   invalidateRevision()
 }
 function toleranceChanged() {
+  persistSettings()
   invalidateRevision()
   requestPreview()
 }
 function hydrateParams() {
   hydrating = true
   Object.keys(params).forEach((key) => delete params[key])
-  selectedPrim.value.params.forEach((param) => { params[param[0]] = param[4] })
+  Object.assign(params, restoreParams(selectedPrim.value, paramsByObject[selected.value]))
   hydrating = false
+}
+function selectObject(event) {
+  selected.value = selectPrimitive(selected.value, event.target.value, PRIMS)
+}
+function resetDefaults() {
+  saveObjectParams(paramsByObject, selected.value, selectedPrim.value, defaultParams(selectedPrim.value))
+  invalidateRevision()
+  hydrateParams()
+  persistSettings()
+  codeRequest()
+  requestPreview()
 }
 function codeRequest() {
   const ids = requestContext()
@@ -371,15 +403,27 @@ function toggleWireframe() {
   if (mesh) mesh.material.wireframe = wireframe.value
 }
 
-watch(query, () => {
-  if (!filteredPrims.value.some(([key]) => key === selected.value) && filteredPrims.value[0]) {
-    selected.value = filteredPrims.value[0][0]
+watch(query, persistSettings)
+watch(selected, (value, previous) => {
+  saveCurrentParams(previous)
+  invalidateRevision()
+  hydrateParams()
+  persistSettings()
+  codeRequest()
+  requestPreview()
+}, { flush: 'sync' })
+watch(params, () => {
+  if (!hydrating) {
+    saveCurrentParams()
+    persistSettings()
+    invalidateRevision()
+    codeRequest()
+    requestPreview()
   }
-})
-watch(selected, () => { invalidateRevision(); hydrateParams(); codeRequest(); requestPreview() }, { flush: 'sync' })
-watch(params, () => { if (!hydrating) { invalidateRevision(); codeRequest(); requestPreview() } }, { deep: true, flush: 'sync' })
+}, { deep: true, flush: 'sync' })
 watch(preview, (value) => applyPreview(value))
-watch(wireframe, (value) => { if (mesh) mesh.material.wireframe = value })
+watch(wireframe, (value) => { if (mesh) mesh.material.wireframe = value; persistSettings() })
+watch(spinning, persistSettings)
 onMounted(() => {
   hydrateParams()
   window.orca?.onMessage?.(handleMessage)
@@ -414,10 +458,16 @@ onBeforeUnmount(() => {
           <button class="tab" :class="{ active: mode === 'code' }" @click="setMode('code')">Code</button>
         </nav>
         <section v-if="mode === 'objects'" class="space-y-3 p-3">
-          <div><label class="eyebrow" for="objectSearch">Model</label><input id="objectSearch" v-model="query" class="control mt-1 w-full" placeholder="Filter objects…"></div>
-          <select v-model="selected" class="control w-full"><option v-for="([key, prim]) in filteredPrims" :key="key" :value="key">{{ prim.label }}</option></select>
+          <div>
+            <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="objectSearch">Model</label><button v-if="query" class="btn btn-small" type="button" @click="query = ''">Clear search</button></div>
+            <input id="objectSearch" v-model="query" class="control mt-1 w-full" placeholder="Filter objects…">
+          </div>
+          <div v-if="!filteredPrims.length" class="rounded-lg border border-dashed border-[var(--line)] p-3 text-xs text-[var(--muted)]" role="status">
+            <p>No objects match “{{ query }}”.</p><button class="btn btn-small mt-2" type="button" @click="query = ''">Clear search</button>
+          </div>
+          <select v-else :value="selected" class="control w-full" @change="selectObject"><option v-for="([key, prim]) in filteredPrims" :key="key" :value="key">{{ prim.label }}</option></select>
           <p class="text-xs text-[var(--muted)]">{{ selectedPrim.blurb }}</p>
-          <div class="eyebrow">Parameters</div>
+          <div class="flex items-center justify-between gap-2"><div class="eyebrow">Parameters</div><button class="btn btn-small" type="button" @click="resetDefaults">Reset defaults</button></div>
           <details v-for="section in parameterSections" :key="section.name" open class="parameter-section">
             <summary class="flex cursor-pointer items-center justify-between gap-2 px-2 py-1.5 text-xs font-bold">{{ section.name }} <span class="text-[var(--muted)]">{{ section.params.length }}</span></summary>
             <div v-for="param in section.params" :key="param[0]" class="border-b border-dashed border-[var(--line)] px-2 py-2 last:border-0" :class="{ 'opacity-50': parameterDisabled(param) }">
