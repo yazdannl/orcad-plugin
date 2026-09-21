@@ -1,0 +1,31 @@
+orcad 0.7.0
+
+Original project code
+--------------------
+The original Python plugin, object sources, verification code, documentation,
+and frontend source in this repository are released under the GNU Affero
+General Public License, version 3 only (AGPL-3.0-only). See LICENSE.
+
+Upstream Gridfinity attribution
+--------------------------------
+The Gridfinity Bin and Gridfinity Baseplate geometry are ports or approximating
+ports of kennetek/gridfinity-rebuilt-openscad. The source files retain the
+upstream project and source-file references used during the port.
+
+This checkout does not contain the upstream repository's license text or a
+pinned upstream revision. The upstream Gridfinity license and any additional
+attribution requirements MUST be verified from the authoritative upstream
+source before redistributing the port or a release containing it. This notice
+does not guess, grant, or relicense rights to upstream code.
+
+Host attribution
+----------------
+orcad targets the OrcaSlicer plugin API. OrcaSlicer is a separate host project
+and is not relicensed or redistributed by this repository.
+
+Third-party frontend material
+-----------------------------
+The compiled frontend includes third-party Vue and Three.js material under
+their own MIT licenses. Their notices are kept separate in
+THIRD_PARTY_NOTICES; the AGPL-3.0-only statement above does not relicense
+those components.

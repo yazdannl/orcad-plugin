@@ -1,4 +1,9 @@
-# orcad — build123d CAD tab for OrcaSlicer (v0.7)
+# orcad — build123d CAD tab for OrcaSlicer (v0.7.0)
+
+The authoritative plugin release version is **0.7.0**, recorded in
+`compatibility.json` as `plugin.version`. `orcad.py`, the frontend package and
+lockfile, and the release documentation must agree with that value; dependency
+and host/API versions remain separate values.
 
 Real Plugin-Hub plugin (Nightly / >2.4.2). Adds a top-level **orcad** tab
 next to Prepare/Preview/Device/Project via `orca.pages.PagesPluginCapabilityBase`
@@ -7,12 +12,13 @@ with **live preview**, a compact native code editor, Three.js 3D preview, and
 **Send to plate**; build123d runs in Orca's embedded Python, exports
 STL/STEP/3MF to the plugin's `exports/` folder.
 
-The Gridfinity Bin is a complete port of
-kennetek/gridfinity-rebuilt-openscad: compartments, label tabs (all styles),
-scoop, cylindrical compartments, depth/fill/height-mode controls, refined /
-magnet / screw holes with crush ribs, chamfers and supportless tops,
-corner-only holes, thumbscrew holes, stacking lip — verified feature by
-feature against OpenSCAD-rendered reference STLs (see `verify/`).
+The Gridfinity Bin is a substantial port of
+kennetek/gridfinity-rebuilt-openscad: compartments, label tabs, scoop,
+cylindrical compartments, depth/fill/height-mode controls, refined / magnet /
+screw holes with crush ribs, chamfers and supportless tops, corner-only holes,
+thumbscrew holes, and stacking lip. The checked-in verification matrix covers
+selected cases and toleranced geometry metrics; feature status and known
+approximations are listed below and must not be read as upstream certification.
 
 The UI is a compact local Vue app with Tailwind CSS and a bundled Three.js
 runtime. `frontend/dist/index.html` is self-contained and loaded beside
@@ -46,6 +52,9 @@ Python dependencies.
   default solids, cross-sections, and export success/failure paths.
 - `verify/geometry.py` — bounded integration-test entry point using `.venv`.
 - `README.md`, `CHANGELOG.md`
+- `LICENSE` — AGPL-3.0-only for original project code.
+- `NOTICE` — project, host, and Gridfinity attribution plus upstream-license uncertainty.
+- `THIRD_PARTY_NOTICES` — separate MIT notices for Vue and Three.js.
 
 ## Build and release verification
 
@@ -80,11 +89,22 @@ files owned by this pipeline are `frontend/src/primitives.js`,
 `--write`/`--check` options remain available for targeted synchronization but
 `--write` refuses to embed a stale frontend.
 
+The final release check is:
+
+```sh
+python3 -m pytest tests/ -q
+python3 verify/geometry.py
+python3 verify/compatibility.py --run
+(cd frontend && npm test && npm run build)
+python3 packaging/bundle.py --release --check
+git diff --check
+```
+
 ## Supported versions and compatibility
 
-`compatibility.json` is the machine-readable source for the constraints and
-local verification matrix. The declarations distinguish the runtime installed
-for the plugin from tools used only by contributors:
+`compatibility.json` is the machine-readable source for the release version,
+constraints, and local verification matrix. The declarations distinguish the
+runtime installed for the plugin from tools used only by contributors:
 
 - **Plugin runtime:** Python `>=3.12,<3.15`, `build123d==0.12.0`,
   `cadquery-ocp-novtk==7.9.3.1.1` (the OCP distribution), and NumPy `>=2,<3`.
@@ -121,83 +141,95 @@ No CI provider is configured. `verify/compatibility.py --run` is the local
 replacement and fails on declared tool drift; the optional geometry stage
 skips with repair guidance when `.venv` is absent.
 
-## Manual test (you do this in Orca)
+## Install, first run, and troubleshooting
 
-1. Use latest OrcaSlicer **Nightly** (Pages API = `main` branch; Stable 2.4.2 has no `orca.pages`).
-2. Copy `orcad.py` to `<Orca data dir>/orca_plugins/orcad/orcad.py`
-   (the embedded frontend fallback makes the Python file sufficient). If
-   developing locally, you may also copy `frontend/dist/index.html` beside it.
-3. Restart OrcaSlicer. Plugins dialog should list **orcad 0.7.0** with capability **orcad** (type Pages). Enable it.
-4. An **orcad** tab appears in the top tab bar. Open it: left side switches between
-   **Objects** (filterable model list, Gridfinity Bin preselected, live preview as
-   you drag sliders) and **Code** (native build123d editor); right side always
-   shows the Three.js preview.
-5. Try: drag a Gridfinity slider → preview updates live. Press Generate + Export,
-   then **⤓ Send to plate** → model should appear on Prepare (first click asks a
-   one-time OS permission — allow & remember).
-   Try Code Editor tab → Run + Export the gridfinity example.
-6. Exports land in `.../orca_plugins/orcad/exports/`. If Send to plate does not
-   load the model (association/single-instance varies by install type), drag the
-   file onto Prepare instead.
-7. Logs: `data_dir()/log/python_*.log` has tracebacks + `print()` output.
-8. On a build without `orca.pages`, the plugin registers `orcad (needs Pages build)`
-   script fallback with an upgrade message instead of a tab.
+1. Use the latest OrcaSlicer **Nightly** exposing the `main` Pages API. Stable
+   2.4.2 has no `orca.pages` and is unsupported.
+2. Copy `orcad.py` to `<Orca data dir>/orca_plugins/orcad/orcad.py`. The
+   embedded frontend fallback makes the Python file sufficient; developers may
+   also copy `frontend/dist/index.html` beside it.
+3. Restart OrcaSlicer and enable **orcad 0.7.0** in the Plugins dialog. With
+   the Pages API present, an **orcad** tab appears next to the normal tabs.
+4. In **Objects**, Gridfinity Bin is preselected. Adjust a parameter to request
+   a live preview, then use **Generate + export**. In **Code**, load an example
+   or edit the native build123d code and press **Run**. Assign the final solid to `result`.
+5. **Send to plate** always exports an STL and asks the host/OS to open it. A
+   first handoff may ask for a one-time OS permission; allow it if desired.
+   The plugin cannot confirm that the host imported the file, so drag the
+   reported export path onto OrcaSlicer Prepare when association or
+   single-instance handoff does not load it.
 
-## First-run setup and readiness
+First CAD preview/export setup may install `build123d`, NumPy, and OCP through
+Orca's bundled `uv`. It may take time, can download hundreds of MB, and needs
+network and write access. **Bridge ready** only means that host messaging is
+available; the UI checks **CAD/model ready** only after a preview or export
+succeeds. There is no separate dependency probe.
 
-The first CAD preview or export may install `build123d` and `numpy` (including the
-OCP dependency) through Orca's bundled `uv`. This can download hundreds of MB,
-needs network and write access, and may take time. The UI reports **Bridge** and
-**CAD/model** status separately: bridge ready means only that the host messaging
-API is available; CAD/model readiness is checked by a preview or export. There is
-no separate dependency probe, so the plugin does not claim CAD is ready before a
-real operation succeeds.
+Troubleshooting:
 
-If setup or a build fails, check network and write permissions, reopen the Plugins
-dialog or restart OrcaSlicer to retry dependency setup, then run again. Read the
-error and `data_dir()/log/python_*.log` if it still fails. A failed operation does
-not replace the last successful preview or export.
+- Setup or OCP download failure: check network and write permissions, reopen
+  the Plugins dialog or restart OrcaSlicer, retry dependency setup, and retry
+  the preview/export.
+- Build or code failure: read the displayed error and
+  `data_dir()/log/python_*.log`; correct the code or parameters and press
+  **Run**/retry. The last successful preview/export is retained.
+- Missing result or invalid solid: use `result = Box(20, 20, 20)` as a known
+  good code shape; a missing `result`, flat sketch, or non-solid cannot export.
+- Bridge unavailable: restart the host and confirm the plugin is enabled. A
+  build without `orca.pages` registers `orcad (needs Pages build)` with an
+  upgrade hint instead of a CAD tab.
+- Exports are in `.../orca_plugins/orcad/exports/`; use **Copy path** or
+  **Open exports folder** from **Last export**, then drag the file onto Prepare
+  if **Send to plate** did not load it.
 
-## Code trust and recovery
-
-Editable Python/build123d code is **trusted** and executes in-process with
-**no security sandbox**. Any import checks used while validating predefined objects
-are validation/UX only, not a security boundary. Do not run code you do not
-trust. Assign the final solid to `result`, for example:
-
-```python
-from build123d import *
-result = Box(20, 20, 20)
-```
-
-For a code error, fix the reported error and press **Run** again; the last
-successful result remains unchanged. A missing `result`, a flat sketch, or a
-non-solid can also prevent export.
+Editable Python/build123d code is **trusted** and executes in-process with no security sandbox. Import checks for predefined objects are validation/UX only, not a security boundary. Do not run code you do not trust.
 
 ## Plugin Hub publish
 
 OrcaCloud → Plugin Hub → Create listing → upload `orcad.py` (or the package
 with `frontend/dist/index.html`), thumbnail screenshot of CAD tab, tags
-(`cad`, `build123d`, `parametric`), OS = all, compatible Orca = Nightly/>2.4.2,
-description + changelog from CHANGELOG.md.
+(`cad`, `build123d`, `parametric`), and compatible Orca = Nightly/>2.4.2.
+Only advertise operating systems and host builds after running the corresponding
+manual checks; this checkout has verified Linux x86_64 only. Include
+`CHANGELOG.md`, `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES` with a release.
 
-## Limits (v0.7, honest)
+## Feature status and limits (v0.7)
 
-- HTML tab only; preview is a decimated mesh render (max 3000 tris), not full CAD.
-- Gridfinity Bin mirrors the original CSG tree and matches reference STLs
-  (bbox/z-profiles within 0.3mm, volume within 4%, hole positions exact).
-  Known approximations: thumbscrew threads → plain hole (shape differs,
-  position exact); bin corner fillets r_f2 are exact on cutters; M3 threads
-  in screw holes are not modeled (clearance holes only).
-- Not ported (roadmap): half-grid bins, lite (hollow) bases, baseplate styles
-  beyond thin+magnet (weighted/skeletonized/screw-together/fit-to-drawer),
-  label-tab geometry on the baseplate, `cut_lip` for tall cylinders.
-- `orca.host` exposes no plate-mutation API (verified on `main`: Plater has only
-  `model` + dirty flags), so Send to plate works via OS file-open → OrcaSlicer's
-  single-instance handling. Depends on file association; drag-and-drop fallback kept.
-- Algebra mode only; assign final solid to `result`.
-- Busy operations report queued/building/tessellating/exporting/handoff stages and elapsed time. Cancel removes pending work; running build123d/native CAD work is not hard-stopped safely, so it finishes in the worker and its result is discarded.
-- License recommendation for Hub: AGPL-3.0 (Orca is AGPL-3.0).
+**Verified** — pure Python behavior and parameter validation; frontend bridge,
+state, accessibility, export-payload, recovery, and UI tests; generated object
+spec synchronization; the declared compatibility checks; and the release
+bundle check. The local geometry suite verifies the checked-in default and
+regression cases. The optional upstream comparison matrix verifies only the
+cases and tolerances recorded by its harness; it is not a claim of exact
+feature identity.
+
+**Approximate** — the preview is a decimated mesh render (maximum 3000
+triangles), not full CAD. Gridfinity comparison is metric-based (bbox/z-profiles
+within 0.3 mm, volume within 4%, hole positions exact for the recorded cases).
+Baseplate sockets are an approximation of the upstream cutter profile.
+Thumbscrew threads are represented as plain holes (positions are exact), and
+M3 screw threads are clearance holes rather than modeled threads.
+
+**Experimental / host-dependent** — the Pages API integration and the
+OS-file-open **Send to plate** handoff have not been exercised on every host
+build or operating system. `orca.host` exposes no plate-mutation API, so the
+handoff depends on file association and OrcaSlicer's single-instance behavior;
+drag-and-drop is the recovery path. Non-Linux operation is expected but not
+verified in this checkout. Arbitrary Code-mode execution is intentionally
+trusted and unsandboxed.
+
+**Unsupported / roadmap** — stable OrcaSlicer 2.4.2 and builds without
+`orca.pages`; half-grid bins; lite/hollow bases; baseplate styles beyond
+thin+magnet (weighted, skeletonized, screw-together, fit-to-drawer); baseplate
+label-tab geometry; and `cut_lip` for tall cylinders. These are not release
+features. Algebra mode is the supported code path: assign the final solid to
+`result`. Cancel removes pending work, but an already-running CAD operation is
+not hard-stopped safely and its result is discarded.
+
+The original project code is AGPL-3.0-only; see `LICENSE` and `NOTICE`. The
+Gridfinity upstream license is not present in this checkout and must be
+verified before redistribution. Vue and Three.js remain under their separate
+MIT notices in `THIRD_PARTY_NOTICES`.
 
 ## Verification (reproduce it)
 

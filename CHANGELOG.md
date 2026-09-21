@@ -1,42 +1,31 @@
 # Changelog
 
-## Unreleased — Supported versions
+## 0.7.0 — Supported release and parity notes (Supported versions)
 
+- 0.7.0 is the single plugin release version. `compatibility.json` is the
+  version authority; `orcad.py`, frontend package metadata, and this release
+  documentation are synchronized to it.
 - Declared the tested Python, build123d, OCP, NumPy, Node.js, npm, and pytest
-  constraints in `orcad.py`, `frontend/package.json`, and `compatibility.json`.
-- Documented the Nightly `main` Pages API target, the stable 2.4.2 limitation,
-  OS verification scope, and the deterministic local compatibility matrix.
-
-## Unreleased — Local Vue frontend
-
+  constraints, plus the Nightly `main` Pages API target and stable 2.4.2
+  limitation.
 - Moved the UI into `frontend/src` as a Vue + Tailwind app and committed the
-  self-contained `frontend/dist/index.html` build artifact.
-- `orcad.py` now loads the compiled asset beside the plugin; Node is needed
-  only to rebuild it, not to run the plugin.
-
-## Unreleased — Compact Three.js UI
-
-- Replaced the broken canvas/OrbitControls preview with a reliable Three.js
-  WebGL viewer using native drag rotation and wheel zoom.
-- Rebuilt the page as a compact responsive inline app: filterable model list,
-  generated parameter controls, native code editor, export/status cards, and
-  responsive preview layout.
-- Removed the Monaco and OrbitControls CDN dependencies; Three.js is the only
-  page dependency, and the embedded WebView remains usable without CSS assets.
-
-## 0.7.0 — Complete Rebuilt port, STL-verified feature by feature
-
-- Gridfinity Bin now ports the whole entry-file feature set: grid divisions
-  (0 = solid), compartment depth + solid-fill overrides, height modes 0-3
-  with z-snap, label tabs (Full/Auto/Left/Center/Right/None + top-left-only),
-  scoop weight, cylindrical compartments with top chamfer, refined / magnet /
-  screw holes with crush ribs, chamfers, supportless tops, corner-only and
-  thumbscrew holes, stacking lip.
-- Verified against OpenSCAD-snapshot renders of the original sources across
-  a 27-case matrix (bbox/z-profiles within 0.3mm, volume within 4%, hole
-  positions exact). Harness in `verify/`. Defaults now match the entry file
-  (refined holes, scoop, auto tabs); outer wall default is spec 0.95mm.
-- DX/DY now mean compartment counts like the original (DX=0 → solid bin).
+  self-contained `frontend/dist/index.html` artifact. Node is needed only to
+  rebuild it, not to run the plugin.
+- Replaced the old preview with a compact Three.js WebGL viewer, filterable
+  object list, generated parameter controls, native code editor, export/status
+  cards, and responsive preview layout. The page has no runtime CDN dependency.
+- Gridfinity Bin ports the recorded entry-file controls: grid divisions,
+  compartment depth/fill, height modes and z-snap, label tabs, scoop,
+  cylindrical compartments, refined/magnet/screw holes, chamfers,
+  supportless tops, corner-only and thumbscrew holes, and stacking lip.
+  The verification harness covers selected cases and toleranced metrics; this
+  is not a claim of exact feature parity or upstream certification.
+- Known approximations remain explicit: baseplate sockets approximate the
+  upstream cutter profile; thumbscrew threads are plain holes; M3 screw holes
+  are clearance holes; and preview geometry is decimated.
+- Added AGPL-3.0-only licensing for original project code, separate Vue and
+  Three.js MIT notices, and an explicit warning that the Gridfinity upstream
+  license must be verified before redistribution.
 
 ## 0.6.0 — Object files are build123d programs
 
@@ -48,15 +37,17 @@
 - Param values are baked into the program's own variable lines; the Code
   Editor shows the actual object file with your values in it.
 
-## 0.5.1 — Gridfinity verified against original .scad
+## 0.5.1 — Gridfinity comparison harness
 
-- Bin + baseplate rewritten as a faithful port of
+- Bin + baseplate were rewritten as ports of
   kennetek/gridfinity-rebuilt-openscad (file:line citations inline).
-  Fixed real bugs found by STL-vs-STL comparison: off-center cells,
-  flat-bottom slab, buried single magnet hole, box sockets, square-only lip.
-- Verified: OpenSCAD-rendered reference STLs vs build123d output match
-  (footprint, foot taper, magnet positions within 0.3mm). Known deltas:
-  nominal 4.4 lip, ~6% volume (lip + omitted interior fillets).
+  Fixed geometry deltas found by STL comparison: off-center cells,
+  flat-bottom slab, buried single magnet hole, box sockets, and square-only
+  lip.
+- The recorded OpenSCAD comparison covered footprint, foot taper, and magnet
+  positions within the stated tolerances. It also recorded known deltas,
+  including the nominal 4.4 lip and volume differences from omitted interior
+  fillets. This remains approximate parity, not an upstream certification.
 - Predefined objects now live in `objects/*.py` (one file each), bundled
   into `orcad.py` via `packaging/bundle.py` (`--check` enforced by tests).
 
@@ -78,11 +69,11 @@
   export-free, with seq guard dropping stale results; errors shown subtly in
   the preview header without clearing the last good mesh. Tab opens already
   rendering the default Gridfinity Bin.
-- Send to plate: exports STL and opens it with the OS default app so
-  OrcaSlicer's single-instance handling loads it onto the build plate
-  (verified: no plate-mutation API exists in `orca.host` on `main` — same
-  mechanism generator plugins use). One audit prompt on first use, then
-  remembered; drag-and-drop fallback kept and documented.
+- Send to plate: exports STL and requests the OS default app so
+  OrcaSlicer's single-instance handling may load it onto the build plate.
+  The host has no plate-mutation API on `main`; file association and host
+  behavior are therefore experimental/host-dependent. One audit prompt on
+  first use, then remembered; drag-and-drop fallback kept and documented.
 
 ## 0.3.0 — Self-contained modern UI + Gridfinity
 

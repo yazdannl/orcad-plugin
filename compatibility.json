@@ -2,6 +2,8 @@
   "schema": 1,
   "plugin": {
     "version": "0.7.0",
+    "version_authority": "compatibility.json plugin.version",
+    "license": "AGPL-3.0-only (original project code; see NOTICE for third-party material)",
     "manifest": "orcad.py (PEP 723 script metadata)"
   },
   "runtime": {
