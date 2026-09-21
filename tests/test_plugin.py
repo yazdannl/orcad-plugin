@@ -316,7 +316,28 @@ def test_preview_reports_missing_build123d():
         mod.preview_shape("result = Box(1, 1, 1)")
         raise AssertionError("expected RuntimeError without build123d")
     except RuntimeError as exc:
-        assert "build123d is not installed" in str(exc)
+        message = str(exc)
+        assert "build123d/OCP is not ready" in message
+        assert "hundreds of MB" in message
+        assert "network and write access" in message
+        assert "restart OrcaSlicer" in message
+        assert "retry dependency setup" in message
+
+
+def test_setup_trust_and_result_guidance_stays_consistent():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    html = mod.PAGE_HTML
+    for source in (readme, html):
+        assert "hundreds of MB" in source
+        assert "network and write access" in source
+        assert "no security sandbox" in source.lower()
+        assert "validation/UX only" in source
+        assert "result" in source
+    assert "End users need no Node.js or CDN to load the" in readme
+    assert "End users need no Node.js, CDN, or network" not in readme
+    assert "Bridge" in html and "CAD/model" in html
+    assert "CAD/model not checked" in html
+    assert "there is no separate dependency probe" in html
 
 
 def test_exports_route_formats_and_tessellation_settings(tmp_path):

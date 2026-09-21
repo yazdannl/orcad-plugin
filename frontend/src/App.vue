@@ -15,6 +15,7 @@ import {
   bridgeReadiness, bridgeTechnicalDetail, errorTechnicalDetail, normalizeBridgeMessage,
   preserveOnFailure, recoverPostFailure,
 } from './bridgeProtocol'
+import { SETUP_GUIDANCE, cadReadinessStatus } from './setupGuidance'
 import { copyPath, handoffMessage } from './handoff'
 import { parameterGroups, paramUi, isParamDisabled, validationMessages } from './parameterUi'
 import { buildExportPayload, formatQuality } from './exportPayload'
@@ -51,6 +52,8 @@ const logLines = ref(['ready.'])
 const notice = ref('')
 const bridgeState = ref('initializing')
 const bridgeDetail = ref('')
+const cadReadinessState = ref('unchecked')
+const cadStatus = computed(() => cadReadinessStatus(cadReadinessState.value))
 const previewError = ref(null)
 const operationError = ref(null)
 const codeError = ref(null)
@@ -433,6 +436,7 @@ function openExportsFolder() {
 function showResult(message) {
   const stateMessage = handoffMessage(message)
   const exportSucceeded = message.type === 'plate_result' ? message.export_ok === true : message.ok === true
+  cadReadinessState.value = exportSucceeded ? 'ready' : 'attention'
   if (exportSucceeded) {
     result.value = message
     exportStats.value = message.stats || {}
@@ -533,6 +537,7 @@ function processBridgeMessage(rawMessage) {
     if (!accepts(message, activePreview.value, true)) return
     activePreview.value = null
     if (message.ok) {
+      cadReadinessState.value = 'ready'
       clearError('preview')
       clearValidationErrors()
       preview.value = preserveOnFailure(preview.value, message.preview, true)
@@ -541,6 +546,7 @@ function processBridgeMessage(rawMessage) {
       previewWarnings.value = warningList(message.warnings)
       previewStatus.value = message.preview ? 'preview ready' : 'preview returned no mesh; showing last preview'
     } else {
+      cadReadinessState.value = 'attention'
       previewError.value = bridgeError('preview', message.error || 'The backend rejected the preview.')
       previewError.value.message = message.error || previewError.value.message
       setValidationErrors(message)
@@ -871,6 +877,7 @@ onBeforeUnmount(() => {
       <div class="font-bold tracking-wide">orcad <span class="font-normal text-[var(--accent)]">build123d</span></div>
       <div class="text-xs text-[var(--muted)]">{{ busy ? busyStatus : status }}</div>
       <span class="rounded border px-1.5 py-0.5 text-[11px]" :class="bridgeState === 'ready' ? 'border-[var(--accent)] text-[var(--accent)]' : 'border-[var(--danger)] text-[var(--danger)]'" role="status" aria-live="polite" :title="bridgeDetail">{{ bridgeStatus }}</span>
+      <span class="rounded border px-1.5 py-0.5 text-[11px]" :class="cadReadinessState === 'ready' ? 'border-[var(--accent)] text-[var(--accent)]' : cadReadinessState === 'attention' ? 'border-[var(--danger)] text-[var(--danger)]' : 'border-[var(--line)] text-[var(--muted)]'" role="status" :title="cadStatus.detail">{{ cadStatus.label }}</span>
       <button v-if="bridgeState === 'unavailable'" class="btn btn-small" type="button" @click="retryProtocol">Retry bridge</button>
       <button v-if="busy" class="btn btn-small" type="button" @click="cancelBusy">Cancel</button>
       <div class="flex-1" />
@@ -881,6 +888,12 @@ onBeforeUnmount(() => {
       <span class="max-w-64 text-[11px] text-[var(--muted)]" title="Export quality">{{ qualityHelp }}</span>
       <button class="btn btn-primary" type="button" :disabled="busy" @click="mode === 'objects' ? generate() : runCode()">Run / export</button>
     </header>
+
+    <section class="mx-auto grid max-w-[1500px] gap-2 border-b border-[var(--line)] bg-[var(--panel)] px-3.5 py-2.5 text-xs md:grid-cols-3" aria-labelledby="setup-heading" role="note">
+      <div><h1 id="setup-heading" class="font-bold">First-run setup</h1><p class="mt-1 text-[var(--muted)]">{{ SETUP_GUIDANCE.firstRun }}</p></div>
+      <p class="text-[var(--muted)]"><b class="text-[var(--fg)]">Recovery:</b> {{ SETUP_GUIDANCE.recovery }}</p>
+      <p class="text-[var(--muted)]"><b class="text-[var(--fg)]">Readiness:</b> {{ SETUP_GUIDANCE.readiness }}</p>
+    </section>
 
     <div v-if="protocolError" class="mx-auto max-w-[1500px] px-3.5 pt-3.5">
       <div class="rounded-lg border border-[var(--danger)] bg-[var(--panel)] p-3 text-xs" role="alert" aria-live="assertive"><b>{{ protocolError.title }}</b><p class="mt-1">{{ protocolError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ protocolError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ protocolError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retryProtocol">Retry</button></div>
@@ -930,6 +943,7 @@ onBeforeUnmount(() => {
         <section v-else id="code-panel" role="tabpanel" aria-label="Code" class="space-y-2 p-3">
           <div class="flex items-center justify-between gap-2"><label class="eyebrow" for="code">build123d code <span v-if="draft.dirty" class="text-[var(--accent)]">· edited</span></label><button v-if="draft.generatedCode" class="btn btn-small" type="button" @click="replaceWithGenerated">Replace draft</button></div>
           <textarea id="code" :value="draft.codeDraft" @input="editDraft" class="h-[410px] w-full resize-y rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2.5 font-mono text-xs leading-5 outline-none" spellcheck="false"></textarea>
+          <div class="rounded-lg border border-[var(--line)] bg-[var(--panel2)] p-2 text-[11px] leading-4" role="note" aria-label="Code execution help"><p>{{ SETUP_GUIDANCE.trust }}</p><p class="mt-1">{{ SETUP_GUIDANCE.result }}</p><p class="mt-1 text-[var(--muted)]">{{ SETUP_GUIDANCE.codeRecovery }}</p></div>
           <div v-if="codeError" class="rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert" aria-live="assertive"><b>{{ codeError.title }}</b><p class="mt-1">{{ codeError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ codeError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ codeError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('code')">Retry code generation</button></div>
           <div class="flex gap-1.5"><label class="sr-only" for="example">Example</label><select id="example" v-model="example" class="control min-w-0 flex-1"><option v-for="(_, key) in EXAMPLES" :key="key" :value="key">{{ key }}</option></select><button class="btn" type="button" @click="loadExample">Load</button><button class="btn btn-primary" type="button" :disabled="busy" @click="runCode">Run</button></div>
         </section>

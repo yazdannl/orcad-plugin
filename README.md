@@ -17,7 +17,9 @@ feature against OpenSCAD-rendered reference STLs (see `verify/`).
 The UI is a compact local Vue app with Tailwind CSS and a bundled Three.js
 runtime. `frontend/dist/index.html` is self-contained and loaded beside
 `orcad.py` when present; `orcad.py` also carries a compressed fallback copy so
-single-file installs still work. End users need no Node.js, CDN, or network.
+single-file installs still work. End users need no Node.js or CDN to load the
+UI. The first CAD run may still need network and write access to install the
+Python dependencies.
 
 ## Files
 
@@ -60,7 +62,36 @@ single-file installs still work. End users need no Node.js, CDN, or network.
 8. On a build without `orca.pages`, the plugin registers `orcad (needs Pages build)`
    script fallback with an upgrade message instead of a tab.
 
-First run installs `build123d+numpy` via bundled `uv` — slow (100s of MB OCP wheel), needs network.
+## First-run setup and readiness
+
+The first CAD preview or export may install `build123d` and `numpy` (including the
+OCP dependency) through Orca's bundled `uv`. This can download hundreds of MB,
+needs network and write access, and may take time. The UI reports **Bridge** and
+**CAD/model** status separately: bridge ready means only that the host messaging
+API is available; CAD/model readiness is checked by a preview or export. There is
+no separate dependency probe, so the plugin does not claim CAD is ready before a
+real operation succeeds.
+
+If setup or a build fails, check network and write permissions, reopen the Plugins
+dialog or restart OrcaSlicer to retry dependency setup, then run again. Read the
+error and `data_dir()/log/python_*.log` if it still fails. A failed operation does
+not replace the last successful preview or export.
+
+## Code trust and recovery
+
+Editable Python/build123d code is **trusted** and executes in-process with
+**no security sandbox**. Any import checks used while validating predefined objects
+are validation/UX only, not a security boundary. Do not run code you do not
+trust. Assign the final solid to `result`, for example:
+
+```python
+from build123d import *
+result = Box(20, 20, 20)
+```
+
+For a code error, fix the reported error and press **Run** again; the last
+successful result remains unchanged. A missing `result`, a flat sketch, or a
+non-solid can also prevent export.
 
 ## Plugin Hub publish
 
