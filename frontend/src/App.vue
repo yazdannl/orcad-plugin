@@ -1,7 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import {
-  BufferAttribute, BufferGeometry, DirectionalLight, HemisphereLight, Mesh,
+  BufferAttribute, BufferGeometry, DirectionalLight, Group, HemisphereLight, Mesh,
   MeshStandardMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three'
 import { EXAMPLES, PRIMS } from './primitives'
@@ -22,6 +22,7 @@ import {
   defaultParams, filterPrimitiveEntries, loadSettings, persistedParams,
   restoreParams, saveObjectParams, saveSettings, selectPrimitive,
 } from './objectState'
+import { fitCameraDistance, viewCameraState, zoomCameraDistance } from './viewerState'
 
 const initialSettings = loadSettings()
 const mode = ref('objects')
@@ -66,6 +67,7 @@ const cancellation = ref(null)
 const elapsedNow = ref(Date.now())
 let elapsedTimer
 let folderRequest = null
+let bridgeCleanup
 let noticeTimer
 
 const busy = computed(() => Boolean(activePreview.value || activeOperation.value || previewPending.value))
@@ -127,13 +129,16 @@ function post(message) {
 }
 function registerBridge() {
   bridgeState.value = 'initializing'
+  bridgeCleanup?.()
+  bridgeCleanup = null
   try {
     const onMessage = window.orca?.onMessage
     if (bridgeReadiness(window.orca) !== 'ready' || typeof onMessage !== 'function') {
       setBridgeUnavailable()
       return false
     }
-    onMessage.call(window.orca, handleMessage)
+    const cleanup = onMessage.call(window.orca, handleMessage)
+    if (typeof cleanup === 'function') bridgeCleanup = cleanup
     bridgeState.value = 'ready'
     bridgeDetail.value = ''
     return true
@@ -547,31 +552,58 @@ function processBridgeMessage(rawMessage) {
 let scene
 let camera
 let renderer
+let modelRoot
 let mesh
 let modelSize = 0
 let frameId
 const viewer = ref(null)
 let drag
+let resizeObserver
+let viewerHandlers
 
+function disposeMaterial(material) {
+  for (const item of Array.isArray(material) ? material : [material]) item?.dispose?.()
+}
 function removeMesh() {
   if (!mesh) return
-  scene.remove(mesh)
+  modelRoot?.remove(mesh)
   mesh.geometry.dispose()
-  mesh.material.dispose()
+  disposeMaterial(mesh.material)
   mesh = null
+}
+function setCameraView(view, distance = camera?.position.length()) {
+  if (!camera) return
+  const state = viewCameraState(view, distance)
+  camera.position.fromArray(state.position)
+  camera.up.fromArray(state.up)
+  camera.lookAt(...state.target)
 }
 function fitView() {
   if (!camera || !modelSize) return
-  camera.position.set(modelSize * 1.9, modelSize * 1.5, modelSize * 1.9)
+  const direction = camera.position.clone().normalize()
+  const distance = fitCameraDistance(modelSize, camera.aspect, camera.fov)
+  camera.position.copy(direction.multiplyScalar(distance))
   camera.lookAt(0, 0, 0)
 }
+function zoomView(factor) {
+  if (!camera || !modelSize) return
+  camera.position.setLength(zoomCameraDistance(camera.position.length(), modelSize, factor))
+  camera.lookAt(0, 0, 0)
+}
+function setStandardView(view) {
+  if (!camera) return
+  modelRoot?.rotation.set(0, 0, 0)
+  setCameraView(view, camera.position.length() || (modelSize ? fitCameraDistance(modelSize, camera.aspect, camera.fov) : 3))
+}
 function applyPreview(payload) {
+  const hadMesh = Boolean(mesh)
   removeMesh()
   if (!payload?.tris?.length) {
+    modelSize = 0
     previewStatus.value = 'no mesh returned'
     return
   }
-  if (!renderer) {
+  if (!renderer || !modelRoot) {
     previewStatus.value = 'WebGL unavailable'
     return
   }
@@ -584,14 +616,15 @@ function applyPreview(payload) {
   modelSize = Math.max(size.x, size.y, size.z, 1)
   mesh = new Mesh(geometry, new MeshStandardMaterial({ color: 0x35c4b0, roughness: 0.75, metalness: 0.05, wireframe: wireframe.value }))
   mesh.position.set(-center.x, -center.y, -center.z)
-  scene.add(mesh)
-  fitView()
+  modelRoot.add(mesh)
+  // Keep the root rotation and camera distance when a replacement preview arrives.
+  if (!hadMesh) fitView()
   previewStatus.value = `mesh ready · ${payload.total || payload.tris.length / 9} triangles`
 }
 function resizeViewer() {
-  if (!renderer || !viewer.value) return
-  const width = viewer.value.clientWidth || 640
-  const height = viewer.value.clientHeight || 400
+  if (!renderer || !viewer.value || !camera) return
+  const width = Math.max(viewer.value.clientWidth || 640, 1)
+  const height = Math.max(viewer.value.clientHeight || 400, 1)
   renderer.setSize(width, height, false)
   camera.aspect = width / height
   camera.updateProjectionMatrix()
@@ -599,7 +632,10 @@ function resizeViewer() {
 function initViewer() {
   try {
     scene = new Scene()
+    modelRoot = new Group()
+    scene.add(modelRoot)
     camera = new PerspectiveCamera(40, 1, 0.01, 100000)
+    setCameraView('iso', 3)
     renderer = new WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2))
     viewer.value.appendChild(renderer.domElement)
@@ -607,30 +643,47 @@ function initViewer() {
     const light = new DirectionalLight(0xffffff, 2.4)
     light.position.set(70, 100, 80)
     scene.add(light)
-    viewer.value.addEventListener('pointerdown', (event) => {
-      drag = { x: event.clientX, y: event.clientY }
-      viewer.value.setPointerCapture?.(event.pointerId)
-      viewer.value.style.cursor = 'grabbing'
-    })
-    viewer.value.addEventListener('pointermove', (event) => {
-      if (!drag || !mesh) return
-      mesh.rotation.y += (event.clientX - drag.x) * 0.01
-      mesh.rotation.x = Math.max(-1.45, Math.min(1.45, mesh.rotation.x + (event.clientY - drag.y) * 0.01))
-      drag = { x: event.clientX, y: event.clientY }
-    })
-    ;['pointerup', 'pointercancel', 'pointerleave'].forEach((name) => viewer.value.addEventListener(name, () => {
+    const finishDrag = () => {
       drag = null
-      viewer.value.style.cursor = 'grab'
-    }))
-    viewer.value.addEventListener('wheel', (event) => {
-      event.preventDefault()
-      if (!camera || !modelSize) return
-      camera.position.multiplyScalar(event.deltaY > 0 ? 1.1 : 0.9)
-      camera.position.setLength(Math.max(modelSize * 0.35, Math.min(modelSize * 8, camera.position.length())))
-      camera.lookAt(0, 0, 0)
-    }, { passive: false })
+      if (viewer.value) viewer.value.style.cursor = 'grab'
+    }
+    viewerHandlers = {
+      finishDrag,
+      pointerdown: (event) => {
+        drag = { x: event.clientX, y: event.clientY }
+        viewer.value.setPointerCapture?.(event.pointerId)
+        viewer.value.style.cursor = 'grabbing'
+      },
+      pointermove: (event) => {
+        if (!drag || !mesh) return
+        modelRoot.rotation.y += (event.clientX - drag.x) * 0.01
+        modelRoot.rotation.x = Math.max(-1.45, Math.min(1.45, modelRoot.rotation.x + (event.clientY - drag.y) * 0.01))
+        drag = { x: event.clientX, y: event.clientY }
+      },
+      wheel: (event) => {
+        event.preventDefault()
+        zoomView(event.deltaY > 0 ? 1.1 : 0.9)
+      },
+    }
+    viewer.value.addEventListener('pointerdown', viewerHandlers.pointerdown)
+    viewer.value.addEventListener('pointermove', viewerHandlers.pointermove)
+    viewer.value.addEventListener('wheel', viewerHandlers.wheel, { passive: false })
+    for (const name of ['pointerup', 'pointercancel', 'pointerleave']) {
+      viewer.value.addEventListener(name, viewerHandlers.finishDrag)
+    }
     resizeViewer()
-    window.addEventListener('resize', resizeViewer)
+    if (typeof ResizeObserver === 'function') {
+      try {
+        resizeObserver = new ResizeObserver(resizeViewer)
+        resizeObserver.observe(viewer.value)
+      } catch {
+        resizeObserver?.disconnect()
+        resizeObserver = null
+        window.addEventListener('resize', resizeViewer)
+      }
+    } else {
+      window.addEventListener('resize', resizeViewer)
+    }
     frameId = requestAnimationFrame(renderFrame)
   } catch (error) {
     previewStatus.value = 'preview unavailable'
@@ -639,13 +692,13 @@ function initViewer() {
 }
 function renderFrame() {
   frameId = requestAnimationFrame(renderFrame)
-  if (mesh && spinning.value) mesh.rotation.y += 0.005
+  if (modelRoot && spinning.value) modelRoot.rotation.y += 0.005
   renderer?.render(scene, camera)
 }
 function resetView() {
-  if (!mesh) return
-  mesh.rotation.set(0, 0, 0)
-  fitView()
+  if (!camera) return
+  modelRoot?.rotation.set(0, 0, 0)
+  setCameraView('iso', modelSize ? fitCameraDistance(modelSize, camera.aspect, camera.fov) : 3)
 }
 function toggleWireframe() {
   wireframe.value = !wireframe.value
@@ -689,8 +742,20 @@ onBeforeUnmount(() => {
   clearTimeout(previewTimer)
   clearInterval(elapsedTimer)
   cancelAnimationFrame(frameId)
-  window.removeEventListener('resize', resizeViewer)
+  resizeObserver?.disconnect()
+  if (!resizeObserver) window.removeEventListener('resize', resizeViewer)
+  if (viewer.value && viewerHandlers) {
+    viewer.value.removeEventListener('pointerdown', viewerHandlers.pointerdown)
+    viewer.value.removeEventListener('pointermove', viewerHandlers.pointermove)
+    viewer.value.removeEventListener('wheel', viewerHandlers.wheel)
+    for (const name of ['pointerup', 'pointercancel', 'pointerleave']) {
+      viewer.value.removeEventListener(name, viewerHandlers.finishDrag)
+    }
+  }
+  removeMesh()
   renderer?.dispose()
+  bridgeCleanup?.()
+  bridgeCleanup = null
   clearTimeout(noticeTimer)
 })
 </script>
@@ -765,10 +830,10 @@ onBeforeUnmount(() => {
 
       <main class="grid min-w-0 gap-3.5">
         <section class="overflow-hidden rounded-xl border border-[var(--line)] bg-[var(--panel)]">
-          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><button v-if="previewError" class="btn btn-small" type="button" @click="retry('preview')">Retry preview</button><button class="btn btn-small" @click="resetView">Reset</button><button class="btn btn-small" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" :disabled="busy" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
+          <div class="flex flex-wrap items-center gap-1.5 border-b border-[var(--line)] px-2.5 py-2"><b class="text-sm">Preview</b><span class="text-xs text-[var(--muted)]">{{ previewStatus }}</span><div class="flex-1" /><div class="flex items-center gap-1" role="group" aria-label="Camera views (build123d Z-up)"><button class="btn btn-small" type="button" title="Front view: look along build123d -Y, Z up" aria-label="Front view, build123d negative Y with Z up" @click="setStandardView('front')">Front</button><button class="btn btn-small" type="button" title="Top view: look down build123d +Z" aria-label="Top view, build123d positive Z" @click="setStandardView('top')">Top</button><button class="btn btn-small" type="button" title="Side view: look along build123d +X, Z up" aria-label="Side view, build123d positive X with Z up" @click="setStandardView('side')">Side</button></div><div class="flex items-center gap-1" role="group" aria-label="Zoom controls"><button class="btn btn-small" type="button" title="Zoom out" aria-label="Zoom out" @click="zoomView(1.15)">−</button><button class="btn btn-small" type="button" title="Fit model in preview" aria-label="Fit model in preview" @click="fitView">Fit</button><button class="btn btn-small" type="button" title="Zoom in" aria-label="Zoom in" @click="zoomView(0.87)">+</button></div><button v-if="previewError" class="btn btn-small" type="button" @click="retry('preview')">Retry preview</button><button class="btn btn-small" type="button" @click="resetView">Reset</button><button class="btn btn-small" type="button" @click="toggleWireframe">Wireframe: {{ wireframe ? 'on' : 'off' }}</button><button class="btn btn-small" type="button" @click="spinning = !spinning">Spin: {{ spinning ? 'on' : 'off' }}</button><button class="btn btn-primary btn-small" :disabled="busy" title="Always exports STL for OrcaSlicer" @click="sendPlate">Send to plate</button></div>
           <div ref="viewer" class="viewer relative h-[510px] bg-[var(--bg)] max-sm:h-[330px]"><div v-if="!preview?.tris?.length" class="pointer-events-none absolute inset-0 grid place-items-center text-center text-xs text-[var(--muted)]"><span><b class="mb-1 block text-[var(--fg)]">Nothing previewed yet</b>Choose a model and adjust a parameter.</span></div></div>
           <div v-if="previewError" class="border-t border-[var(--danger)] px-2.5 py-2 text-xs" role="alert"><b>{{ previewError.title }}</b><p class="mt-1">{{ previewError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ previewError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ previewError.detail }}</pre></details></div>
-          <div class="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] px-2.5 py-2 text-xs"><span v-for="([key, value]) in statEntries" :key="key" class="rounded bg-[var(--panel2)] px-1.5 py-0.5">{{ key }}: <b class="font-mono font-normal">{{ value }}</b></span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel to zoom</span></div>
+          <div class="flex flex-wrap items-center gap-1.5 border-t border-[var(--line)] px-2.5 py-2 text-xs"><span v-for="([key, value]) in statEntries" :key="key" class="rounded bg-[var(--panel2)] px-1.5 py-0.5">{{ key }}: <b class="font-mono font-normal">{{ value }}</b></span><span class="flex-1" /><span class="text-[var(--muted)]">drag to rotate · wheel or buttons to zoom · build123d Z-up</span></div>
         </section>
         <div class="grid gap-3.5 md:grid-cols-2"><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Last export</h2><div v-if="operationError" class="mb-3 rounded-lg border border-[var(--danger)] p-2 text-xs" role="alert"><b>{{ operationError.title }}</b><p class="mt-1">{{ operationError.message }}</p><p class="mt-1 text-[var(--muted)]">{{ operationError.action }}</p><details class="mt-2"><summary class="cursor-pointer">Technical detail</summary><pre class="mt-1 whitespace-pre-wrap text-[11px]">{{ operationError.detail }}</pre></details><button class="btn btn-small mt-2" type="button" @click="retry('operation')">Retry export</button></div><div v-if="!result" class="min-h-19 text-xs text-[var(--muted)]">Nothing exported yet.</div><div v-else class="space-y-2 text-xs"><p v-if="result.message" class="whitespace-pre-wrap text-[var(--muted)]">{{ result.message }}</p><p v-if="result.error" class="whitespace-pre-wrap text-[var(--danger)]">{{ result.error }}</p><div v-if="result.file" class="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1"><span class="text-[var(--muted)]">file</span><span class="break-all font-mono">{{ result.file }}</span><span class="text-[var(--muted)]">size</span><span class="font-mono">{{ result.size_bytes }} bytes</span></div><div v-if="result.file" class="flex flex-wrap gap-1.5"><button class="btn btn-small" type="button" @click="copyResultPath">Copy path</button><button class="btn btn-small" type="button" @click="openExportsFolder">Open exports folder</button></div><p v-if="result.file" class="text-[var(--muted)]">If it is not on the plate, drag the file above into OrcaSlicer Prepare.</p></div></section><section class="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3"><h2 class="mb-2 text-xs font-bold">Activity</h2><pre class="h-19 overflow-auto whitespace-pre-wrap rounded-lg border border-[var(--line)] bg-[var(--bg)] p-2 font-mono text-[11px] leading-4">{{ logLines.join('\n') }}</pre></section></div>
       </main>
