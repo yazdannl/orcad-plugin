@@ -4,7 +4,7 @@ import {
   BufferAttribute, BufferGeometry, DirectionalLight, Group, HemisphereLight, Mesh,
   MeshStandardMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three'
-import { EXAMPLES, PRIMS } from './primitives'
+import { EXAMPLES, PRIMS, PRIMS_SPEC_FINGERPRINT } from './primitives'
 import {
   createDraftState, markDraftEdited, receiveGeneratedCode, replaceDraft,
   replaceDraftWith,
@@ -870,7 +870,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--bg)] text-[var(--fg)]">
+  <div class="min-h-screen bg-[var(--bg)] text-[var(--fg)]" :data-orcad-spec-fingerprint="PRIMS_SPEC_FINGERPRINT">
     <div class="sr-only" aria-live="polite" aria-atomic="true">{{ liveStatus }}</div>
     <div v-if="notice" class="fixed right-3 top-3 z-10 rounded-lg border border-[var(--accent)] bg-[var(--panel)] px-3 py-2 text-xs shadow-lg" role="status">{{ notice }}</div>
     <header class="flex h-13 items-center gap-3 border-b border-[var(--line)] bg-[var(--panel)] px-4">

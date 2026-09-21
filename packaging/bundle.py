@@ -12,20 +12,26 @@ carry `# spec:` comments, e.g.::
 This script extracts the UI spec from those variables, bakes per-object
 SPEC + TEMPLATE data into orcad.py, embeds the compiled frontend fallback,
 and smoke-tests every object (defaults + min/max extremes must stay valid
-python). The frontend is built separately with `cd frontend && npm run build`.
+python). The release command builds the frontend before embedding its artifact.
 
 Single source of truth: objects/*.py. Never edit the generated regions.
 
 Usage:
-    python3 packaging/bundle.py --write   # regenerate Python + frontend spec regions
-    python3 packaging/bundle.py --check   # exit 1 when out of sync (tests)
+    python3 packaging/bundle.py --release        # build, bundle, test, and audit
+    python3 packaging/bundle.py --release --check  # CI check without writing files
+    python3 packaging/bundle.py --write         # regenerate after a current frontend build
+    python3 packaging/bundle.py --check         # exit 1 when generated files are stale
 """
 import ast
 import base64
 import gzip
+import hashlib
 import json
 import re
+import shlex
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +45,10 @@ FRONTEND_END = "/* END GENERATED PRIMS */"
 HTML_BEGIN = "# BEGIN BUNDLED FRONTEND"
 HTML_END = "# END BUNDLED FRONTEND"
 FRONTEND_ASSET = ROOT / "frontend" / "dist" / "index.html"
+GENERATED_PATHS = frozenset({
+    "orcad.py", "frontend/src/primitives.js", "frontend/dist/index.html",
+})
+FRONTEND_FINGERPRINT_RE = re.compile(r"\b([a-f0-9]{64})\b")
 SPEC_LINE_RE = re.compile(
     r"^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[^#\n]*#\s*spec\s*:\s*(.+)$"
 )
@@ -255,14 +265,14 @@ def _replace_region(text, begin, end, fresh):
     return "".join(lines[:bi + 1]) + fresh + "\n" + "".join(lines[ei:])
 
 
-def build_frontend_asset():
-    compressed = gzip.compress(FRONTEND_ASSET.read_bytes(), compresslevel=9, mtime=0)
+def build_frontend_asset(asset=FRONTEND_ASSET):
+    compressed = gzip.compress(asset.read_bytes(), compresslevel=9, mtime=0)
     encoded = base64.b64encode(compressed).decode("ascii")
     lines = "\\n".join(encoded[index:index + 96] for index in range(0, len(encoded), 96))
     return f'_EMBEDDED_FRONTEND_GZIP = b"""\\n{lines}\\n"""'
 
 
-def build_frontend_region(objects):
+def frontend_specs(objects):
     specs = {}
     for obj in objects:
         params = []
@@ -284,37 +294,197 @@ def build_frontend_region(objects):
         if obj["warnings"]:
             spec["warnings"] = obj["warnings"]
         specs[obj["name"]] = spec
-    return "export const PRIMS = " + json.dumps(specs, separators=(",", ":")) + ";"
+    return specs
 
 
-def build_target():
-    objects = _load_objects()
+def spec_fingerprint(objects):
+    payload = json.dumps(frontend_specs(objects), separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def build_frontend_region(objects):
+    specs = json.dumps(frontend_specs(objects), separators=(",", ":"))
+    fingerprint = spec_fingerprint(objects)
+    return (f'export const PRIMS_SPEC_FINGERPRINT = "{fingerprint}";\n'
+            f"export const PRIMS = {specs};")
+
+
+def frontend_asset_matches(objects, asset=FRONTEND_ASSET):
+    if not asset.is_file():
+        return False
+    expected = spec_fingerprint(objects)
+    return any(match.group(1) == expected
+               for match in FRONTEND_FINGERPRINT_RE.finditer(asset.read_text(encoding="utf-8")))
+
+
+def build_target(objects=None, asset=FRONTEND_ASSET):
+    objects = _load_objects() if objects is None else objects
     text = TARGET.read_text(encoding="utf-8")
     text = _replace_region(text, PY_BEGIN, PY_END, build_py_region(objects))
-    return _replace_region(text, HTML_BEGIN, HTML_END, build_frontend_asset())
+    return _replace_region(text, HTML_BEGIN, HTML_END, build_frontend_asset(asset))
 
 
-def build_frontend_target():
-    objects = _load_objects()
+def build_frontend_target(objects=None):
+    objects = _load_objects() if objects is None else objects
     text = FRONTEND_TARGET.read_text(encoding="utf-8")
     return _replace_region(text, FRONTEND_BEGIN, FRONTEND_END, build_frontend_region(objects))
 
 
 def check():
-    return (TARGET.read_text(encoding="utf-8") == build_target()
-            and FRONTEND_TARGET.read_text(encoding="utf-8") == build_frontend_target())
+    try:
+        objects = _load_objects()
+        return (FRONTEND_TARGET.read_text(encoding="utf-8") == build_frontend_target(objects)
+                and frontend_asset_matches(objects)
+                and TARGET.read_text(encoding="utf-8") == build_target(objects))
+    except (OSError, StopIteration, ValueError):
+        return False
 
 
-def write():
-    TARGET.write_text(build_target(), encoding="utf-8")
-    FRONTEND_TARGET.write_text(build_frontend_target(), encoding="utf-8")
+def write_generated_specs(objects=None):
+    objects = _load_objects() if objects is None else objects
+    FRONTEND_TARGET.write_text(build_frontend_target(objects), encoding="utf-8")
+    return objects
+
+
+def write(objects=None):
+    objects = _load_objects() if objects is None else objects
+    if not frontend_asset_matches(objects):
+        raise RuntimeError(
+            "frontend/dist/index.html is missing or stale for current object specs; "
+            "run `python3 packaging/bundle.py --release`"
+        )
+    TARGET.write_text(build_target(objects), encoding="utf-8")
+    FRONTEND_TARGET.write_text(build_frontend_target(objects), encoding="utf-8")
+
+
+def _status_paths():
+    result = subprocess.run(
+        ["git", "status", "--porcelain=v1", "--untracked-files=all"],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    if result.returncode:
+        raise RuntimeError(f"git status failed with exit {result.returncode}")
+    paths = set()
+    for line in result.stdout.splitlines():
+        if len(line) < 4:
+            continue
+        path = line[3:]
+        if " -> " in path:  # porcelain rename/copy entry
+            paths.update(path.split(" -> ", 1))
+        else:
+            paths.add(path)
+    return frozenset(paths)
+
+
+def _run_stage(label, command, cwd=ROOT):
+    rendered = shlex.join(str(part) for part in command)
+    print(f"[release] {label}: {rendered}", flush=True)
+    result = subprocess.run(command, cwd=cwd, check=False)
+    if result.returncode:
+        raise RuntimeError(f"{label} failed with exit {result.returncode}")
+
+
+def _require_generated_frontend(objects):
+    expected = build_frontend_target(objects)
+    actual = FRONTEND_TARGET.read_text(encoding="utf-8")
+    if actual != expected:
+        raise RuntimeError(
+            "frontend/src/primitives.js is out of date for objects/*.py; "
+            "the release pipeline must derive specs before building the frontend"
+        )
+
+
+def _require_frontend_artifact(objects, artifact=FRONTEND_ASSET):
+    if not frontend_asset_matches(objects, artifact):
+        try:
+            label = artifact.relative_to(ROOT)
+        except ValueError:
+            label = artifact
+        raise RuntimeError(
+            f"{label} is stale or missing the current object-spec fingerprint; "
+            "rebuild the frontend before embedding it"
+        )
+
+
+def _run_frontend_build(output_dir=None):
+    command = ["npm", "run", "build"]
+    if output_dir is not None:
+        command.extend(["--", "--outDir", str(output_dir)])
+    _run_stage("build frontend", command, cwd=ROOT / "frontend")
+
+
+def _check_reproducible_frontend(objects):
+    with tempfile.TemporaryDirectory(prefix="orcad-frontend-") as temporary:
+        artifact = Path(temporary) / "index.html"
+        _run_frontend_build(Path(temporary))
+        if not artifact.is_file():
+            raise RuntimeError("frontend build did not produce index.html")
+        if artifact.read_bytes() != FRONTEND_ASSET.read_bytes():
+            raise RuntimeError(
+                "frontend/dist/index.html is not the reproducible output of the current "
+                "frontend source; run `python3 packaging/bundle.py --release`"
+            )
+        _require_frontend_artifact(objects, artifact)
+
+
+def release(check_only=False):
+    before = _status_paths()
+    objects = _load_objects()
+    print("[release] derive object specs", flush=True)
+    if check_only:
+        _require_generated_frontend(objects)
+        _check_reproducible_frontend(objects)
+        _require_frontend_artifact(objects)
+        if not check():
+            raise RuntimeError("generated Python bundle, frontend specs, or embedded page is out of sync")
+    else:
+        write_generated_specs(objects)
+        _require_generated_frontend(objects)
+        _run_frontend_build()
+        _require_frontend_artifact(objects)
+        print("[release] embed exact frontend artifact", flush=True)
+        write(objects)
+        if not check():
+            raise RuntimeError("bundle synchronization check failed after embedding")
+
+    print("[release] bundle synchronization: passed", flush=True)
+    _run_stage("Python regression tests", [sys.executable, "-m", "pytest", "tests/", "-q"])
+    _run_stage("frontend regression tests", ["npm", "test"], cwd=ROOT / "frontend")
+    _run_stage("diff whitespace check", ["git", "diff", "--check"])
+
+    after = _status_paths()
+    unexpected_after = after - before - GENERATED_PATHS
+    if unexpected_after:
+        names = ", ".join(sorted(unexpected_after))
+        raise RuntimeError(f"pipeline created unexpected changes: {names}")
+    if check_only and after != before:
+        names = ", ".join(sorted(after ^ before))
+        raise RuntimeError(f"check-only pipeline changed the working tree: {names}")
+    print("[release] passed", flush=True)
+
+
+def _main(argv=None):
+    args = set(sys.argv[1:] if argv is None else argv)
+    if "--release" in args:
+        unknown = args - {"--release", "--check"}
+        if unknown:
+            raise SystemExit(f"usage: {Path(__file__).name} --release [--check]")
+        release(check_only="--check" in args)
+        return 0
+    if args == {"--write"}:
+        write()
+        print("bundled objects into orcad.py and frontend/src/primitives.js")
+        return 0
+    if args == {"--check"}:
+        return 0 if check() else 1
+    raise SystemExit(
+        f"usage: {Path(__file__).name} --release [--check] | --write | --check"
+    )
 
 
 if __name__ == "__main__":
-    if "--write" in sys.argv:
-        write()
-        print("bundled objects into orcad.py and frontend/src/primitives.js")
-    elif "--check" in sys.argv:
-        sys.exit(0 if check() else 1)
-    else:
-        sys.exit("usage: bundle.py --write | --check")
+    try:
+        sys.exit(_main())
+    except (OSError, RuntimeError, ValueError) as exc:
+        print(f"bundle: ERROR: {exc}", file=sys.stderr)
+        sys.exit(1)
