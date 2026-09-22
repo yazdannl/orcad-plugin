@@ -27,6 +27,22 @@ single-file installs still work. End users need no Node.js or CDN to load the
 UI. The first CAD run may still need network and write access to install the
 Python dependencies.
 
+## Reusable OpenSCAD/Gridfinity backend
+
+The React reset backend is in `openscad/`. It vendors the unchanged
+`kennetek/gridfinity-rebuilt-openscad` source at commit
+`910e22d8607fd7f5f51ad5e5cbc5287a76810bfd`, including its MIT license and
+attribution. `openscad/catalog.json` is the canonical Bin/Baseplate schema;
+`openscad/runner.py` uses safe subprocess argv lists and exposes draft,
+balanced, and final quality profiles with timing in every result. These are
+quality choices, not universal sub-second render promises.
+
+OpenSCAD is an external dependency. The backend probes the executable and
+rejects local OpenSCAD **2021.01** for this upstream source because its
+`$`-scoped grid machinery is not reliably supported there; use a current or
+2023-era build and run the optional smoke test. No web framework, build123d,
+numpy, or speculative daemon is required by this slice.
+
 ## Files
 
 - `orcad.py` — plugin entry point. It loads the compiled frontend beside it

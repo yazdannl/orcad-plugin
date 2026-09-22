@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "source": {
+    "repository": "https://github.com/kennetek/gridfinity-rebuilt-openscad",
+    "revision": "910e22d8607fd7f5f51ad5e5cbc5287a76810bfd",
+    "license": "MIT"
+  },
+  "quality_profiles": {
+    "draft": {"fa": 12.0, "fs": 0.8},
+    "balanced": {"fa": 6.0, "fs": 0.3},
+    "final": {"fa": 3.0, "fs": 0.1}
+  },
+  "objects": {
+    "bin": {
+      "label": "Gridfinity Bin",
+      "entry_file": "gridfinity-rebuilt-bins.scad",
+      "parameters": [
+        {"variable":"gridx","label":"Grid X","type":"integer","default":3,"min":1,"max":20,"step":1,"group":"General","help":"Number of bases along the X axis."},
+        {"variable":"gridy","label":"Grid Y","type":"integer","default":2,"min":1,"max":20,"step":1,"group":"General","help":"Number of bases along the Y axis."},
+        {"variable":"gridz","label":"Grid height","type":"number","default":6,"min":0,"max":100,"step":0.1,"group":"Height","help":"Height in Gridfinity units when height mode is 0."},
+        {"variable":"half_grid","label":"Half grid","type":"boolean","default":false,"group":"General","help":"Use half-grid bases; this also limits holes to corners."},
+        {"variable":"gridz_define","label":"Height mode","type":"integer","default":0,"min":0,"max":3,"step":1,"group":"Height","options":[{"value":0,"label":"7 mm increments (excludes lip)"},{"value":1,"label":"Internal mm (excludes base and lip)"},{"value":2,"label":"External mm (excludes lip)"},{"value":3,"label":"External mm"}],"help":"Select how gridz is interpreted."},
+        {"variable":"height_internal","label":"Internal height override","type":"number","default":0,"min":0,"max":500,"step":0.1,"group":"Height","help":"Override the solid fill height; zero uses the calculated height."},
+        {"variable":"enable_zsnap","label":"Snap height to 7 mm","type":"boolean","default":false,"group":"Height","help":"Round the calculated height up to a 7 mm increment."},
+        {"variable":"include_lip","label":"Stacking lip","type":"boolean","default":true,"group":"Height","help":"Include the stacking lip."},
+        {"variable":"divx","label":"Divisions X","type":"integer","default":1,"min":0,"max":20,"step":1,"group":"Compartments","help":"Number of X divisions; zero makes a solid bin."},
+        {"variable":"divy","label":"Divisions Y","type":"integer","default":1,"min":0,"max":20,"step":1,"group":"Compartments","help":"Number of Y divisions; zero makes a solid bin."},
+        {"variable":"depth","label":"Compartment depth","type":"number","default":0,"min":0,"max":500,"step":0.1,"group":"Compartments","unit":"mm","help":"Compartment depth; zero uses the full available depth."},
+        {"variable":"cut_cylinders","label":"Cylindrical compartments","type":"boolean","default":false,"group":"Compartments","help":"Use cylindrical cutouts instead of rectangular compartments."},
+        {"variable":"cd","label":"Cylinder diameter","type":"number","default":10,"min":0.1,"max":200,"step":0.1,"group":"Compartments","unit":"mm","depends_on":["cut_cylinders"],"help":"Diameter of cylindrical cutouts."},
+        {"variable":"c_chamfer","label":"Cylinder top chamfer","type":"number","default":0.5,"min":0,"max":50,"step":0.1,"group":"Compartments","unit":"mm","depends_on":["cut_cylinders"],"help":"Chamfer around cylindrical cutout rims."},
+        {"variable":"style_tab","label":"Tab style","type":"integer","default":1,"min":0,"max":5,"step":1,"group":"Compartment features","options":[{"value":0,"label":"Full"},{"value":1,"label":"Auto"},{"value":2,"label":"Left"},{"value":3,"label":"Center"},{"value":4,"label":"Right"},{"value":5,"label":"None"}],"help":"Style of label tabs."},
+        {"variable":"place_tab","label":"Tab placement","type":"integer","default":0,"min":0,"max":1,"step":1,"group":"Compartment features","options":[{"value":0,"label":"Everywhere"},{"value":1,"label":"Top-left division"}],"help":"Which divisions receive tabs."},
+        {"variable":"scoop","label":"Scoop amount","type":"number","default":1,"min":0,"max":1,"step":0.1,"group":"Compartment features","help":"Zero disables the scoop; one is the standard scoop."},
+        {"variable":"only_corners","label":"Holes only at corners","type":"boolean","default":false,"group":"Base holes","help":"Only cut mounting holes at the outer corners."},
+        {"variable":"refined_holes","label":"Refined holes","type":"boolean","default":true,"group":"Base holes","conflicts_with":["magnet_holes"],"help":"Use Gridfinity refined holes."},
+        {"variable":"magnet_holes","label":"Magnet holes","type":"boolean","default":false,"group":"Base holes","conflicts_with":["refined_holes"],"help":"Cut holes for 6 mm x 2 mm magnets."},
+        {"variable":"screw_holes","label":"M3 screw holes","type":"boolean","default":false,"group":"Base holes","help":"Cut holes for M3 screws."},
+        {"variable":"crush_ribs","label":"Crush ribs","type":"boolean","default":true,"group":"Base holes","depends_on":["magnet_holes"],"help":"Add ribs to retain magnets."},
+        {"variable":"chamfer_holes","label":"Chamfer holes","type":"boolean","default":true,"group":"Base holes","help":"Chamfer magnet and screw holes."},
+        {"variable":"printable_hole_top","label":"Supportless hole tops","type":"boolean","default":true,"group":"Base holes","help":"Add printable bridges to hole tops."},
+        {"variable":"enable_thumbscrew","label":"Thumbscrew holes","type":"boolean","default":false,"group":"Base holes","help":"Add Gridfinity refined thumbscrew holes."}
+      ]
+    },
+    "baseplate": {
+      "label": "Gridfinity Baseplate",
+      "entry_file": "gridfinity-rebuilt-baseplate.scad",
+      "parameters": [
+        {"variable":"gridx","label":"Grid X","type":"integer","default":1,"min":0,"max":20,"step":1,"group":"General","help":"Number of bases along X; zero allows fit-to-drawer sizing."},
+        {"variable":"gridy","label":"Grid Y","type":"integer","default":1,"min":0,"max":20,"step":1,"group":"General","help":"Number of bases along Y; zero allows fit-to-drawer sizing."},
+        {"variable":"d_screw","label":"Screw diameter","type":"number","default":3.35,"min":0.1,"max":20,"step":0.05,"group":"Screw-together","unit":"mm","help":"Screw clearance diameter."},
+        {"variable":"d_screw_head","label":"Screw head diameter","type":"number","default":5,"min":0.1,"max":30,"step":0.1,"group":"Screw-together","unit":"mm","help":"Screw head diameter."},
+        {"variable":"screw_spacing","label":"Screw spacing","type":"number","default":0.5,"min":0,"max":20,"step":0.1,"group":"Screw-together","unit":"mm","help":"Extra spacing between screw holes."},
+        {"variable":"n_screws","label":"Screws per grid block","type":"integer","default":1,"min":1,"max":3,"step":1,"group":"Screw-together","help":"Number of screws per seam."},
+        {"variable":"distancex","label":"Minimum X","type":"number","default":0,"min":0,"max":2000,"step":1,"group":"Fit to drawer","unit":"mm","help":"Minimum plate length; zero uses the grid size."},
+        {"variable":"distancey","label":"Minimum Y","type":"number","default":0,"min":0,"max":2000,"step":1,"group":"Fit to drawer","unit":"mm","help":"Minimum plate width; zero uses the grid size."},
+        {"variable":"fitx","label":"Fit X","type":"number","default":0,"min":-1,"max":1,"step":0.1,"group":"Fit to drawer","help":"Align extra X space left, centered, or right."},
+        {"variable":"fity","label":"Fit Y","type":"number","default":0,"min":-1,"max":1,"step":0.1,"group":"Fit to drawer","help":"Align extra Y space bottom, centered, or top."},
+        {"variable":"style_plate","label":"Baseplate style","type":"integer","default":3,"min":0,"max":4,"step":1,"group":"Styles","options":[{"value":0,"label":"Thin"},{"value":1,"label":"Weighted"},{"value":2,"label":"Skeletonized"},{"value":3,"label":"Screw together"},{"value":4,"label":"Screw together minimal"}],"help":"Select the plate construction style."},
+        {"variable":"style_hole","label":"Mount hole style","type":"integer","default":0,"min":0,"max":2,"step":1,"group":"Styles","options":[{"value":0,"label":"None"},{"value":1,"label":"Countersink"},{"value":2,"label":"Counterbore"}],"help":"Select the screw-hole head shape."},
+        {"variable":"enable_magnet","label":"Magnet holes","type":"boolean","default":true,"group":"Mounting","help":"Cut holes for 6 mm x 2 mm magnets."},
+        {"variable":"crush_ribs","label":"Crush ribs","type":"boolean","default":true,"group":"Mounting","depends_on":["enable_magnet"],"help":"Add ribs to retain magnets."},
+        {"variable":"chamfer_holes","label":"Chamfer holes","type":"boolean","default":true,"group":"Mounting","depends_on":["enable_magnet"],"help":"Chamfer magnet holes."}
+      ]
+    }
+  }
+}
