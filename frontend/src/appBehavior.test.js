@@ -12,7 +12,7 @@ import {
 import { validationMessages } from './parameterUi.js'
 import { PRIMS } from './primitives.js'
 
-// Lightweight App.vue state harness: it uses the same extracted routing helpers and a
+// Lightweight React state harness: it uses the same extracted routing helpers and a
 // synchronous mock of the Orca bridge, without importing Vue, WebGL, or OrcaSlicer.
 class MockOrcaBridge {
   constructor() {
