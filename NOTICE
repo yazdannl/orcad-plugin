@@ -12,11 +12,12 @@ The Gridfinity Bin and Gridfinity Baseplate geometry are ports or approximating
 ports of kennetek/gridfinity-rebuilt-openscad. The source files retain the
 upstream project and source-file references used during the port.
 
-This checkout does not contain the upstream repository's license text or a
-pinned upstream revision. The upstream Gridfinity license and any additional
-attribution requirements MUST be verified from the authoritative upstream
-source before redistributing the port or a release containing it. This notice
-does not guess, grant, or relicense rights to upstream code.
+The reusable OpenSCAD backend vendors the upstream source unchanged at commit
+910e22d8607fd7f5f51ad5e5cbc5287a76810bfd under
+`openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/`. That directory retains
+the upstream MIT `LICENSE` and attribution. The vendored source remains under
+its MIT terms and is not relicensed by this repository. Any additional
+attribution requirements MUST be verified against that authoritative source. Release checks MUST be verified against that authoritative vendored license and attribution.
 
 Host attribution
 ----------------
