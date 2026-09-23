@@ -66,6 +66,9 @@ def test_feature_status_and_installation_docs_match_supported_behavior():
         "drag the",
         "npm test",
         "verify/compatibility.py --run",
+        "silently downloads a pinned official OpenSCAD snapshot",
+        "SHA-256 digest",
+        "per-user cache",
     ):
         assert phrase in readme
     assert "complete port" not in readme.lower()

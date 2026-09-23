@@ -14,6 +14,8 @@ class ErrorCode:
     UNSUPPORTED_VERSION = "openscad_unsupported_version"
     NOT_FOUND = "openscad_not_found"
     PROBE_FAILED = "openscad_probe_failed"
+    INSTALL_FAILED = "openscad_install_failed"
+    UNSUPPORTED_PLATFORM = "openscad_unsupported_platform"
     SOURCE_NOT_FOUND = "source_not_found"
     OUTPUT_ERROR = "output_error"
     TIMEOUT = "timeout"

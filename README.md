@@ -29,7 +29,8 @@ single-file installs still work. The reusable OpenSCAD backend and pinned
 vendor tree are also embedded in `orcad.py`; a beside-plugin `openscad/`
 directory is used when the full package is installed and is convenient for
 backend development. Gridfinity object mode still needs a modern OpenSCAD
-executable; Code mode needs the declared build123d dependencies.
+executable, which the Pages startup setup provisions when a supported artifact
+is available; Code mode needs the declared build123d dependencies.
 
 ## Reusable OpenSCAD/Gridfinity backend
 
@@ -37,15 +38,22 @@ The reusable backend is in `openscad/`. It vendors the unchanged
 `kennetek/gridfinity-rebuilt-openscad` source at commit
 `910e22d8607fd7f5f51ad5e5cbc5287a76810bfd`, including its MIT license and
 attribution. `openscad/catalog.json` is the canonical Bin/Baseplate schema;
-`openscad/runner.py` uses safe subprocess argv lists, an opt-in content-addressed
-STL cache, and draft, balanced, and final quality profiles with timing in every
-result. These are quality choices, not universal sub-second render promises.
+`openscad/runner.py` uses safe subprocess argv lists, explicitly requests binary
+STL, an opt-in content-addressed STL cache, and draft, balanced, and final
+quality profiles with timing in every result. `openscad/bootstrap.py` owns the
+pinned, checksum-verified per-user OpenSCAD startup setup. These are quality
+choices, not universal sub-second render promises.
 
-OpenSCAD is an external dependency. The backend probes the executable and
-rejects local OpenSCAD **2021.01** for this upstream source because its
-`$`-scoped grid machinery is not reliably supported there; use a current or
-2023-era build and run the optional smoke test. No web framework, build123d,
-numpy, or speculative daemon is required by this slice.
+OpenSCAD is an external executable dependency. At Pages-plugin startup the
+backend first probes the system PATH; if OpenSCAD is missing or older than
+`>=2023.0`, it silently downloads a pinned official OpenSCAD snapshot, verifies
+its SHA-256 digest, and stores it in a per-user cache without sudo/admin
+privileges. The bootstrap needs network and write access and covers Linux
+x86_64/ARM64,
+universal macOS, and Windows x86_64; unsupported platforms get a manual-install
+error. Local OpenSCAD **2021.01** is rejected because its `$`-scoped grid
+machinery is not reliably supported there. No web framework, build123d, numpy,
+or speculative daemon is required by this slice.
 
 ## Files
 
@@ -174,8 +182,12 @@ skips with repair guidance when `.venv` is absent.
    `<Orca data dir>/orca_plugins/orcad/`. The beside-plugin assets take
    precedence for development; the embedded fallbacks keep the core plugin
    installable as one file.
-3. Install a current OpenSCAD build (2023 or newer is recommended). The local
-   2021.01 build is explicitly rejected for this upstream source. Run
+3. No separate OpenSCAD installation is required on supported platforms. When
+   the plugin starts, it reuses a supported executable or downloads the pinned
+   official build in the background. The first download needs network/write
+   access and can take time; no sudo/admin prompt is used. If the platform is
+   unsupported or the verified setup fails, install OpenSCAD 2023 or newer
+   manually. The local 2021.01 build is explicitly rejected. Run
    `python3 -m pytest tests/test_openscad_backend.py -q` to exercise the fake
    executable path without OpenSCAD.
 4. Restart OrcaSlicer and enable **orcad 0.7.0** in the Plugins dialog. With
@@ -193,9 +205,11 @@ skips with repair guidance when `.venv` is absent.
 First Code-mode CAD preview/export setup may install `build123d`, NumPy, and
 OCP through Orca's bundled `uv`. It may take time, can download hundreds of MB,
 and needs network and write access. Gridfinity object mode instead probes
-OpenSCAD and reports a stable not-found, unsupported-version, timeout, or
-process error. **Bridge ready** only means that host messaging is available;
-the UI checks **CAD/model ready** only after a preview or export succeeds.
+OpenSCAD and silently bootstraps the pinned per-user build when the system
+executable is missing or unsupported; it reports a stable setup, unsupported-
+version, timeout, or process error if that path cannot complete. **Bridge ready**
+only means that host messaging is available; the UI checks **CAD/model ready**
+only after a preview or export succeeds.
 
 Troubleshooting:
 
@@ -231,11 +245,12 @@ manual checks; this checkout has verified Linux x86_64 only. Include
 
 **Verified** — pure Python validation, safe OpenSCAD argv construction, version
 probing, cancellation/timeout handling, deterministic cache keys, binary-STL
-parsing, and fake-executable rendering; frontend bridge/state/accessibility,
-indexed-mesh decoding, export-payload, recovery, and UI tests; generated object
-spec synchronization; the declared compatibility checks; and the release
-bundle check. Real OpenSCAD rendering remains host-dependent and should be
-smoke-tested on the target machine.
+parsing, verified bootstrap checks, fake-executable rendering, and a manual
+Linux x86_64 probe plus Bin/Baseplate render/cache smoke test with the pinned
+OpenSCAD artifact; frontend bridge/state/accessibility, indexed-mesh decoding,
+export-payload, recovery, and UI tests; generated object spec synchronization;
+the declared compatibility checks; and the release bundle check. Real
+OpenSCAD rendering remains host-dependent on other target machines.
 
 **Approximate** — the preview transports the complete mesh returned by
 OpenSCAD rather than claiming a decimation budget. Very large models can still

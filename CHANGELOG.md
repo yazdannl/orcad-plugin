@@ -20,6 +20,9 @@
   cancellation, timeout handling, and an opt-in content-addressed STL cache.
   The release bundler embeds the backend and pinned `.scad` source so the
   single-file `orcad.py` install retains Gridfinity support.
+- Added a silent startup bootstrap for missing or too-old OpenSCAD: it reuses a
+  supported system executable or downloads a pinned official per-user artifact,
+  verifies its SHA-256 digest, and avoids sudo/admin package-manager actions.
 - Preserved build123d for simple predefined objects and trusted Code mode;
   upstream object mode currently exports STL only. The complete upstream mesh
   is transported for preview rather than being silently decimated.

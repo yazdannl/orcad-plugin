@@ -54,6 +54,7 @@ def test_argv_uses_separate_safe_define_arguments():
     assert "-D" in argv
     assert "gridx=2" in argv
     assert "$fa=12" in argv and "$fs=0.8" in argv
+    assert argv[3:5] == ["--export-format", "binstl"]
     assert "folder with spaces/out.stl" in argv
     with pytest.raises(ValueError):
         encode_define("gridx", "2; rm -rf /")

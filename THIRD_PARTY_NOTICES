@@ -45,3 +45,14 @@ vite-plugin-singlefile identify themselves as MIT-licensed in their package
 metadata. They are build-time dependencies, not a separate license grant from
 this repository. Their package-local license files remain available in the
 npm dependency tree recorded by frontend/package-lock.json.
+
+OpenSCAD bootstrap artifacts
+----------------------------
+When Gridfinity object mode starts without a supported system executable, the
+plugin downloads a pinned OpenSCAD snapshot directly from the official
+`files.openscad.org` host. The checked-in bootstrap table records the exact
+artifact URL and SHA-256 digest; the OpenSCAD executable and its bundled
+third-party libraries remain under the licenses supplied by the OpenSCAD
+project and are not relicensed under AGPL-3.0-only. The downloaded package's
+upstream notices are retained in the per-user cache; this repository does not
+vendor the platform-specific binary.

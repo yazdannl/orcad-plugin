@@ -23,6 +23,7 @@ def test_embedded_backend_archive_contains_reusable_source_and_vendor():
     with zipfile.ZipFile(io.BytesIO(gzip.decompress(base64.b64decode(encoded)))) as archive:
         names = set(archive.namelist())
     assert "openscad/catalog.json" in names
+    assert "openscad/bootstrap.py" in names
     assert "openscad/runner.py" in names
     assert "openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/LICENSE" in names
     assert "openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/gridfinity-rebuilt-bins.scad" in names

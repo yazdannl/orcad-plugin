@@ -28,9 +28,16 @@
       "constraint": ">=2023.0",
       "tested": [],
       "required_for": "Gridfinity Bin/Baseplate object mode",
-      "unsupported": ["2021.01"]
+      "unsupported": ["2021.01"],
+      "bootstrap": {
+        "version": "2026.09.22",
+        "source": "pinned official OpenSCAD snapshots with checked-in SHA-256 digests",
+        "scope": ["Linux x86_64", "Linux ARM64", "macOS universal", "Windows x86_64"],
+        "cache": "per-user cache; no sudo/admin privileges",
+        "tested": "fake-download/checksum/extraction tests plus manual Linux x86_64 probe and Bin/Baseplate renders with the pinned artifact; other hosts remain host-dependent"
+      }
     },
-    "resolution": "OrcaSlicer's bundled uv resolves the Python runtime dependencies on the first Code-mode CAD operation; OpenSCAD is installed separately for Gridfinity object mode."
+    "resolution": "OrcaSlicer's bundled uv resolves the Python runtime dependencies on the first Code-mode CAD operation; the Pages plugin probes OpenSCAD at startup and silently provisions the pinned per-user build when a supported system executable is unavailable."
   },
   "contributor": {
     "python": {

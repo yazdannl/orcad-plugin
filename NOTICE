@@ -20,6 +20,16 @@ remain under this repository's AGPL-3.0-only terms. Any additional upstream
 attribution requirements MUST be verified against the authoritative vendored
 license and README.
 
+OpenSCAD bootstrap attribution
+-------------------------------
+The plugin can download a pinned OpenSCAD development snapshot from the
+official `files.openscad.org` host when Gridfinity object mode has no supported
+system executable. The exact URLs and SHA-256 digests are checked into
+`openscad/bootstrap.py`; the platform-specific OpenSCAD binaries and their
+bundled dependencies remain under the OpenSCAD project's licenses and are not
+relicensed by this repository. The bootstrap stores the upstream package in a
+per-user cache rather than vendoring it here. See THIRD_PARTY_NOTICES.
+
 Host attribution
 ----------------
 orcad targets the OrcaSlicer plugin API. OrcaSlicer is a separate host project

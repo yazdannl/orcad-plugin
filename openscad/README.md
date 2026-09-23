@@ -10,13 +10,24 @@ in `vendor/gridfinity-rebuilt-openscad-910e22d8/LICENSE` and `README.md`.
 
 ## Dependency and compatibility
 
-Install a current OpenSCAD build. The upstream project recommends development
-snapshots for render performance; this backend requires a version at or newer
-than the current upstream compatibility floor (2023-era builds). **OpenSCAD
-2021.01 is explicitly rejected**: it cannot reliably evaluate the `$`-scoped
-grid machinery used by this source. `probe_openscad()` returns a flagged
-`EngineInfo` and rendering returns the stable `openscad_unsupported_version`
-error instead of attempting a known-incompatible render.
+The plugin starts a background per-user bootstrap when the Pages capability is
+registered. It first reuses a supported system executable; when none is
+available, it downloads a pinned official OpenSCAD snapshot, verifies its
+SHA-256 digest, and stores it without sudo/admin privileges under the platform's
+user cache (`~/.cache/orcad/openscad`, `~/Library/Caches/orcad/openscad`, or
+`%LOCALAPPDATA%/orcad/openscad`). The pinned artifact table is in
+`bootstrap.py`; it currently covers Linux x86_64/ARM64 AppImages, the universal
+macOS disk image, and the Windows x86_64 ZIP. Unsupported platforms receive a
+manual-install error rather than an unverified download. The download needs
+network and write access and the first startup can take time.
+
+The upstream project recommends development snapshots for render performance;
+this backend requires a version at or newer than the current upstream
+compatibility floor (2023-era builds). **OpenSCAD 2021.01 is explicitly
+rejected**: it cannot reliably evaluate the `$`-scoped grid machinery used by
+this source. `probe_openscad()` returns a flagged `EngineInfo` and rendering
+returns the stable `openscad_unsupported_version` error instead of attempting a
+known-incompatible render.
 
 `compatibility_smoke_test()` is an opt-in hook for checking a local executable
 against a small catalog entry. It does not rewrite source files.
@@ -43,13 +54,13 @@ cache-write failures.
 ## Runner contract
 
 Use `validate_parameters()` before crossing the process boundary. `build_argv`
-constructs an argv list with `-D name=value`, never a shell command and never
-source rewriting. `OpenSCADRunner.render()` uses a temporary STL beside the
-requested output, atomically moves a successful result into place, validates
-binary STL output, and returns a JSON-serializable `RenderResult`. A valid
-cache hit copies the checked mesh without spawning OpenSCAD. The optional
-cancellation callback/event, `cancel()`, and `render_latest()` support a host
-that discards stale requests.
+constructs an argv list with `-D name=value`, explicitly requests `binstl`, and
+never builds a shell command or rewrites source. `OpenSCADRunner.render()` uses
+a temporary STL beside the requested output, atomically moves a successful
+result into place, validates binary STL output, and returns a JSON-serializable
+`RenderResult`. A valid cache hit copies the checked mesh without spawning
+OpenSCAD. The optional cancellation callback/event, `cancel()`, and
+`render_latest()` support a host that discards stale requests.
 
 `stl.py` provides a compact deduplicated vertex/index mesh, binary STL parsing
 and encoding, bbox/count statistics, and volume only when the mesh has closed
