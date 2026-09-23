@@ -1,4 +1,7 @@
 __pycache__/
+# Local, user-owned agent guidance stays out of version control.
+/AGENTS.md
+/agents.md
 node_modules/
 .pytest_cache/
 *.pyc
