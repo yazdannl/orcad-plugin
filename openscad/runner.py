@@ -142,7 +142,7 @@ def build_argv(executable: str | os.PathLike[str], *args: Any, quality_profile: 
     source = Path(source)
     if not source.is_file():
         raise BackendError(ErrorCode.SOURCE_NOT_FOUND, "OpenSCAD entry file is missing", {"source": str(source)})
-    argv = [str(executable), "-o", str(output)]
+    argv = [str(executable), "--export-format", "binstl", "-o", str(output)]
     for name, value in checked.items():
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", name):
             raise BackendError(ErrorCode.INVALID_VALUE, "invalid OpenSCAD variable name", {"parameter": name})

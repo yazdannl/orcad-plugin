@@ -50,6 +50,7 @@ def test_defaults_are_valid_and_validation_is_strict():
 
 def test_argv_uses_separate_safe_define_arguments():
     argv = build_argv("openscad", "bin", {"gridx": 2}, Path("folder with spaces") / "out.stl", quality_profile="draft")
+    assert argv[argv.index("--export-format") + 1] == "binstl"
     assert "-D" in argv
     assert "gridx=2" in argv
     assert "$fa=12" in argv and "$fs=0.8" in argv
@@ -102,7 +103,10 @@ def _fake_openscad(tmp_path: Path, version: str = "2024.01", delay: float = 0.0)
         "    raise SystemExit(0)\n"
         f"time.sleep({delay})\n"
         "output = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])\n"
-        "output.write_bytes(payload)\n",
+        "if '--export-format' in sys.argv and sys.argv[sys.argv.index('--export-format') + 1] == 'binstl':\n"
+        "    output.write_bytes(payload)\n"
+        "else:\n"
+        "    output.write_text('solid ascii\\nendsolid ascii\\n')\n",
         encoding="utf-8",
     )
     script.chmod(script.stat().st_mode | stat.S_IXUSR)

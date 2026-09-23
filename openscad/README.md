@@ -38,8 +38,9 @@ These are quality settings, not render-time guarantees. Every result exposes
 ## Runner contract
 
 Use `validate_parameters()` before crossing the process boundary. `build_argv`
-constructs an argv list with `-D name=value`, never a shell command and never
-source rewriting. `OpenSCADRunner.render()` uses a temporary STL beside the
+constructs an argv list with `-D name=value`, explicitly requests binary STL
+(`--export-format binstl`), never uses a shell command, and never rewrites
+source. `OpenSCADRunner.render()` uses a temporary STL beside the
 requested output, atomically moves a successful result into place, validates
 binary STL output, and returns a JSON-serializable `RenderResult`. The optional
 cancellation callback/event, `cancel()`, and `render_latest()` support a host
