@@ -24,7 +24,13 @@
       "constraint": ">=2,<3",
       "tested": ["2.5.3"]
     },
-    "resolution": "OrcaSlicer's bundled uv resolves these runtime dependencies on the first CAD operation."
+    "openscad": {
+      "constraint": ">=2023.0",
+      "tested": [],
+      "required_for": "Gridfinity Bin/Baseplate object mode",
+      "unsupported": ["2021.01"]
+    },
+    "resolution": "OrcaSlicer's bundled uv resolves the Python runtime dependencies on the first Code-mode CAD operation; OpenSCAD is installed separately for Gridfinity object mode."
   },
   "contributor": {
     "python": {
@@ -80,7 +86,7 @@
       "name": "bundle synchronization",
       "command": "python3 packaging/bundle.py --check",
       "status": "required",
-      "scope": "Checks generated specs, the compiled page fingerprint, and the embedded page."
+      "scope": "Checks generated specs, the compiled page fingerprint, and the embedded page/backend archive."
     },
     {
       "name": "geometry integration",

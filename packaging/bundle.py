@@ -32,6 +32,7 @@ import shlex
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,7 +45,10 @@ FRONTEND_BEGIN = "/* BEGIN GENERATED PRIMS */"
 FRONTEND_END = "/* END GENERATED PRIMS */"
 HTML_BEGIN = "# BEGIN BUNDLED FRONTEND"
 HTML_END = "# END BUNDLED FRONTEND"
+OPENSCAD_BEGIN = "# BEGIN EMBEDDED OPENSCAD BACKEND"
+OPENSCAD_END = "# END EMBEDDED OPENSCAD BACKEND"
 FRONTEND_ASSET = ROOT / "frontend" / "dist" / "index.html"
+OPENSCAD_DIR = ROOT / "openscad"
 GENERATED_PATHS = frozenset({
     "orcad.py", "frontend/src/primitives.js", "frontend/dist/index.html",
 })
@@ -265,6 +269,29 @@ def _replace_region(text, begin, end, fresh):
     return "".join(lines[:bi + 1]) + fresh + "\n" + "".join(lines[ei:])
 
 
+def _archive_bytes():
+    """Build a reproducible zip of the reusable backend and pinned SCAD tree."""
+    with tempfile.SpooledTemporaryFile() as buffer:
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
+            for path in sorted(OPENSCAD_DIR.rglob("*")):
+                if not path.is_file() or "__pycache__" in path.parts:
+                    continue
+                relative = path.relative_to(ROOT).as_posix()
+                info = zipfile.ZipInfo(relative, date_time=(1980, 1, 1, 0, 0, 0))
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = 0o600 << 16
+                archive.writestr(info, path.read_bytes())
+        buffer.seek(0)
+        return buffer.read()
+
+
+def build_openscad_archive():
+    compressed = gzip.compress(_archive_bytes(), compresslevel=9, mtime=0)
+    encoded = base64.b64encode(compressed).decode("ascii")
+    lines = "\\n".join(encoded[index:index + 96] for index in range(0, len(encoded), 96))
+    return f'_EMBEDDED_OPENSCAD_GZIP = b"""\\n{lines}\\n"""'
+
+
 def build_frontend_asset(asset=FRONTEND_ASSET):
     compressed = gzip.compress(asset.read_bytes(), compresslevel=9, mtime=0)
     encoded = base64.b64encode(compressed).decode("ascii")
@@ -321,6 +348,7 @@ def build_target(objects=None, asset=FRONTEND_ASSET):
     objects = _load_objects() if objects is None else objects
     text = TARGET.read_text(encoding="utf-8")
     text = _replace_region(text, PY_BEGIN, PY_END, build_py_region(objects))
+    text = _replace_region(text, OPENSCAD_BEGIN, OPENSCAD_END, build_openscad_archive())
     return _replace_region(text, HTML_BEGIN, HTML_END, build_frontend_asset(asset))
 
 
@@ -473,7 +501,7 @@ def _main(argv=None):
         return 0
     if args == {"--write"}:
         write()
-        print("bundled objects into orcad.py and frontend/src/primitives.js")
+        print("bundled objects and OpenSCAD backend into orcad.py and frontend/src/primitives.js")
         return 0
     if args == {"--check"}:
         return 0 if check() else 1

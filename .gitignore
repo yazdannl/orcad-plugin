@@ -3,6 +3,7 @@ node_modules/
 .pytest_cache/
 *.pyc
 exports/
+.openscad-cache/
 dist/
 !frontend/dist/
 !frontend/dist/**

@@ -45,7 +45,7 @@ def test_project_license_and_attribution_boundaries_are_explicit():
     assert "AGPL-3.0-only" in notice
     assert "kennetek/gridfinity-rebuilt-openscad" in notice
     assert "MUST be verified" in notice
-    assert "Vue" in third_party and "Three.js" in third_party
+    assert "React" in third_party and "Three.js" in third_party
     assert "The MIT License" in third_party
     assert "not relicensed under" in third_party
     assert "AGPL-3.0-only" in third_party

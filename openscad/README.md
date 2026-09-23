@@ -1,6 +1,8 @@
 # OpenSCAD/Gridfinity backend
 
-This directory is the reusable backend slice for the React reset. It vendors
+This directory is the reusable backend for the React CAD frontend. The release
+bundler also embeds this backend and its pinned source into single-file
+`orcad.py` installs. It vendors
 `kennetek/gridfinity-rebuilt-openscad` at commit
 `910e22d8607fd7f5f51ad5e5cbc5287a76810bfd` under `vendor/`. The vendored `.scad`
 files are unmodified. Its MIT license and Gridfinity attribution are retained
@@ -33,7 +35,10 @@ one of the explicit runner profiles:
 | `final` | 3 | 0.1 | higher tessellation export |
 
 These are quality settings, not render-time guarantees. Every result exposes
-`duration_ms`; no universal sub-one-second render claim is made.
+`duration_ms`; no universal sub-one-second render claim is made. Interactive
+callers can pass `cache_dir` to `OpenSCADRunner` for content-addressed STL
+reuse; the plugin uses `.openscad-cache/` beside its entry point and ignores
+cache-write failures.
 
 ## Runner contract
 
@@ -41,7 +46,8 @@ Use `validate_parameters()` before crossing the process boundary. `build_argv`
 constructs an argv list with `-D name=value`, never a shell command and never
 source rewriting. `OpenSCADRunner.render()` uses a temporary STL beside the
 requested output, atomically moves a successful result into place, validates
-binary STL output, and returns a JSON-serializable `RenderResult`. The optional
+binary STL output, and returns a JSON-serializable `RenderResult`. A valid
+cache hit copies the checked mesh without spawning OpenSCAD. The optional
 cancellation callback/event, `cancel()`, and `render_latest()` support a host
 that discards stale requests.
 

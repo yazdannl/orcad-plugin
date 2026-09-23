@@ -7,16 +7,24 @@ export function createBridge(host = globalThis) {
     available: () => bridgeReadiness(bridge) === 'ready',
     post(message) {
       if (!this.available()) return false
-      bridge.postMessage(message)
-      return true
+      try {
+        bridge.postMessage(message)
+        return true
+      } catch {
+        return false
+      }
     },
     subscribe(handler) {
       if (!this.available()) return () => {}
-      const cleanup = bridge.onMessage((raw) => {
-        const parsed = normalizeBridgeMessage(raw)
-        if (parsed.ok) handler(parsed.message)
-      })
-      return typeof cleanup === 'function' ? cleanup : () => {}
+      try {
+        const cleanup = bridge.onMessage((raw) => {
+          const parsed = normalizeBridgeMessage(raw)
+          if (parsed.ok) handler(parsed.message)
+        })
+        return typeof cleanup === 'function' ? cleanup : () => {}
+      } catch {
+        return () => {}
+      }
     },
   }
 }

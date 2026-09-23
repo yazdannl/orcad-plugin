@@ -13,7 +13,7 @@ import { validationMessages } from './parameterUi.js'
 import { PRIMS } from './primitives.js'
 
 // Lightweight React state harness: it uses the same extracted routing helpers and a
-// synchronous mock of the Orca bridge, without importing Vue, WebGL, or OrcaSlicer.
+// synchronous mock of the Orca bridge, without importing React DOM, WebGL, or OrcaSlicer.
 class MockOrcaBridge {
   constructor() {
     this.messages = []

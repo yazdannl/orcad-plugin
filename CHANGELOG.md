@@ -6,26 +6,26 @@
   version authority; `orcad.py`, frontend package metadata, and this release
   documentation are synchronized to it.
 - Declared the tested Python, build123d, OCP, NumPy, Node.js, npm, and pytest
-  constraints, plus the Nightly `main` Pages API target and stable 2.4.2
-  limitation.
-- Moved the UI into `frontend/src` as a Vue + Tailwind app and committed the
-  self-contained `frontend/dist/index.html` artifact. Node is needed only to
-  rebuild it, not to run the plugin.
-- Replaced the old preview with a compact Three.js WebGL viewer, filterable
-  object list, generated parameter controls, native code editor, export/status
-  cards, and responsive preview layout. The page has no runtime CDN dependency.
-- Gridfinity Bin ports the recorded entry-file controls: grid divisions,
-  compartment depth/fill, height modes and z-snap, label tabs, scoop,
-  cylindrical compartments, refined/magnet/screw holes, chamfers,
-  supportless tops, corner-only and thumbscrew holes, and stacking lip.
-  The verification harness covers selected cases and toleranced metrics; this
-  is not a claim of exact feature parity or upstream certification.
-- Known approximations remain explicit: baseplate sockets approximate the
-  upstream cutter profile; thumbscrew threads are plain holes; M3 screw holes
-  are clearance holes; and preview geometry is decimated.
-- Added AGPL-3.0-only licensing for original project code, separate Vue and
-  Three.js MIT notices, and an explicit warning that the Gridfinity upstream
-  license must be verified before redistribution.
+  constraints, the external OpenSCAD `>=2023.0` requirement for Gridfinity,
+  the Nightly `main` Pages API target, and the stable 2.4.2 limitation.
+- Replaced the page with a React + Tailwind app and committed the self-contained
+  `frontend/dist/index.html` artifact. Node is needed only to rebuild it, not to
+  run the plugin.
+- Added a direct Three.js WebGL viewport with indexed binary-STL decoding,
+  demand-driven rendering, disposal, wireframe/spin controls, and latest-only
+  request handling. The page has no runtime CDN dependency.
+- Added the reusable vendored OpenSCAD/Gridfinity backend. Bin/Baseplate
+  object-mode requests use the pinned upstream entry files, strict catalog
+  validation, safe argv lists, draft/balanced/final quality profiles,
+  cancellation, timeout handling, and an opt-in content-addressed STL cache.
+  The release bundler embeds the backend and pinned `.scad` source so the
+  single-file `orcad.py` install retains Gridfinity support.
+- Preserved build123d for simple predefined objects and trusted Code mode;
+  upstream object mode currently exports STL only. The complete upstream mesh
+  is transported for preview rather than being silently decimated.
+- Added AGPL-3.0-only licensing for original project code, separate React,
+  Three.js, Tailwind, and build-tool notices, and retained the upstream
+  Gridfinity MIT license and attribution unchanged.
 
 ## 0.6.0 — Object files are build123d programs
 

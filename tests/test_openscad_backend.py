@@ -6,6 +6,7 @@ import os
 import stat
 import sys
 import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -118,6 +119,18 @@ def test_fake_executable_probe_and_render_are_json_serializable(tmp_path):
     json.dumps(result.to_dict())
 
 
+def test_opt_in_cache_reuses_valid_mesh_without_spawning_again(tmp_path):
+    executable = _fake_openscad(tmp_path)
+    runner = OpenSCADRunner(executable, cache_dir=tmp_path / "cache")
+    first = runner.render(RenderRequest("bin", defaults("bin"), tmp_path / "first.stl", "draft", 5))
+    assert first.ok and first.argv
+    executable.chmod(0o600)
+    second = runner.render(RenderRequest("bin", defaults("bin"), tmp_path / "second.stl", "draft", 5))
+    assert second.ok and second.argv == ()
+    assert second.cache_key == first.cache_key
+    assert (tmp_path / "second.stl").read_bytes() == (tmp_path / "first.stl").read_bytes()
+
+
 def test_2021_01_is_flagged_and_render_is_rejected(tmp_path):
     info = probe_openscad(_fake_openscad(tmp_path, "2021.01"))
     assert not info.supported
@@ -141,6 +154,26 @@ def test_pre_cancelled_request_does_not_run_process(tmp_path):
         RenderRequest("bin", defaults("bin"), tmp_path / "no.stl"), cancel=event)
     assert not result.ok
     assert result.error["code"] == "cancelled"
+
+
+def test_render_latest_cancels_the_obsolete_process(tmp_path):
+    runner = OpenSCADRunner(_fake_openscad(tmp_path, delay=0.3))
+    first_result = []
+
+    def render_first():
+        first_result.append(runner.render(
+            RenderRequest("bin", defaults("bin"), tmp_path / "first.stl", timeout=5)))
+
+    thread = threading.Thread(target=render_first)
+    thread.start()
+    time.sleep(0.05)
+    second = runner.render_latest(
+        RenderRequest("bin", defaults("bin"), tmp_path / "second.stl", timeout=5))
+    thread.join(timeout=5)
+
+    assert second.ok
+    assert first_result and not first_result[0].ok
+    assert first_result[0].error["code"] == "cancelled"
 
 
 @pytest.mark.skipif(not __import__("shutil").which("openscad"), reason="OpenSCAD is not installed")

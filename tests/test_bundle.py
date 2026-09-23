@@ -1,6 +1,10 @@
 """Release pipeline guards; subprocesses and worktree writes stay mocked."""
+import base64
+import gzip
 import importlib.util
+import io
 import subprocess
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -11,6 +15,17 @@ _spec = importlib.util.spec_from_file_location("bundle_for_tests", ROOT / "packa
 bundle = importlib.util.module_from_spec(_spec)
 assert _spec.loader is not None
 _spec.loader.exec_module(bundle)
+
+
+def test_embedded_backend_archive_contains_reusable_source_and_vendor():
+    region = bundle.build_openscad_archive()
+    encoded = region.split('b"""\\n', 1)[1].rsplit('\\n"""', 1)[0].replace('\\n', '')
+    with zipfile.ZipFile(io.BytesIO(gzip.decompress(base64.b64decode(encoded)))) as archive:
+        names = set(archive.namelist())
+    assert "openscad/catalog.json" in names
+    assert "openscad/runner.py" in names
+    assert "openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/LICENSE" in names
+    assert "openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/gridfinity-rebuilt-bins.scad" in names
 
 
 def test_frontend_fingerprint_is_stable_and_detects_stale_artifacts(tmp_path):

@@ -8,16 +8,17 @@ General Public License, version 3 only (AGPL-3.0-only). See LICENSE.
 
 Upstream Gridfinity attribution
 --------------------------------
-The Gridfinity Bin and Gridfinity Baseplate geometry are ports or approximating
-ports of kennetek/gridfinity-rebuilt-openscad. The source files retain the
-upstream project and source-file references used during the port.
-
-The reusable OpenSCAD backend vendors the upstream source unchanged at commit
-910e22d8607fd7f5f51ad5e5cbc5287a76810bfd under
+The Gridfinity Bin and Gridfinity Baseplate object-mode geometry is rendered
+from kennetek/gridfinity-rebuilt-openscad. The source files are vendored
+unchanged at commit 910e22d8607fd7f5f51ad5e5cbc5287a76810bfd under
 `openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/`. That directory retains
-the upstream MIT `LICENSE` and attribution. The vendored source remains under
-its MIT terms and is not relicensed by this repository. Any additional
-attribution requirements MUST be verified against that authoritative source. Release checks MUST be verified against that authoritative vendored license and attribution.
+the upstream MIT `LICENSE`, README attribution, and source-file references;
+the same backend and source tree are embedded in the single-file `orcad.py`
+release. The vendored source remains under its MIT terms and is not relicensed
+by this repository. The catalog, runner, bridge adapter, and other integration code
+remain under this repository's AGPL-3.0-only terms. Any additional upstream
+attribution requirements MUST be verified against the authoritative vendored
+license and README.
 
 Host attribution
 ----------------
@@ -26,7 +27,7 @@ and is not relicensed or redistributed by this repository.
 
 Third-party frontend material
 -----------------------------
-The compiled frontend includes third-party Vue and Three.js material under
-their own MIT licenses. Their notices are kept separate in
-THIRD_PARTY_NOTICES; the AGPL-3.0-only statement above does not relicense
-those components.
+The compiled frontend includes third-party React, React DOM, Three.js,
+Tailwind CSS, Vite, and related build material under their own licenses. Their
+notices are kept separate in THIRD_PARTY_NOTICES; the AGPL-3.0-only statement
+above does not relicense those components.

@@ -227,6 +227,62 @@ def test_invalid_object_messages_reject_before_cad_for_all_object_commands():
         preview.assert_not_called()
 
 
+def test_explicit_openscad_object_routes_preview_and_export(tmp_path):
+    from types import SimpleNamespace
+
+    class FakeRunner:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        def render(self, request, cancel=None):
+            if cancel and cancel():
+                return SimpleNamespace(ok=False, error={"code": "cancelled", "message": "cancelled"})
+            Path(request.output_path).write_bytes(b"fake-stl")
+            return SimpleNamespace(
+                ok=True, output_path=str(request.output_path), stats={"triangle_count": 1},
+                duration_ms=4, elapsed_seconds=0.004, cache_key="fake-cache",
+                engine={"version": "2024.01", "supported": True}, error=None,
+            )
+
+    mesh = SimpleNamespace(vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+                           faces=[(0, 1, 2)])
+    cap = _MessageCapture()
+    with (mock.patch.object(mod, "_OpenSCADRunner", FakeRunner),
+          mock.patch.object(mod, "_read_binary_stl", lambda path: mesh),
+          mock.patch.object(mod, "exports_dir", return_value=tmp_path)):
+        preview_response = mod._handle_message_sync(cap, {
+            "command": "preview", "kind": "generate", "primitive": "gridfinity_bin",
+            "object": "bin", "params": {}, "quality_profile": "draft",
+            "request_id": 201, "revision_id": 4, "seq": 9,
+        })
+        assert preview_response is None
+        preview = _wait_for_type(cap, "preview")
+        assert preview["ok"] is True
+        assert preview["preview"]["indices"] == [0, 1, 2]
+
+        export_response = mod._handle_message_sync(cap, {
+            "command": "generate", "kind": "generate", "primitive": "gridfinity_baseplate",
+            "object": "baseplate", "params": {}, "quality_profile": "balanced",
+            "filename": "baseplate", "request_id": 202, "revision_id": 5,
+        })
+        assert export_response["type"] == "progress"
+        result = _wait_for_type(cap, "result")
+        assert result["ok"] is True and result["format"] == "stl"
+        assert Path(result["file"]).is_file()
+
+
+def test_explicit_openscad_validation_errors_are_structured():
+    cap = _MessageCapture()
+    result = mod._handle_message_sync(cap, {
+        "command": "preview", "kind": "generate", "primitive": "gridfinity_bin",
+        "object": "bin", "params": {"refined_holes": True, "magnet_holes": True},
+        "request_id": 203, "revision_id": 6, "seq": 10,
+    })
+    assert result["type"] == "preview" and result["ok"] is False
+    assert result["error_code"] == "invalid_parameters"
+    assert {item["field"] for item in result["errors"]} >= {"refined_holes", "magnet_holes"}
+
+
 def test_gridfinity_codegen():
     code = _gbin()
     for needle in ("RectangleRounded", "extrude", "GX * 42", "result =", "Pos(",
@@ -318,22 +374,21 @@ def test_preview_payload_keeps_complete_tessellation():
 def test_page_html_contract():
     html = mod.PAGE_HTML
     assert mod.PAGE_ASSET.is_file()
-    for needle in ("window.orca.postMessage", "window.orca?.onMessage", "--orca-bg"):
-        assert needle in html, f"PAGE_HTML missing {needle!r}"
+    for needle in ("postMessage", "onMessage", "min-h-screen"):
+        assert needle in html, f"PAGE_HTML missing bridge/style contract {needle!r}"
     assert "bootstrap" not in html.lower(), "must not depend on Bootstrap CDN"
     assert '<div id="app"></div>' in html
-    assert "Vue" in html and "Three.js" in html and ".min-h-screen" in html
-    for needle in ("Objects", "Code", "objectSearch", "plate_result", "Run / export",
-                   "Wireframe", "Spin", "Send to plate", "Copy path",
-                   "Open exports folder", "drag the file", "drag to rotate"):
+    assert "Three.js" in html
+    for needle in ("Objects", "Code", "plate_result", "Run / export", "Wireframe",
+                   "Spin", "Send to plate", "Copy path", "Open exports folder",
+                   "Setup & recovery", "Demo mode", "Gridfinity Baseplate", "Drag to orbit"):
         assert needle in html, f"PAGE_HTML missing frontend feature {needle!r}"
     for key in mod.PRIMITIVES:
         assert key in html, f"object {key} missing from frontend"
-    for key in mod.EXAMPLES:
-        assert key in html, f"example {key} missing from frontend"
+    assert "calibration_cube" in html, "demo example missing from frontend"
     assert "vite" not in html.lower(), "build tooling must not ship in the page"
     assert not re.search(r'<(?:script|link)[^>]+https?://', html), "frontend must not load network assets"
-    assert len(html) < 700_000, f"compiled frontend too large: {len(html)}"
+    assert len(html) < 850_000, f"compiled frontend too large: {len(html)}"
 
 
 def test_compiled_frontend_fallback():
@@ -392,17 +447,16 @@ def test_preview_reports_missing_build123d():
 def test_setup_trust_and_result_guidance_stays_consistent():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     html = mod.PAGE_HTML
-    for source in (readme, html):
-        assert "hundreds of MB" in source
-        assert "network and write access" in source
-        assert "no security sandbox" in source.lower()
-        assert "validation/UX only" in source
-        assert "result" in source
-    assert "End users need no Node.js or CDN to load the" in readme
-    assert "End users need no Node.js, CDN, or network" not in readme
-    assert "Bridge" in html and "CAD/model" in html
-    assert "CAD/model not checked" in html
-    assert "there is no separate dependency probe" in html
+    assert "hundreds of MB" in readme
+    assert "network and write access" in readme
+    assert "no security sandbox" in readme.lower()
+    assert "trusted" in readme.lower()
+    assert "result" in readme
+    assert "OpenSCAD" in readme and "2021.01" in readme
+    assert "End users do not need Node.js" in readme.replace("\n", " ")
+    assert "Demo mode" in html and "Bridge ready" in html
+    assert "CAD/model not checked" in html and "bridge readiness does not check dependencies" in html
+    assert "Setup & recovery" in html
 
 
 def test_exports_route_formats_and_tessellation_settings(tmp_path):

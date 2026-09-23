@@ -6,9 +6,11 @@ export function decodeMeshPayload(payload) {
   if (!positions || positions.length < 9 || positions.length % 3) return null
   const vertices = Float32Array.from(positions, Number)
   if (!vertices.every(Number.isFinite)) return null
-  const indices = payload.indices && (Array.isArray(payload.indices) || ArrayBuffer.isView(payload.indices))
-    ? Uint32Array.from(payload.indices, Number) : null
-  if (indices && (indices.length < 3 || indices.length % 3 || indices.some((value) => value < 0 || value >= vertices.length / 3))) return null
+  const rawIndices = payload.indices && (Array.isArray(payload.indices) || ArrayBuffer.isView(payload.indices))
+    ? payload.indices : null
+  if (rawIndices && (rawIndices.length < 3 || rawIndices.length % 3
+      || Array.from(rawIndices, Number).some((value) => !Number.isSafeInteger(value) || value < 0 || value >= vertices.length / 3))) return null
+  const indices = rawIndices ? Uint32Array.from(rawIndices, Number) : null
   return { vertices, indices, triangles: indices ? indices.length / 3 : vertices.length / 9 }
 }
 

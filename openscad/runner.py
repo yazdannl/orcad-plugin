@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import tempfile
 import threading
+from contextlib import suppress
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -86,7 +87,7 @@ def probe_openscad(executable: str | os.PathLike[str] | None = None, *, timeout:
         raise BackendError(ErrorCode.PROBE_FAILED, "OpenSCAD did not report a recognizable version", {"returncode": result.returncode})
     version = match.group(1)
     supported = tuple(int(part) for part in re.match(r"(\d+)\.(\d+)", version).groups()) >= _MIN_VERSION  # type: ignore[union-attr]
-    warning = None if supported else "OpenSCAD 2021.01 is rejected: the current upstream source requires a newer development/current build."
+    warning = None if supported else f"OpenSCAD {version} is unsupported; the current upstream source requires OpenSCAD >=2023.0."
     return EngineInfo(str(path), version, supported, warning)
 
 
@@ -159,15 +160,26 @@ def _is_cancelled(cancel: CancelHook) -> bool:
 
 
 class OpenSCADRunner:
-    """Bounded synchronous runner; callers can discard stale results."""
-    def __init__(self, executable: str | os.PathLike[str] | None = None, *, probe: bool = True):
+    """Bounded synchronous runner; callers can discard stale results.
+
+    ``cache_dir`` is opt-in so library users control where rendered artifacts
+    are persisted. Cache entries are content-addressed by source revision,
+    engine version, object parameters, and quality profile.
+    """
+    def __init__(self, executable: str | os.PathLike[str] | None = None, *,
+                 probe: bool = True, cache_dir: str | os.PathLike[str] | None = None,
+                 cache_max_bytes: int = 256 * 1024 * 1024):
         self.executable = discover_openscad(executable)
         self.engine = probe_openscad(self.executable) if probe else None
+        self.cache_dir = Path(cache_dir) if cache_dir is not None else None
+        self.cache_max_bytes = max(0, int(cache_max_bytes))
         self._process: subprocess.Popen[str] | None = None
+        self._generation = 0
         self._lock = threading.Lock()
 
     def cancel(self) -> None:
         with self._lock:
+            self._generation += 1
             process = self._process
         if process and process.poll() is None:
             process.kill()
@@ -182,11 +194,22 @@ class OpenSCADRunner:
         if isinstance(request, RenderRequest):
             job = request
         else:
-            job = RenderRequest(request, params or defaults(request), Path(output) if output else Path(tempfile.mkstemp(suffix=".stl")[1]), quality, timeout)
+            if output is None:
+                fd, generated_output = tempfile.mkstemp(suffix=".stl")
+                os.close(fd)
+                output = generated_output
+            job = RenderRequest(request, params or defaults(request), Path(output), quality, timeout)
         started = time.monotonic()
         temp: Path | None = None
         process: subprocess.Popen[str] | None = None
         argv: list[str] = []
+        with self._lock:
+            generation = self._generation
+
+        def superseded() -> bool:
+            with self._lock:
+                return generation != self._generation
+
         try:
             checked = validate_parameters(job.object_name, job.params)
             if job.timeout <= 0 or not math.isfinite(job.timeout):
@@ -199,18 +222,37 @@ class OpenSCADRunner:
                 raise BackendError(ErrorCode.UNSUPPORTED_VERSION, self.engine.warning or "unsupported OpenSCAD version", self.engine.to_dict())
             destination = Path(job.output_path)
             destination.parent.mkdir(parents=True, exist_ok=True)
+            identity = cache_key(job.object_name, checked, self.engine.version or "unknown", job.quality_profile)
+            if self.cache_dir is not None:
+                cache_path = self.cache_dir / f"{identity}.stl"
+                try:
+                    cached_mesh = read_binary_stl(cache_path) if cache_path.is_file() else None
+                    if cached_mesh is not None:
+                        if _is_cancelled(cancel) or superseded():
+                            raise BackendError(ErrorCode.CANCELLED, "OpenSCAD render cancelled")
+                        if cache_path.resolve() != destination.resolve():
+                            shutil.copyfile(cache_path, destination)
+                        return RenderResult(True, str(destination), round((time.monotonic() - started) * 1000),
+                                            mesh_stats(cached_mesh), identity, self.engine.to_dict(), None, ())
+                except BackendError:
+                    cache_path.unlink(missing_ok=True)
+                except OSError:
+                    cache_path.unlink(missing_ok=True)
             handle, name = tempfile.mkstemp(prefix=".openscad-", suffix=".stl", dir=destination.parent)
             os.close(handle)
             temp = Path(name)
             argv = build_argv(self.executable, job.object_name, checked, temp, quality_profile=job.quality_profile)
-            if _is_cancelled(cancel):
+            if _is_cancelled(cancel) or superseded():
                 raise BackendError(ErrorCode.CANCELLED, "OpenSCAD render cancelled")
             source = Path(argv[-1])
-            process = subprocess.Popen(argv, cwd=cwd or source.parent, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True, shell=False)
+            # OpenSCAD may emit one line per geometry echo; discard its pipes so
+            # a noisy model cannot deadlock the bounded worker on a full buffer.
+            process = subprocess.Popen(argv, cwd=cwd or source.parent, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, text=True, shell=False)
             with self._lock:
                 self._process = process
             while process.poll() is None:
-                if _is_cancelled(cancel):
+                if _is_cancelled(cancel) or superseded():
                     process.kill(); process.wait()
                     raise BackendError(ErrorCode.CANCELLED, "OpenSCAD render cancelled")
                 if time.monotonic() - started > job.timeout:
@@ -221,15 +263,28 @@ class OpenSCADRunner:
                 except subprocess.TimeoutExpired:
                     pass
             _, stderr = process.communicate()
+            if _is_cancelled(cancel) or superseded():
+                raise BackendError(ErrorCode.CANCELLED, "OpenSCAD render cancelled")
             if process.returncode != 0:
                 raise BackendError(ErrorCode.PROCESS_FAILED, "OpenSCAD render failed", {"returncode": process.returncode, "stderr": (stderr or "")[-2000:]})
             if not temp.is_file() or temp.stat().st_size == 0:
                 raise BackendError(ErrorCode.OUTPUT_ERROR, "OpenSCAD did not produce an STL")
             mesh = read_binary_stl(temp)
+            if self.cache_dir is not None and self.cache_max_bytes and temp.stat().st_size <= self.cache_max_bytes:
+                cache_temp: Path | None = None
+                try:
+                    self.cache_dir.mkdir(parents=True, exist_ok=True)
+                    cache_path = self.cache_dir / f"{identity}.stl"
+                    cache_temp = self.cache_dir / f".{identity}.stl.tmp-{os.getpid()}-{threading.get_ident()}"
+                    shutil.copyfile(temp, cache_temp)
+                    os.replace(cache_temp, cache_path)
+                except OSError:
+                    if cache_temp is not None:
+                        with suppress(FileNotFoundError):
+                            cache_temp.unlink()
             os.replace(temp, destination); temp = None
             return RenderResult(True, str(destination), round((time.monotonic() - started) * 1000), mesh_stats(mesh),
-                                cache_key(job.object_name, checked, self.engine.version or "unknown", job.quality_profile),
-                                self.engine.to_dict(), None, tuple(argv))
+                                identity, self.engine.to_dict(), None, tuple(argv))
         except BackendError as exc:
             return RenderResult(False, duration_ms=round((time.monotonic() - started) * 1000), engine=self.engine.to_dict() if self.engine else None, error=exc.to_dict(), argv=tuple(argv))
         except (OSError, ValueError) as exc:

@@ -28,6 +28,16 @@ for (const format of formats) {
   })
 }
 
+test('Gridfinity objects opt into the upstream OpenSCAD backend', () => {
+  const payload = buildExportPayload({
+    mode: 'objects', command: 'generate', primitive: 'gridfinity_bin', params: { gridx: 2 },
+    format: 'stl', tolerance: 0.02, qualityProfile: 'draft', filename: 'bin',
+  })
+  assert.equal(payload.object, 'bin')
+  assert.equal(payload.quality_profile, 'draft')
+  assert.equal(payload.primitive, 'gridfinity_bin')
+})
+
 test('Send to plate always routes STL', () => {
   const payload = buildExportPayload({
     mode: 'objects', command: 'plate', primitive: 'box', params: {},

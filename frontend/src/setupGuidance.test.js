@@ -14,7 +14,11 @@ test('first-run guidance is actionable and documented', () => {
     assert.match(readme, new RegExp(phrase))
   }
   assert.match(SETUP_GUIDANCE.recovery, /reopen the Plugins dialog or restart OrcaSlicer/i)
+  assert.match(SETUP_GUIDANCE.firstRun, /Code-mode CAD/i)
+  assert.match(SETUP_GUIDANCE.firstRun, /OpenSCAD 2023/i)
+  assert.match(SETUP_GUIDANCE.readiness, /probes OpenSCAD/i)
   assert.match(readme, /retry dependency setup/i)
+  assert.match(readme, /Gridfinity object mode instead probes\s+OpenSCAD/i)
 })
 
 test('bridge and CAD/model readiness are distinct and dependency status is honest', () => {

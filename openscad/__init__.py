@@ -1,4 +1,4 @@
-"""Reusable OpenSCAD/Gridfinity backend for the React reset."""
+"""Reusable OpenSCAD/Gridfinity backend for the React CAD frontend."""
 
 from .cache import cache_key, cache_payload
 from .catalog import CATALOG, QUALITY_PROFILES, SOURCE_REVISION, defaults, object_spec
