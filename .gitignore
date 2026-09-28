@@ -11,3 +11,5 @@ exports/
 .cache/
 .backend/
 .verify-cache/
+/AGENTS.md
+/agents.md
