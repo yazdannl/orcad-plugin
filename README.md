@@ -1,4 +1,4 @@
-# orcad: parametric CAD tab for OrcaSlicer (v0.8.0)
+# orcad: parametric CAD tab for OrcaSlicer (v0.9.0)
 
 orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -20,12 +20,16 @@ the build plate with one click.
 - **UI:** gradient styling that follows OrcaSlicer's light/dark theme. The
   layout adapts from wide desktop windows (three columns) through laptops
   (two columns) down to narrow windows (a single stacked column).
+- **AI assistant:** an optional integrated Pi agent in Code mode. It edits the
+  current `model.scad`, renders locally with OpenSCAD, and iterates on errors.
 
 ## How it works
 
 Every model is rendered by **OpenSCAD** with its fast Manifold kernel, so a
 typical Gridfinity bin takes well under a second. The plugin has **no Python
-dependencies** (`dependencies = []`), so installing it downloads nothing.
+dependencies** (`dependencies = []`). OpenSCAD is provisioned on first use if
+needed; the AI runtime is optional and downloads only when you choose **Install
+pi** in the Code view.
 
 On first start the plugin looks for OpenSCAD 2023 or newer on `PATH`. If it
 finds none, it downloads an official OpenSCAD development snapshot (about 80 MB)
@@ -43,6 +47,34 @@ plugin picks the newest snapshot for the platform and verifies it against the
 digest published beside it. The header shows the setup progress. The stable
 OpenSCAD 2021.01 release is too old for the Gridfinity library and is ignored.
 
+### AI assistant: setup, authentication, and privacy
+
+On request, **Install pi** provisions official Node.js **24.21.0** (SHA-256
+pinned per supported platform) and installs `@earendil-works/pi-coding-agent`
+**0.87.1** with that runtime's npm. The Node archive is about **27–38 MB**
+compressed depending on platform; the Pi package tarball is about **7.3 MB**
+(23 MB unpacked), plus its npm dependencies. No admin rights are required.
+
+The runtime, `model.scad` workspace, private Pi configuration, and optional
+provider-key file live under the per-user `orcad/ai` cache:
+
+| Platform | AI cache |
+| --- | --- |
+| Linux | `$XDG_CACHE_HOME/orcad/ai` or `~/.cache/orcad/ai` |
+| macOS | `~/Library/Caches/orcad/ai` |
+| Windows | `%LOCALAPPDATA%\orcad\ai` |
+
+Authentication can reuse the existing Pi login/settings in `~/.pi/agent`, or
+you can select a provider and enter its API key in the orcad settings. The key
+is stored in the private cache with mode `0600` and is never echoed back into
+the UI. The AI subprocess is restricted to `read`, `edit`, `write` for
+`model.scad`, plus orcad's local OpenSCAD render tool; it has no shell tool.
+
+**Privacy:** prompts and the current OpenSCAD source are sent to the selected
+model provider for inference. OpenSCAD rendering itself runs locally. Do not
+send designs you are not comfortable sharing with that provider. AI-generated
+code can be unsafe; inspect it before using or printing it.
+
 **Send to plate** writes an STL to `exports/` beside the plugin and launches the
 running OrcaSlicer executable with `--single-instance <file>` (on macOS,
 `open -a OrcaSlicer.app <file>`). The window that is already open imports it
@@ -55,16 +87,17 @@ Requires an OrcaSlicer build with plugin pages (`orca.pages`, the current
 Nightly). Builds without it get an "orcad (needs a newer OrcaSlicer)" entry
 instead of a tab.
 
-- **Single file (Plugin Hub):** `orcad.py` embeds the compiled page and the
-  OpenSCAD backend with its Gridfinity sources. Put it in
+- **Single file (Plugin Hub):** `orcad.py` embeds the compiled page, OpenSCAD
+  backend/Gridfinity sources, and AI backend code. Put it in
   `<Orca data dir>/orca_plugins/orcad/orcad.py`.
-- **Folder:** `orcad.py` plus `frontend/dist/index.html` and `openscad/` in the
-  same folder. Files beside `orcad.py` take precedence over the embedded copies.
+- **Folder:** `orcad.py` plus `frontend/dist/index.html`, `openscad/`, and `ai/`
+  in the same folder. Files beside `orcad.py` take precedence over embedded
+  copies.
 
 Restart OrcaSlicer and enable **orcad** in the Plugins dialog. Runtime data
 lives next to the plugin: `exports/` (your files), `.cache/` (rendered STL
-cache, capped at 512 MB) and `.backend/` (unpacked backend for single-file
-installs).
+cache, capped at 512 MB), and `.backend/` (unpacked code for single-file
+installs). The separate AI cache location is listed above.
 
 ## Troubleshooting
 
@@ -72,6 +105,8 @@ installs).
   network access to `files.openscad.org`. Hover or click the red pill for the
   reason. As an alternative, install an OpenSCAD 2023+ development snapshot
   and put it on `PATH`.
+- **AI setup fails:** Install pi needs network access to `nodejs.org` and the
+  npm registry. Retry from the AI setup card; Node and Pi versions are pinned.
 - **A render fails:** the message appears over the viewport; the Library
   highlights the fields involved and the Code tab marks the line. Full
   OpenSCAD output is in the Console card.
@@ -87,7 +122,7 @@ code you trust.
 ```sh
 cd frontend && npm ci && cd ..
 python3 dev/serve.py                 # the real backend + page at http://127.0.0.1:8765/?theme=dark|light
-python3 packaging/bundle.py          # build the page and embed it + openscad/ into orcad.py
+python3 packaging/bundle.py          # build the page and embed frontend, openscad/, and ai/
 python3 packaging/bundle.py --check  # CI: fail if frontend/dist or orcad.py is stale
 python3 -m pytest                    # backend, bootstrap, plugin and bundle tests
 (cd frontend && npm test)            # bridge, catalog, mesh and storage tests
@@ -102,6 +137,8 @@ Layout:
 
 - `orcad.py`: plugin entry point, message protocol (`Session`), render queue,
   exports and plate handoff.
+- `ai/`: pinned Node/Pi bootstrap, JSONL RPC bridge, OpenSCAD render extension,
+  and the one-file AI workspace.
 - `openscad/`: the standard-library backend. It holds `catalog.json` (the
   single source of truth for objects and parameters, shared with the
   frontend), `validation.py`, `runner.py` (sandboxed argv, Manifold, timeouts,
@@ -121,5 +158,5 @@ needed) and run the bundler.
 
 Original project code is AGPL-3.0-only (see `LICENSE`, `NOTICE`). The vendored
 Gridfinity Rebuilt source is MIT and unmodified. React, Three.js and the build
-tools are listed in `THIRD_PARTY_NOTICES`. Downloaded OpenSCAD binaries remain
-under the OpenSCAD project's licenses.
+tools are listed in `THIRD_PARTY_NOTICES`. Downloaded OpenSCAD, Node.js, and Pi binaries/packages
+remain under their respective upstream licenses.

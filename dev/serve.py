@@ -12,6 +12,7 @@ import json
 import queue
 import sys
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -55,6 +56,119 @@ def post(message):
 
 
 session = orcad.Session(post)
+AI_MODELS = [
+    {"provider": "openai", "id": "gpt-4.1-mini", "name": "GPT-4.1 mini"},
+    {"provider": "openai", "id": "gpt-4.1", "name": "GPT-4.1"},
+    {"provider": "anthropic", "id": "claude-sonnet-4", "name": "Claude Sonnet 4"},
+]
+ai_lock = threading.Lock()
+ai_state = "missing"
+ai_busy_id = None
+ai_cancelled = set()
+ai_config = {"source": "pi", "provider": "openai", "model": "gpt-4.1-mini", "thinking": "medium", "has_key": False}
+SAMPLE_SCAD = "$fn = 48;\n\ncylinder(h = 24, d = 32, center = true);\n"
+
+
+def ai_status():
+    with ai_lock:
+        current_state = ai_state
+        busy = ai_busy_id is not None
+        config = dict(ai_config)
+    return {
+        "type": "ai_status", "state": current_state,
+        "message": "Mock pi agent for frontend development.",
+        "progress": 1 if current_state == "ready" else 0,
+        "node_version": "24.21.0" if current_state == "ready" else None,
+        "pi_version": "0.87.1" if current_state == "ready" else None,
+        "busy": busy, "config": config, "models": AI_MODELS,
+    }
+
+
+def install_mock_ai():
+    global ai_state
+    for progress in (0.2, 0.55, 0.85):
+        time.sleep(0.35)
+        with ai_lock:
+            ai_state = "installing"
+        post({**ai_status(), "state": "installing", "message": "Installing mock Node.js and pi…", "progress": progress})
+    with ai_lock:
+        ai_state = "ready"
+    post(ai_status())
+
+
+def run_mock_prompt(run_id, initial_code):
+    global ai_busy_id
+    try:
+        for delta in ("I’ll make a simple centered cylinder ", "and keep the model editable in OpenSCAD."):
+            time.sleep(0.35)
+            with ai_lock:
+                cancelled = run_id in ai_cancelled
+            if cancelled:
+                post({"type": "ai_done", "id": run_id, "ok": False, "error": "aborted", "code": initial_code})
+                return
+            post({"type": "ai_event", "id": run_id, "kind": "text", "delta": delta})
+        post({"type": "ai_event", "id": run_id, "kind": "tool", "call_id": f"render-{run_id}",
+              "name": "render_openscad", "phase": "start", "summary": "Checking the generated model"})
+        time.sleep(0.3)
+        with ai_lock:
+            cancelled = run_id in ai_cancelled
+        if cancelled:
+            post({"type": "ai_done", "id": run_id, "ok": False, "error": "aborted", "code": initial_code})
+            return
+        post({"type": "ai_event", "id": run_id, "kind": "tool", "call_id": f"render-{run_id}",
+              "name": "render_openscad", "phase": "end", "summary": "Render check passed"})
+        post({"type": "ai_code", "id": run_id, "code": SAMPLE_SCAD})
+        post({"type": "ai_done", "id": run_id, "ok": True, "code": SAMPLE_SCAD})
+    finally:
+        with ai_lock:
+            ai_cancelled.discard(run_id)
+            if ai_busy_id == run_id:
+                ai_busy_id = None
+
+
+def handle_ai(message):
+    global ai_state, ai_busy_id, ai_config
+    kind = message.get("type")
+    if kind == "ai_status":
+        post(ai_status())
+    elif kind == "ai_setup":
+        with ai_lock:
+            if ai_state == "installing":
+                return
+            ai_state = "installing"
+        post({**ai_status(), "state": "installing", "message": "Preparing mock pi installation…", "progress": 0.05})
+        threading.Thread(target=install_mock_ai, daemon=True).start()
+    elif kind == "ai_config":
+        with ai_lock:
+            ai_config = {
+                "source": "key" if message.get("source") == "key" else "pi",
+                "provider": message.get("provider") or "openai",
+                "model": message.get("model") or "gpt-4.1-mini",
+                "thinking": message.get("thinking") or "medium",
+                # The mock does not retain an API key.
+                "has_key": False,
+            }
+            ai_state = "ready"
+        post(ai_status())
+    elif kind == "ai_prompt":
+        run_id = message.get("id")
+        with ai_lock:
+            if ai_busy_id is not None:
+                post({"type": "ai_done", "id": run_id, "ok": False, "error": "busy", "code": message.get("code", "")})
+                return
+            ai_busy_id = run_id
+            ai_state = "ready"
+        threading.Thread(target=run_mock_prompt, args=(run_id, message.get("code", "")), daemon=True).start()
+    elif kind == "ai_abort":
+        with ai_lock:
+            if message.get("id") == ai_busy_id:
+                ai_cancelled.add(message.get("id"))
+    elif kind == "ai_reset":
+        with ai_lock:
+            if ai_busy_id is not None:
+                ai_cancelled.add(ai_busy_id)
+            ai_busy_id = None
+        post(ai_status())
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -97,9 +211,12 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         length = int(self.headers.get("Content-Length") or 0)
         message = json.loads(self.rfile.read(length) or b"null")
-        reply = session.handle(message)
-        if reply is not None:
-            post(reply)
+        if isinstance(message, dict) and str(message.get("type", "")).startswith("ai_"):
+            handle_ai(message)
+        else:
+            reply = session.handle(message)
+            if reply is not None:
+                post(reply)
         self.send_response(204)
         self.end_headers()
 

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { createBridge } from './bridge.js'
+import { aiReducer, initialAIState } from './ai.js'
 import { OBJECTS, QUALITY, groups, isDisabled, restoreParams, searchObjects, setParam, defaults } from './catalog.js'
 import { loadSettings, saveSettings } from './storage.js'
 import { decodeMesh, meshStats } from './mesh.js'
@@ -9,6 +10,7 @@ import * as fmt from './format.js'
 import { Viewport } from './components/Viewport.jsx'
 import { ParamField } from './components/ParamField.jsx'
 import { CodeEditor } from './components/CodeEditor.jsx'
+import { AiPanel } from './components/AiPanel.jsx'
 import { Icon, Logo } from './components/Icons.jsx'
 
 const bridge = createBridge()
@@ -59,6 +61,9 @@ export default function App() {
   const [quality, setQuality] = useState(QUALITY.includes(saved.quality) ? saved.quality : 'balanced')
   const [format, setFormat] = useState(saved.format === '3mf' ? '3mf' : 'stl')
   const [code, setCode] = useState(typeof saved.code === 'string' && saved.code.trim() ? saved.code : EXAMPLES[DEFAULT_EXAMPLE].code)
+  const [aiState, dispatchAI] = useReducer(aiReducer, initialAIState)
+  const [aiOpen, setAiOpen] = useState(saved.aiOpen !== false)
+  const [aiConfigChoice, setAiConfigChoice] = useState(saved.aiConfig || null)
   const [autoRender, setAutoRender] = useState(saved.autoRender === true)
   const [pendingExample, setPendingExample] = useState(null)
   const [view, setView] = useState({ wireframe: false, edges: saved.edges !== false, grid: saved.grid !== false })
@@ -119,6 +124,17 @@ export default function App() {
       setExports((list) => [{ ...msg, time: new Date() }, ...list].slice(0, 12))
       if (op.purpose === 'plate') notify(msg.handoff?.ok ? 'success' : 'error', msg.handoff?.message || 'Exported.')
       else notify('success', `Saved ${msg.filename}`)
+    } else if (msg.type === 'ai_status') {
+      dispatchAI({ type: 'status', status: msg })
+    } else if (msg.type === 'ai_event') {
+      dispatchAI({ type: 'event', id: msg.id, event: msg })
+    } else if (msg.type === 'ai_code') {
+      dispatchAI({ type: 'code', id: msg.id, code: msg.code })
+      if (typeof msg.code === 'string') setCode(msg.code)
+    } else if (msg.type === 'ai_done') {
+      dispatchAI({ type: 'done', id: msg.id, ok: msg.ok, error: msg.error, code: msg.code })
+      if (typeof msg.code === 'string') setCode(msg.code)
+      if (msg.ok) setRenderTick((n) => n + 1)
     } else if (msg.type === 'notice') {
       notify(msg.ok ? 'info' : 'error', msg.message)
     } else if (msg.type === 'error') {
@@ -126,7 +142,10 @@ export default function App() {
     }
   }), [notify])
 
-  useEffect(() => { bridge.send({ type: 'hello' }) }, [])
+  useEffect(() => {
+    bridge.send({ type: 'hello' })
+    bridge.send({ type: 'ai_status' })
+  }, [])
   useEffect(() => {
     if (!['connecting', 'idle', 'starting'].includes(engine.state)) return undefined
     const timer = setInterval(() => bridge.send({ type: engine.state === 'connecting' ? 'hello' : 'engine' }), 1500)
@@ -135,8 +154,8 @@ export default function App() {
 
   // ---- persistence --------------------------------------------------------
   useEffect(() => {
-    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid })
-  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid])
+    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid, aiOpen, aiConfig: aiConfigChoice })
+  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid, aiOpen, aiConfigChoice])
 
   // ---- rendering ------------------------------------------------------------
   const source = useCallback(() => (mode === 'library'
@@ -327,9 +346,17 @@ export default function App() {
                 </div>
               )}
               <CodeEditor value={code} onChange={setCode} onRun={requestPreview} errorLine={error?.line} />
-              <p className="code-hint">
-                <kbd>Ctrl</kbd>+<kbd>Enter</kbd> renders. <code>include &lt;src/…&gt;</code> loads the bundled Gridfinity library.
-              </p>
+              <div className="ai-toggle-row">
+                <p className="code-hint">
+                  <kbd>Ctrl</kbd>+<kbd>Enter</kbd> renders. <code>include &lt;src/…&gt;</code> loads the bundled Gridfinity library.
+                </p>
+                <button type="button" className="btn btn-sm btn-accent" aria-expanded={aiOpen}
+                  aria-controls="ai-panel" onClick={() => setAiOpen((open) => !open)}>
+                  <Icon name="sparkles" size={15} /><span>{aiOpen ? 'Hide AI' : 'AI'}</span>
+                </button>
+              </div>
+              {aiOpen && <AiPanel state={aiState} dispatch={dispatchAI} code={code} configChoice={aiConfigChoice}
+                onConfigChoice={setAiConfigChoice} onCodeChange={setCode} onRender={() => setRenderTick((n) => n + 1)} sendMessage={bridge.send} />}
             </div>
           )}
         </aside>

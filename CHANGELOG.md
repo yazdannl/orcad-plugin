@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.9.0 — Integrated AI OpenSCAD assistant
+
+- Added an optional Pi coding agent to Code mode with streaming chat, thinking,
+  tool activity, code updates, revert, Stop, and New chat.
+- Added SHA-256-pinned Node.js 24.21.0 provisioning and exact Pi 0.87.1 npm
+  installation in a private per-user cache; existing Pi login or an orcad-owned
+  provider key can be used.
+- Restricted the agent to `model.scad` file tools and added a local Manifold
+  OpenSCAD render tool that reports diagnostics and model bounds.
+- Added worker-thread setup/configuration, progress, cancellation, and RPC
+  lifecycle handling. Prompts and source are sent to the selected AI provider;
+  renders remain local.
+
 ## 0.8.0 — OpenSCAD-only overhaul
 
 - **One CAD engine.** Every model is rendered by OpenSCAD. build123d, OCP and

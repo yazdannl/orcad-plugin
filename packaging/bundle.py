@@ -30,6 +30,7 @@ TARGET = ROOT / "orcad.py"
 FRONTEND = ROOT / "frontend"
 DIST = FRONTEND / "dist" / "index.html"
 BACKEND = ROOT / "openscad"
+AI_BACKEND = ROOT / "ai"
 REGIONS = {
     "backend": ("# BEGIN EMBEDDED OPENSCAD BACKEND", "# END EMBEDDED OPENSCAD BACKEND", "_EMBEDDED_BACKEND"),
     "frontend": ("# BEGIN BUNDLED FRONTEND", "# END BUNDLED FRONTEND", "_EMBEDDED_FRONTEND"),
@@ -45,7 +46,8 @@ def backend_archive() -> bytes:
     """Deterministic zip of openscad/ (fixed timestamps, sorted names)."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
-        for path in sorted(BACKEND.rglob("*")):
+        files = (path for package in (BACKEND, AI_BACKEND) for path in package.rglob("*"))
+        for path in sorted(files, key=lambda item: item.relative_to(ROOT).as_posix()):
             name = path.relative_to(ROOT).as_posix()
             if path.is_file() and not _SKIP.search(name):
                 info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
@@ -98,7 +100,7 @@ def write() -> None:
     TARGET.write_text(render_target(TARGET.read_text(encoding="utf-8"), DIST.read_text(encoding="utf-8")),
                       encoding="utf-8")
     shutil.rmtree(BACKEND / "__pycache__", ignore_errors=True)
-    print(f"embedded {DIST.relative_to(ROOT)} and openscad/ into {TARGET.name} "
+    print(f"embedded {DIST.relative_to(ROOT)}, openscad/ and ai/ into {TARGET.name} "
           f"({TARGET.stat().st_size // 1024} KB)")
 
 

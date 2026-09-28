@@ -1,4 +1,4 @@
-orcad 0.8.0
+orcad 0.9.0
 
 Original project code
 --------------------
@@ -29,6 +29,17 @@ available. The exact URLs and SHA-256 digests are checked into
 bundled dependencies remain under the OpenSCAD project's licenses and are not
 relicensed by this repository. The bootstrap stores the upstream package in a
 per-user cache rather than vendoring it here. See THIRD_PARTY_NOTICES.
+
+AI runtime downloads
+--------------------
+The optional AI feature downloads Node.js v24.21.0 from the official Node.js
+release host and installs `@earendil-works/pi-coding-agent` v0.87.1 from npm at
+runtime. Node.js is distributed under the MIT license; its upstream archive
+contains its full license and bundled third-party notices. Pi coding agent is
+published under the MIT license; its npm package and installed dependencies
+retain their respective upstream license files. These runtimes are stored in a
+per-user cache and are not vendored in this repository. See
+THIRD_PARTY_NOTICES for attribution pointers.
 
 Host attribution
 ----------------
