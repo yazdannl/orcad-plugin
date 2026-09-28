@@ -1,4 +1,4 @@
-# orcad: parametric CAD tab for OrcaSlicer (v0.9.0)
+# orcad: parametric CAD tab for OrcaSlicer (v0.9.1)
 
 orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -55,8 +55,8 @@ pinned per supported platform) and installs `@earendil-works/pi-coding-agent`
 compressed depending on platform; the Pi package tarball is about **7.3 MB**
 (23 MB unpacked), plus its npm dependencies. No admin rights are required.
 
-The runtime, `model.scad` workspace, private Pi configuration, and optional
-provider-key file live under the per-user `orcad/ai` cache:
+The runtime, `model.scad` workspace, orcad-managed Pi agent directory, and
+custom endpoint key files live under the per-user `orcad/ai` cache:
 
 | Platform | AI cache |
 | --- | --- |
@@ -64,16 +64,29 @@ provider-key file live under the per-user `orcad/ai` cache:
 | macOS | `~/Library/Caches/orcad/ai` |
 | Windows | `%LOCALAPPDATA%\orcad\ai` |
 
-Authentication can reuse the existing Pi login/settings in `~/.pi/agent`, or
-you can select a provider and enter its API key in the orcad settings. The key
-is stored in the private cache with mode `0600` and is never echoed back into
-the UI. The AI subprocess is restricted to `read`, `edit`, `write` for
-`model.scad`, plus orcad's local OpenSCAD render tool; it has no shell tool.
+In Code → Settings, choose **Use my pi setup** to reuse `~/.pi/agent`, or
+**orcad-managed** for a separate account/configuration under the cache above.
+Managed setup supports Pi's built-in browser/device sign-in and API-key login
+(e.g. GitHub Copilot, Anthropic Claude Pro/Max, and OpenAI ChatGPT), plus Sign
+out. Pi itself stores those credentials in
+`orcad/ai/private-agent/auth.json`; orcad never returns the saved values to the
+page or writes them to chat/history. One-time authorization links/device codes
+and the prompts needed to complete sign-in appear only in a transient dialog.
 
-**Privacy:** prompts and the current OpenSCAD source are sent to the selected
-model provider for inference. OpenSCAD rendering itself runs locally. Do not
-send designs you are not comfortable sharing with that provider. AI-generated
-code can be unsafe; inspect it before using or printing it.
+Use **Custom endpoint** for Ollama, LM Studio, vLLM, and other compatible
+servers. Enter its base URL, API type (OpenAI Completions/Responses, Anthropic
+Messages, or Google Generative AI), and model IDs, or use **Detect models** to
+query `{baseUrl}/models`. The managed `models.json` contains only endpoint
+settings and an environment-variable reference; an optional endpoint key is
+stored separately in a mode-`0600` file beneath the private agent directory.
+Keyless/local endpoints use a placeholder key when required by Pi.
+
+The AI subprocess is restricted to `read`, `edit`, and `write` for `model.scad`,
+plus orcad's local OpenSCAD render tool; it has no shell tool. **Privacy:**
+prompts and the current OpenSCAD source are sent to the selected model provider
+for inference. OpenSCAD rendering itself runs locally. Do not send designs you
+are not comfortable sharing with that provider. AI-generated code can be unsafe;
+inspect it before using or printing it.
 
 **Send to plate** writes an STL to `exports/` beside the plugin and launches the
 running OrcaSlicer executable with `--single-instance <file>` (on macOS,

@@ -10,6 +10,7 @@ import sys
 import threading
 import time
 import zipfile
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import pytest
@@ -59,7 +60,8 @@ def test_bundle_contains_the_ai_package_and_render_extension():
     bundle = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(bundle)
     with zipfile.ZipFile(io.BytesIO(bundle.backend_archive())) as archive:
-        assert {"ai/__init__.py", "ai/bootstrap.py", "ai/agent.py", "ai/render_openscad.ts"} <= set(archive.namelist())
+        assert {"ai/__init__.py", "ai/bootstrap.py", "ai/agent.py", "ai/providers.py",
+                "ai/pi_auth_helper.mjs", "ai/render_openscad.ts"} <= set(archive.namelist())
 
 
 def test_node_artifacts_are_pinned_for_supported_platforms():
@@ -75,10 +77,11 @@ def test_bootstrap_download_checksum_atomic_install_and_reuse(tmp_path, monkeypa
     digest = hashlib.sha256(payload).hexdigest()
     monkeypatch.setitem(bootstrap.NODE_HASHES, "win-x64", digest)
     server = Server(payload)
-    installs = []
+    installs, install_envs = [], []
 
-    def install(argv, _env, cancel):
+    def install(argv, env, cancel):
         installs.append(argv)
+        install_envs.append(dict(env))
         prefix = Path(argv[argv.index("--prefix") + 1])
         cli = prefix / "node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"
         cli.parent.mkdir(parents=True)
@@ -87,11 +90,14 @@ def test_bootstrap_download_checksum_atomic_install_and_reuse(tmp_path, monkeypa
 
     monkeypatch.setattr(bootstrap, "_run_install", install)
     monkeypatch.setattr(bootstrap, "_verify_pi", lambda root, _node, _env: bootstrap._pi_cli(root))
+    monkeypatch.setattr(bootstrap, "child_env", lambda: {
+        "ORCAD_CUSTOM_TEST_API_KEY": "dummy-custom-key", "OPENAI_API_KEY": "dummy-openai-key", "PATH": "/usr/bin"})
     progress = []
     paths = bootstrap.ensure_ai(root=tmp_path, system="win32", machine="x86_64", opener=server,
                                 progress=lambda message, value: progress.append((message, value)))
     assert Path(paths["node"]).is_file() and Path(paths["pi"]).is_file()
     assert len(installs) == 1 and "--ignore-scripts" in installs[0]
+    assert "ORCAD_CUSTOM_TEST_API_KEY" not in install_envs[0] and "OPENAI_API_KEY" not in install_envs[0]
     assert any(message == "Downloading Node.js" for message, _value in progress)
     assert progress[-1] == ("Ready", 1.0)
     assert bootstrap.ensure_ai(root=tmp_path, system="win32", machine="x86_64", opener=server) == paths
@@ -230,6 +236,18 @@ def test_session_routes_ai_protocol_and_returns_busy():
             pass
         def reset(self):
             pass
+        def authenticate(self, *_args):
+            return True
+        def respond_auth(self, _message):
+            pass
+        def cancel_auth(self):
+            pass
+        def detect_custom_models(self, _message):
+            return True
+        def save_custom_provider(self, _message):
+            return True
+        def remove_custom_provider(self, _message):
+            return True
         def close(self):
             pass
 
@@ -237,11 +255,126 @@ def test_session_routes_ai_protocol_and_returns_busy():
     assert session.handle({"type": "ai_status"}) == {"type": "ai_status", "state": "ready"}
     assert session.handle({"type": "ai_setup"})["state"] == "ready"
     assert session.handle({"type": "ai_config", "source": "pi"})["state"] == "ready"
+    assert session.handle({"type": "ai_auth", "action": "login", "provider": "github-copilot", "auth_type": "oauth"}) is None
+    assert session.handle({"type": "ai_auth_response", "id": "dialog", "value": "one-time-value"}) is None
+    assert session.handle({"type": "ai_auth_cancel"}) is None
+    assert session.handle({"type": "ai_provider_detect", "id": "detect", "baseUrl": "http://localhost"}) is None
+    assert session.handle({"type": "ai_provider_save", "provider": {"name": "Test"}}) is None
+    assert session.handle({"type": "ai_provider_remove", "id": "test"}) is None
     busy = session.handle({"type": "ai_prompt", "id": "x", "text": "edit", "code": ""})
     assert busy == {"type": "ai_done", "id": "x", "ok": False, "error": "busy", "code": ""}
     assert session.handle({"type": "ai_abort", "id": "x"}) is None
     assert session.handle({"type": "ai_reset"}) is None
     session.shutdown()
+
+
+def test_sdk_auth_prompts_bridge_without_echoing_secret(tmp_path, monkeypatch):
+    instance, messages = _agent(tmp_path, monkeypatch)
+    script = tmp_path / "fake-auth.py"
+    script.write_text(
+        """import json, sys
+print(json.dumps({'type':'notice','event':{'type':'device_code','userCode':'DEMO-CODE','verificationUri':'https://example.test/device'}}), flush=True)
+print(json.dumps({'type':'prompt','id':'auth-prompt','prompt':{'type':'secret','message':'API key'}}), flush=True)
+response = json.loads(sys.stdin.readline())
+print(json.dumps({'type':'done','ok':response.get('value')=='test-placeholder'}), flush=True)
+""",
+        encoding="utf-8")
+    instance._config["source"] = "managed"
+    instance.auth_helper_factory = lambda *_args: [sys.executable, str(script)]
+    messages.clear()
+    def post(message):
+        messages.append(message)
+        if message.get("type") == "ai_auth_prompt":
+            instance.respond_auth({"id": message["id"], "value": "test-placeholder"})
+    instance.post = post
+    result = instance._run_auth_helper("login", "test-provider", "api_key")
+    assert result["ok"]
+    assert any(message.get("type") == "ai_auth_prompt" for message in messages)
+    notice = next(message for message in messages if message.get("type") == "ai_auth_notice")
+    assert notice["event"]["userCode"] == "DEMO-CODE"
+    assert all("test-placeholder" not in json.dumps(message) for message in messages)
+    instance.close()
+
+
+def test_sign_out_routes_to_pi_auth_storage(tmp_path, monkeypatch):
+    instance, messages = _agent(tmp_path, monkeypatch)
+    script = tmp_path / "fake-logout.py"
+    script.write_text("import json; print(json.dumps({'type':'done','ok':True}), flush=True)\n", encoding="utf-8")
+    instance._config["source"] = "managed"
+    instance._providers = [{"id": "openai", "name": "OpenAI", "methods": ["api_key"], "status": "key set"}]
+    instance._stop_process = lambda: None
+    instance._ensure_process = lambda: None
+    instance._refresh_models = lambda: None
+    instance._refresh_provider_catalog = lambda: None
+    captured = []
+    instance.auth_helper_factory = lambda *args: (captured.append(args), [sys.executable, str(script)])[1]
+    assert instance.authenticate("logout", "openai")
+    done = _wait_for(messages, lambda item: item.get("type") == "ai_auth_done")
+    assert done["ok"] and captured[0][3:] == ("logout", "openai", "")
+    instance.close()
+
+
+def test_custom_provider_models_json_and_key_permissions(tmp_path, monkeypatch):
+    instance, messages = _agent(tmp_path, monkeypatch)
+    instance._config["source"] = "managed"
+    assert instance.save_custom_provider({"provider": {
+        "name": "Local Test", "baseUrl": "http://127.0.0.1:11434/v1", "api": "openai-completions",
+        "models": [{"id": "qwen-local", "name": "Qwen local"}],
+    }, "api_key": "test-local-key"})
+    saved = _wait_for(messages, lambda item: item.get("type") == "ai_provider_result" and item.get("action") == "save")
+    assert saved["ok"] and saved["id"] == "local-test"
+    private = tmp_path / "data/private-agent"
+    models_path = private / "models.json"
+    models = json.loads(models_path.read_text(encoding="utf-8"))
+    assert stat.S_IMODE(models_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE(private.stat().st_mode) == 0o700
+    assert models["providers"]["local-test"]["models"] == [{"id": "qwen-local", "name": "Qwen local"}]
+    assert models["providers"]["local-test"]["apiKey"] == "${ORCAD_CUSTOM_LOCAL_TEST_API_KEY}"
+    assert "test-local-key" not in models_path.read_text(encoding="utf-8")
+    key_path = private / "custom-keys/local-test.key"
+    assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
+    assert stat.S_IMODE((private / "custom-keys").stat().st_mode) == 0o700
+    assert instance.status()["custom_providers"][0]["has_key"]
+    child = agent_module._clean_pi_environment(
+        {}, {**instance._config, "node": sys.executable, "openscad": "openscad", "library": str(tmp_path)},
+        tmp_path / "data")
+    assert child["ORCAD_CUSTOM_LOCAL_TEST_API_KEY"] == "test-local-key"
+    assert instance.remove_custom_provider({"id": "local-test"})
+    removed = _wait_for(messages, lambda item: item.get("type") == "ai_provider_result" and item.get("action") == "remove")
+    assert removed["ok"]
+    assert json.loads(models_path.read_text(encoding="utf-8")) == {"providers": {}}
+    assert not key_path.exists()
+    instance.close()
+
+
+def test_detect_models_uses_bounded_openai_style_endpoint_and_key(tmp_path):
+    received = {}
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            received["path"] = self.path
+            received["authorization"] = self.headers.get("Authorization")
+            payload = json.dumps({"data": [{"id": "dummy-model"}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+        def log_message(self, *_args):
+            pass
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        endpoint = f"http://127.0.0.1:{server.server_port}/v1"
+        assert agent_module.custom_provider_config.detect_models(endpoint, "test-discovery-key") == [
+            {"id": "dummy-model", "name": "dummy-model"}]
+        assert received == {"path": "/v1/models", "authorization": "Bearer test-discovery-key"}
+    finally:
+        server.shutdown()
+        thread.join(timeout=2)
+        server.server_close()
+    with pytest.raises(ValueError, match="HTTPS"):
+        agent_module.custom_provider_config.validate_base_url("http://example.com/v1")
 
 
 def test_private_key_config_is_0600_and_never_echoed(tmp_path, monkeypatch):
@@ -250,7 +383,7 @@ def test_private_key_config_is_0600_and_never_echoed(tmp_path, monkeypatch):
     keyfile = tmp_path / "data/provider-key"
     assert stat.S_IMODE(keyfile.stat().st_mode) == 0o600
     status = instance.status()
-    assert status["config"]["source"] == "key" and status["config"]["has_key"]
+    assert status["config"]["source"] == "managed" and status["config"]["has_key"]
     child = agent_module._clean_pi_environment(
         {}, {**instance._config, "node": sys.executable, "openscad": "openscad", "library": str(tmp_path)},
         tmp_path / "data")

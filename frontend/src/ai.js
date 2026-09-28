@@ -4,6 +4,11 @@ export const initialAIState = {
   activeId: null,
   beforeCode: null,
   changed: false,
+  authPrompt: null,
+  authNotices: [],
+  authResult: null,
+  providerResult: null,
+  providerDetect: null,
 }
 
 export function aiReducer(state, action) {
@@ -59,6 +64,26 @@ export function aiReducer(state, action) {
         changed: typeof action.code === 'string' ? action.code !== state.beforeCode : state.changed,
         messages: action.ok ? state.messages : [...state.messages, { role: 'error', id: action.id, text: action.error || 'The AI request failed.' }],
       }
+    case 'auth-prompt':
+      return { ...state, authPrompt: { id: action.id, prompt: action.prompt }, authResult: null }
+    case 'auth-notice':
+      return { ...state, authNotices: [...state.authNotices.slice(-4), action.event] }
+    case 'auth-done':
+      return { ...state, authPrompt: null, authNotices: [], authResult: action.result }
+    case 'clear-auth-prompt':
+      return { ...state, authPrompt: null }
+    case 'clear-auth-result':
+      return { ...state, authResult: null }
+    case 'provider-result':
+      return { ...state, providerResult: action.result }
+    case 'clear-provider-result':
+      return { ...state, providerResult: null }
+    case 'provider-detect-start':
+      return { ...state, providerDetect: { id: action.id, done: false } }
+    case 'provider-detect-result':
+      return { ...state, providerDetect: { ...action.result, done: true } }
+    case 'clear-provider-detect':
+      return { ...state, providerDetect: null }
     case 'new-chat':
       return { ...state, messages: [], activeId: null, beforeCode: null, changed: false }
     case 'revert':

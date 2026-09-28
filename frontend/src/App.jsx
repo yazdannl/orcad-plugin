@@ -135,6 +135,16 @@ export default function App() {
       dispatchAI({ type: 'done', id: msg.id, ok: msg.ok, error: msg.error, code: msg.code })
       if (typeof msg.code === 'string') setCode(msg.code)
       if (msg.ok) setRenderTick((n) => n + 1)
+    } else if (msg.type === 'ai_auth_prompt') {
+      dispatchAI({ type: 'auth-prompt', id: msg.id, prompt: msg.prompt })
+    } else if (msg.type === 'ai_auth_notice') {
+      dispatchAI({ type: 'auth-notice', event: msg.event })
+    } else if (msg.type === 'ai_auth_done') {
+      dispatchAI({ type: 'auth-done', result: msg })
+    } else if (msg.type === 'ai_provider_result') {
+      dispatchAI({ type: 'provider-result', result: msg })
+    } else if (msg.type === 'ai_provider_detect_result') {
+      dispatchAI({ type: 'provider-detect-result', result: msg })
     } else if (msg.type === 'notice') {
       notify(msg.ok ? 'info' : 'error', msg.message)
     } else if (msg.type === 'error') {

@@ -346,6 +346,7 @@ html:root .editor-input {
 .ai-title { color: var(--soft-text); }
 .ai-title h2 { font-size: .95rem; font-weight: 700; color: var(--text); }
 .ai-actions { flex-wrap: wrap; justify-content: flex-end; }
+.ai-operation-status { color: var(--muted); font-size: .8rem; }
 .ai-setup {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 8px 12px; padding: 9px 10px;
   border: 1px solid var(--line-strong); border-radius: 10px; background: var(--raised);
@@ -382,6 +383,7 @@ html:root .ai-prompt textarea, html:root .ai-field input, html:root .ai-field se
   background: var(--field); color: var(--text);
 }
 html:root .ai-prompt textarea { flex: 1; min-height: 42px; max-height: 110px; resize: vertical; line-height: 1.4; }
+html:root .ai-prompt > button { flex: none; min-width: 68px; height: 42px; padding: 0 14px; }
 html:root .ai-prompt textarea:focus, html:root .ai-field input:focus, html:root .ai-field select:focus { border-color: var(--accent); }
 .ai-footnote { color: var(--muted); font-size: .7rem; }
 .ai-settings { position: relative; }
@@ -389,7 +391,7 @@ html:root .ai-prompt textarea:focus, html:root .ai-field input:focus, html:root 
 .ai-settings > summary::-webkit-details-marker { display: none; }
 .ai-settings > summary:hover { color: var(--text); border-color: var(--accent); }
 .ai-settings-body {
-  position: absolute; z-index: 20; bottom: calc(100% + 7px); right: 0; display: grid; gap: 10px; width: min(330px, calc(100vw - 40px));
+  position: absolute; z-index: 20; bottom: calc(100% + 7px); right: 0; display: grid; gap: 10px; width: min(420px, calc(100vw - 32px));
   max-height: min(70vh, 560px); overflow: auto; padding: 13px; border: 1px solid var(--line-strong); border-radius: 12px;
   background: var(--raised-2); box-shadow: var(--shadow);
 }
@@ -398,6 +400,33 @@ html:root .ai-prompt textarea:focus, html:root .ai-field input:focus, html:root 
 .ai-field small { font-size: .72rem; }
 .ai-settings-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ai-settings-actions [role=status] { color: var(--muted); font-size: .75rem; }
+.ai-settings-title { font-size: .95rem; }
+.ai-settings-help, .ai-settings-notice { color: var(--muted); font-size: .78rem; }
+.ai-provider-section { display: grid; gap: 8px; padding-top: 10px; border-top: 1px solid var(--line); }
+.ai-section-head, .ai-provider-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ai-section-head { justify-content: space-between; font-size: .84rem; }
+.ai-section-head span, .ai-provider-status { color: var(--muted); font-size: .76rem; }
+.ai-provider-row { padding: 6px 7px; border-radius: 8px; background: var(--raised); }
+.ai-provider-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: .82rem; }
+.ai-provider-actions, .ai-custom-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; }
+.ai-auth-picker { display: grid; gap: 8px; padding: 9px; border-radius: 9px; background: var(--raised); }
+.ai-custom-tools > span { flex: 1; min-width: 120px; color: var(--muted); font-size: .76rem; }
+.ai-check { display: flex; align-items: center; gap: 7px; font-size: .8rem; }
+html:root .ai-check input { width: 16px; height: 16px; accent-color: var(--accent); }
+.ai-warning { color: var(--danger); font-size: .8rem; }
+.ai-modal-scrim { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, .56); }
+.ai-modal { width: min(480px, calc(100vw - 32px)); max-height: 88vh; overflow: auto; display: grid; gap: 12px; padding: 18px;
+  border: 1px solid var(--line-strong); border-radius: 14px; background: var(--raised-2); color: var(--text); box-shadow: var(--shadow); }
+.ai-modal h3 { font-size: 1rem; }
+.ai-modal-copy { color: var(--muted); font-size: .86rem; white-space: pre-wrap; }
+.ai-modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding-top: 4px; }
+.ai-auth-notice { display: grid; gap: 5px; padding: 10px; border-radius: 9px; background: var(--soft); overflow-wrap: anywhere; font-size: .82rem; }
+.ai-auth-notice p { color: var(--muted); }
+.ai-auth-notice a { color: var(--soft-text); text-decoration: underline; }
+.ai-device-code { justify-self: start; padding: 5px 9px; border-radius: 6px; background: var(--field); color: var(--text); font: 700 1rem var(--mono); user-select: all; }
+.ai-custom-modal { width: min(520px, calc(100vw - 32px)); max-height: 92vh; }
+.ai-custom-modal textarea { width: 100%; min-height: 90px; padding: 8px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--field); color: var(--text); font: .82rem/1.4 var(--mono); resize: vertical; }
+html:root .ai-custom-modal textarea:focus { border-color: var(--accent); }
 
 /* --------------------------------------------------------------- stage -- */
 .stage {

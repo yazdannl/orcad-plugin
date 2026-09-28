@@ -293,7 +293,8 @@ def ensure_ai(*, root: str | os.PathLike[str] | None = None, system: str | None 
                 raise FileNotFoundError("node was not found in the official archive")
             pi_dir = staging / "pi"
             pi_dir.mkdir()
-            env = {key: value for key, value in child_env().items() if key not in _CREDENTIAL_ENV}
+            env = {key: value for key, value in child_env().items()
+                   if key not in _CREDENTIAL_ENV and not key.startswith("ORCAD_CUSTOM_")}
             env["PATH"] = str(node.parent) + os.pathsep + env.get("PATH", "")
             env["HOME"] = str(staging)
             env["USERPROFILE"] = str(staging)

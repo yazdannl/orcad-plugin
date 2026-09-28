@@ -61,9 +61,20 @@ AI_MODELS = [
     {"provider": "openai", "id": "gpt-4.1", "name": "GPT-4.1"},
     {"provider": "anthropic", "id": "claude-sonnet-4", "name": "Claude Sonnet 4"},
 ]
+AI_PROVIDERS = [
+    {"id": "openai-codex", "name": "OpenAI ChatGPT", "methods": ["oauth"], "subscription": True, "status": "not configured"},
+    {"id": "anthropic", "name": "Anthropic Claude Pro/Max", "methods": ["oauth", "api_key"], "subscription": True, "status": "not configured"},
+    {"id": "github-copilot", "name": "GitHub Copilot", "methods": ["oauth"], "subscription": True, "status": "not configured"},
+    {"id": "openai", "name": "OpenAI API", "methods": ["api_key"], "subscription": False, "status": "not configured"},
+]
+AI_CUSTOM_PROVIDERS = []
 ai_lock = threading.Lock()
 ai_state = "missing"
 ai_busy_id = None
+ai_auth_busy = False
+ai_auth_request_id = None
+ai_auth_provider = None
+ai_auth_method = None
 ai_cancelled = set()
 ai_config = {"source": "pi", "provider": "openai", "model": "gpt-4.1-mini", "thinking": "medium", "has_key": False}
 SAMPLE_SCAD = "$fn = 48;\n\ncylinder(h = 24, d = 32, center = true);\n"
@@ -72,7 +83,7 @@ SAMPLE_SCAD = "$fn = 48;\n\ncylinder(h = 24, d = 32, center = true);\n"
 def ai_status():
     with ai_lock:
         current_state = ai_state
-        busy = ai_busy_id is not None
+        busy = ai_busy_id is not None or ai_auth_busy
         config = dict(ai_config)
     return {
         "type": "ai_status", "state": current_state,
@@ -80,7 +91,9 @@ def ai_status():
         "progress": 1 if current_state == "ready" else 0,
         "node_version": "24.21.0" if current_state == "ready" else None,
         "pi_version": "0.87.1" if current_state == "ready" else None,
-        "busy": busy, "config": config, "models": AI_MODELS,
+        "busy": busy, "auth_busy": ai_auth_busy, "config": config, "models": AI_MODELS,
+        "providers": AI_PROVIDERS if config.get("source") != "pi" else [],
+        "custom_providers": AI_CUSTOM_PROVIDERS if config.get("source") != "pi" else [],
     }
 
 
@@ -126,8 +139,21 @@ def run_mock_prompt(run_id, initial_code):
                 ai_busy_id = None
 
 
+def mock_auth_flow(provider, auth_type, request_id):
+    if auth_type == "oauth":
+        post({"type": "ai_auth_notice", "event": {"type": "auth_url",
+              "url": "https://example.com/device", "instructions": "Open the provider page, then paste its redirect URL or code."}})
+        time.sleep(0.25)
+        prompt = {"type": "manual_code", "message": "Paste the final redirect URL or authorization code.",
+                  "placeholder": "https://localhost/callback?...", "options": []}
+    else:
+        prompt = {"type": "secret", "message": f"Enter an API key for {provider}.", "placeholder": "API key", "options": []}
+    post({"type": "ai_auth_prompt", "id": request_id, "prompt": prompt})
+
+
 def handle_ai(message):
-    global ai_state, ai_busy_id, ai_config
+    global ai_state, ai_busy_id, ai_config, ai_auth_busy, ai_auth_request_id, ai_auth_provider, ai_auth_method
+    global AI_PROVIDERS, AI_CUSTOM_PROVIDERS, AI_MODELS
     kind = message.get("type")
     if kind == "ai_status":
         post(ai_status())
@@ -139,21 +165,89 @@ def handle_ai(message):
         post({**ai_status(), "state": "installing", "message": "Preparing mock pi installation…", "progress": 0.05})
         threading.Thread(target=install_mock_ai, daemon=True).start()
     elif kind == "ai_config":
+        source = "pi" if message.get("source") == "pi" else "managed"
         with ai_lock:
             ai_config = {
-                "source": "key" if message.get("source") == "key" else "pi",
+                "source": source,
                 "provider": message.get("provider") or "openai",
                 "model": message.get("model") or "gpt-4.1-mini",
                 "thinking": message.get("thinking") or "medium",
-                # The mock does not retain an API key.
                 "has_key": False,
             }
             ai_state = "ready"
         post(ai_status())
+    elif kind == "ai_auth":
+        provider, auth_type = message.get("provider"), message.get("auth_type")
+        if message.get("action") == "logout":
+            with ai_lock:
+                for item in AI_PROVIDERS:
+                    if item["id"] == provider:
+                        item["status"] = "not configured"
+            post({"type": "ai_auth_done", "action": "logout", "provider": provider, "ok": True})
+            post(ai_status())
+            return
+        with ai_lock:
+            if ai_config.get("source") != "managed" or ai_auth_busy:
+                post({"type": "ai_auth_done", "ok": False, "message": "Use orcad-managed mode first."})
+                return
+            ai_auth_busy = True
+            ai_auth_request_id = f"mock-auth-{time.monotonic_ns()}"
+            ai_auth_provider, ai_auth_method = provider, auth_type
+            request_id = ai_auth_request_id
+        post(ai_status())
+        threading.Thread(target=mock_auth_flow, args=(provider, auth_type, request_id), daemon=True).start()
+    elif kind == "ai_auth_response":
+        with ai_lock:
+            if message.get("id") != ai_auth_request_id:
+                return
+            provider, auth_type = ai_auth_provider, ai_auth_method
+            cancelled = message.get("cancelled") is True
+            # The mock observes only whether a value was supplied; it never retains the value.
+            configured = not cancelled and isinstance(message.get("value"), str) and bool(message.get("value"))
+            ai_auth_busy = False
+            ai_auth_request_id = ai_auth_provider = ai_auth_method = None
+            for item in AI_PROVIDERS:
+                if item["id"] == provider and configured:
+                    item["status"] = "signed in" if auth_type == "oauth" else "key set"
+        post({"type": "ai_auth_done", "action": "login", "provider": provider,
+              "ok": configured, "cancelled": cancelled})
+        post(ai_status())
+    elif kind == "ai_auth_cancel":
+        with ai_lock:
+            ai_auth_busy = False
+            ai_auth_request_id = ai_auth_provider = ai_auth_method = None
+        post({"type": "ai_auth_done", "ok": False, "cancelled": True})
+        post(ai_status())
+    elif kind == "ai_provider_detect":
+        post({"type": "ai_provider_detect_result", "id": message.get("id"), "ok": True,
+              "models": [{"id": "qwen2.5-coder:7b", "name": "Qwen 2.5 Coder 7B"},
+                         {"id": "llama3.2:latest", "name": "Llama 3.2"}]})
+    elif kind == "ai_provider_save":
+        provider = dict(message.get("provider") or {})
+        provider_id = provider.get("id") or "-".join(provider.get("name", "local").lower().split())
+        provider["id"] = provider_id
+        with ai_lock:
+            existing = next((item for item in AI_CUSTOM_PROVIDERS if item["id"] == provider_id), None)
+            has_key = bool(message.get("api_key")) or (bool(existing and existing.get("has_key")) and not message.get("remove_key"))
+            entry = {key: provider[key] for key in ("id", "name", "baseUrl", "api", "models") if key in provider}
+            entry["has_key"] = has_key
+            AI_CUSTOM_PROVIDERS = [item for item in AI_CUSTOM_PROVIDERS if item["id"] != provider_id] + [entry]
+            AI_MODELS = [item for item in AI_MODELS if item["provider"] != provider_id]
+            AI_MODELS.extend({"provider": provider_id, "id": model["id"], "name": model.get("name", model["id"])}
+                             for model in provider.get("models", []) if isinstance(model, dict) and model.get("id"))
+        post({"type": "ai_provider_result", "action": "save", "id": provider_id, "ok": True})
+        post(ai_status())
+    elif kind == "ai_provider_remove":
+        provider_id = message.get("id")
+        with ai_lock:
+            AI_CUSTOM_PROVIDERS = [item for item in AI_CUSTOM_PROVIDERS if item["id"] != provider_id]
+            AI_MODELS = [item for item in AI_MODELS if item["provider"] != provider_id]
+        post({"type": "ai_provider_result", "action": "remove", "id": provider_id, "ok": True})
+        post(ai_status())
     elif kind == "ai_prompt":
         run_id = message.get("id")
         with ai_lock:
-            if ai_busy_id is not None:
+            if ai_busy_id is not None or ai_auth_busy:
                 post({"type": "ai_done", "id": run_id, "ok": False, "error": "busy", "code": message.get("code", "")})
                 return
             ai_busy_id = run_id

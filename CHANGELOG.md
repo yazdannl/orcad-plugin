@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.1 — In-app provider setup
+
+- Added orcad-managed Pi OAuth/subscription and API-key sign-in/sign-out using Pi's SDK auth API and private `auth.json`.
+- Added custom OpenAI-compatible endpoints for Ollama, LM Studio, vLLM, and similar services, with optional `/models` discovery and 0600 key files.
+- Added provider status/model settings and transient authentication dialogs; saved credentials are not returned to page state or logs.
+- Improved provider settings, Revert/New chat buttons, and the prompt Send button layout.
+
 ## 0.9.0 — Integrated AI OpenSCAD assistant
 
 - Added an optional Pi coding agent to Code mode with streaming chat, thinking,
