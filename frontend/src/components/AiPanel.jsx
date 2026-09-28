@@ -193,12 +193,16 @@ function Settings({ status, configChoice, onConfigChoice, sendMessage, state, di
       if (!rect) return
       const width = Math.max(0, Math.min(420, window.innerWidth - 32))
       const maxHeight = Math.min(560, window.innerHeight * 0.7)
-      const above = rect.top - 24
+      const safeTop = document.querySelector('.topbar')?.getBoundingClientRect().bottom ?? 16
+      const above = rect.top - safeTop - 8
       const below = window.innerHeight - rect.bottom - 24
-      const openBelow = below >= Math.min(maxHeight, 320) || below >= above
+      const openBelow = below >= maxHeight || below >= above
       const available = Math.max(0, Math.min(maxHeight, openBelow ? below : above))
       const left = Math.max(16, Math.min(rect.right - width, window.innerWidth - width - 16))
-      setPopoverStyle({ left, top: openBelow ? rect.bottom + 8 : Math.max(16, rect.top - available - 8), width, maxHeight: available })
+      const position = { left, width, maxHeight: available }
+      if (openBelow) position.top = rect.bottom + 8
+      else position.bottom = window.innerHeight - rect.top + 8
+      setPopoverStyle(position)
     }
     positionPopover()
     window.addEventListener('resize', positionPopover)
