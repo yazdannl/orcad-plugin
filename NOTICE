@@ -1,9 +1,9 @@
-orcad 0.7.0
+orcad 0.8.0
 
 Original project code
 --------------------
-The original Python plugin, object sources, verification code, documentation,
-and frontend source in this repository are released under the GNU Affero
+The original Python plugin, OpenSCAD object sources, documentation, and
+frontend source in this repository are released under the GNU Affero
 General Public License, version 3 only (AGPL-3.0-only). See LICENSE.
 
 Upstream Gridfinity attribution
@@ -23,8 +23,8 @@ license and README.
 OpenSCAD bootstrap attribution
 -------------------------------
 The plugin can download a pinned OpenSCAD development snapshot from the
-official `files.openscad.org` host when Gridfinity object mode has no supported
-system executable. The exact URLs and SHA-256 digests are checked into
+official `files.openscad.org` host when no supported system executable is
+available. The exact URLs and SHA-256 digests are checked into
 `openscad/bootstrap.py`; the platform-specific OpenSCAD binaries and their
 bundled dependencies remain under the OpenSCAD project's licenses and are not
 relicensed by this repository. The bootstrap stores the upstream package in a
@@ -38,6 +38,6 @@ and is not relicensed or redistributed by this repository.
 Third-party frontend material
 -----------------------------
 The compiled frontend includes third-party React, React DOM, Three.js,
-Tailwind CSS, Vite, and related build material under their own licenses. Their
+and related build material under their own licenses. Their
 notices are kept separate in THIRD_PARTY_NOTICES; the AGPL-3.0-only statement
 above does not relicense those components.

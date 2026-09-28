@@ -1,50 +1,66 @@
-import rawCatalog from '../../openscad/catalog.json' with { type: 'json' }
-import { PRIMS as legacyPrims } from './primitives.js'
+import catalog from '../../openscad/catalog.json' with { type: 'json' }
 
-const UI_KEYS = ['group', 'help']
+export const QUALITY = Object.keys(catalog.quality_profiles)
+export const OBJECTS = catalog.objects
+export const OBJECT_KEYS = Object.keys(OBJECTS)
+export const LIBRARY_REVISION = catalog.source.revision
 
-function uiMetadata(parameter) {
-  const ui = {}
-  for (const key of UI_KEYS) {
-    if (parameter[key] !== undefined) ui[key] = parameter[key]
-  }
-  if (Array.isArray(parameter.depends_on) && parameter.depends_on.length) {
-    ui.dependsOn = parameter.depends_on[0]
-  }
-  if (Array.isArray(parameter.conflicts_with) && parameter.conflicts_with.length) {
-    ui.exclusiveWith = parameter.conflicts_with[0]
-  }
-  return ui
+export function defaults(key) {
+  return Object.fromEntries((OBJECTS[key]?.parameters || []).map((p) => [p.variable, p.default]))
 }
 
-function primitiveFromOpenScad(name, spec) {
-  const params = spec.parameters.map((parameter) => {
-    const type = parameter.type === 'boolean'
-      ? 'bool'
-      : parameter.type === 'integer' ? 'int' : 'number'
-    const ui = uiMetadata(parameter)
-    const tuple = [parameter.variable, parameter.label, parameter.unit || '', type, parameter.default]
-    if (type !== 'bool') tuple.push(parameter.min, parameter.max, parameter.step)
-    if (parameter.options) tuple.push(parameter.options)
-    if (Object.keys(ui).length) tuple.push(ui)
-    return tuple
+export function groups(key) {
+  const result = new Map()
+  for (const param of OBJECTS[key]?.parameters || []) {
+    const name = param.group || 'Parameters'
+    if (!result.has(name)) result.set(name, [])
+    result.get(name).push(param)
+  }
+  return [...result].map(([name, params]) => ({ name, params }))
+}
+
+export function searchObjects(query) {
+  const needle = String(query || '').trim().toLowerCase()
+  return OBJECT_KEYS.filter((key) => {
+    const o = OBJECTS[key]
+    return !needle || [key, o.label, o.category, o.description].some((text) => String(text).toLowerCase().includes(needle))
   })
-  return {
-    label: spec.label,
-    blurb: `Upstream Gridfinity Rebuilt ${name}.`,
-    params,
-    backendObject: name,
-    warnings: spec.warnings || [],
-  }
 }
 
-export const OPENSCAD_PRIMS = Object.fromEntries(
-  Object.entries(rawCatalog.objects).map(([name, spec]) => [`gridfinity_${name}`, primitiveFromOpenScad(name, spec)]),
-)
+// Mirrors the backend rules so an obviously bad value never costs a render.
+export function checkValue(param, value) {
+  if (param.type === 'boolean') return typeof value === 'boolean' ? null : 'Must be on or off'
+  if (typeof value !== 'number' || !Number.isFinite(value)) return 'Enter a number'
+  if (param.type === 'integer' && !Number.isInteger(value)) return 'Enter a whole number'
+  const unit = param.unit ? ` ${param.unit}` : ''
+  if (param.min !== undefined && value < param.min) return `Minimum is ${param.min}${unit}`
+  if (param.max !== undefined && value > param.max) return `Maximum is ${param.max}${unit}`
+  if (param.step) {
+    const steps = (value - (param.min ?? 0)) / param.step
+    if (Math.abs(steps - Math.round(steps)) > 1e-6) return `Use steps of ${param.step}`
+  }
+  if (param.options && !param.options.some((o) => o.value === value)) return 'Choose an option'
+  return null
+}
 
-// The legacy objects remain available for simple build123d/code-mode examples;
-// these two entries are replaced by the upstream OpenSCAD catalog above.
-export const PRIMS = { ...legacyPrims, ...OPENSCAD_PRIMS }
-export const OPENSCAD_QUALITY_PROFILES = rawCatalog.quality_profiles
-export const OPENSCAD_SOURCE_REVISION = rawCatalog.source.revision
-export const OPENSCAD_PRIMITIVE_KEYS = new Set(Object.keys(OPENSCAD_PRIMS))
+export function restoreParams(key, saved) {
+  const result = defaults(key)
+  if (!saved || typeof saved !== 'object') return result
+  for (const param of OBJECTS[key]?.parameters || []) {
+    const value = saved[param.variable]
+    if (value !== undefined && checkValue(param, value) === null) result[param.variable] = value
+  }
+  return result
+}
+
+export function isDisabled(param, values) {
+  return (param.depends_on || []).some((name) => !values[name])
+}
+
+// Turning one option on switches off the options it conflicts with.
+export function setParam(key, values, name, value) {
+  const next = { ...values, [name]: value }
+  const param = OBJECTS[key]?.parameters.find((p) => p.variable === name)
+  if (value === true) for (const other of param?.conflicts_with || []) next[other] = false
+  return next
+}

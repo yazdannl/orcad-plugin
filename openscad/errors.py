@@ -1,5 +1,4 @@
 """Stable error values shared by the OpenSCAD backend."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -9,14 +8,12 @@ from typing import Any
 class ErrorCode:
     INVALID_OBJECT = "invalid_object"
     INVALID_PARAMETERS = "invalid_parameters"
-    INVALID_PARAMETER = "invalid_parameter"
     INVALID_VALUE = "invalid_value"
     UNSUPPORTED_VERSION = "openscad_unsupported_version"
     NOT_FOUND = "openscad_not_found"
     PROBE_FAILED = "openscad_probe_failed"
     INSTALL_FAILED = "openscad_install_failed"
     UNSUPPORTED_PLATFORM = "openscad_unsupported_platform"
-    SOURCE_NOT_FOUND = "source_not_found"
     OUTPUT_ERROR = "output_error"
     TIMEOUT = "timeout"
     CANCELLED = "cancelled"
@@ -40,10 +37,5 @@ class BackendError(Exception):
 
 
 class ValidationError(BackendError):
-    def __init__(self, message: str, **details: Any) -> None:
-        super().__init__(ErrorCode.INVALID_PARAMETERS, message, details)
-
-
-class InvalidSTLError(BackendError):
-    def __init__(self, message: str, **details: Any) -> None:
-        super().__init__(ErrorCode.INVALID_STL, message, details)
+    def __init__(self, message: str, *fields: str, **details: Any) -> None:
+        super().__init__(ErrorCode.INVALID_PARAMETERS, message, {"fields": list(fields), **details})

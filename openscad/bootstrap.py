@@ -1,9 +1,11 @@
-"""Download a verified OpenSCAD build into a per-user cache when needed.
+"""Provision a verified OpenSCAD build into a per-user cache when needed.
 
-The plugin cannot rely on a system package manager because OrcaSlicer runs on
-multiple operating systems and must not request administrator privileges. The
-artifact table is intentionally pinned: a startup download is accepted only
-from the official OpenSCAD snapshot URL with the checked-in SHA-256 digest.
+OrcaSlicer runs on several operating systems and must never ask for admin
+rights, so the plugin downloads an official OpenSCAD development snapshot
+(stable 2021.01 is too old for the Gridfinity library) and verifies it against
+a pinned SHA-256 digest. Snapshots are eventually deleted upstream; when the
+pinned file is gone, the newest snapshot for the platform is used instead and
+verified against the digest published beside it on the same HTTPS host.
 """
 from __future__ import annotations
 
@@ -11,6 +13,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 import shutil
 import stat
 import subprocess
@@ -18,20 +21,22 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from .errors import BackendError, ErrorCode
-from .runner import discover_openscad, probe_openscad
+from .runner import child_env, discover_openscad, popen_flags, probe_openscad
 
 BOOTSTRAP_VERSION = "2026.09.22"
+SNAPSHOT_INDEX = "https://files.openscad.org/snapshots/"
 MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
-MAX_EXTRACTED_BYTES = 500 * 1024 * 1024
-DOWNLOAD_TIMEOUT_SECONDS = 120.0
-PROBE_TIMEOUT_SECONDS = 10.0
+MAX_EXTRACTED_BYTES = 800 * 1024 * 1024
+NETWORK_TIMEOUT = 60.0
+INSTALL_TIMEOUT = 300.0
 
 
 @dataclass(frozen=True)
@@ -41,433 +46,313 @@ class OpenSCADArtifact:
     filename: str
     url: str
     sha256: str
-    kind: str
+    kind: str  # appimage | zip | dmg
     executable_name: str
     version: str = BOOTSTRAP_VERSION
+    pattern: str = ""  # newest-snapshot fallback; empty disables it
 
 
-# Official OpenSCAD snapshot artifacts. Keep these immutable and update the
-# digest whenever the pinned snapshot is intentionally changed.
 ARTIFACTS = {
     ("linux", "x86_64"): OpenSCADArtifact(
         "linux", "x86_64", "OpenSCAD-2026.09.22-x86_64.AppImage",
-        "https://files.openscad.org/snapshots/OpenSCAD-2026.09.22-x86_64.AppImage",
+        SNAPSHOT_INDEX + "OpenSCAD-2026.09.22-x86_64.AppImage",
         "474f7803ffcc3fbfc958c1ae8e57c12d9b78bdd3ad1eed5dd3417c2b85c5ad5a",
-        "appimage", "OpenSCAD-2026.09.22-x86_64.AppImage",
+        "appimage", "openscad", pattern=r"OpenSCAD-(\d{4}\.\d\d\.\d\d)(?:\.ai\d+)?-x86_64\.AppImage",
     ),
     ("linux", "aarch64"): OpenSCADArtifact(
         "linux", "aarch64", "OpenSCAD-2023.09.11.ai-aarch64.AppImage",
-        "https://files.openscad.org/snapshots/OpenSCAD-2023.09.11.ai-aarch64.AppImage",
+        SNAPSHOT_INDEX + "OpenSCAD-2023.09.11.ai-aarch64.AppImage",
         "84d7bb1c71e14b4e248a84fbe0a4b02f58bcbf5326f0ee81c8a4de3653a3b568",
-        "appimage", "OpenSCAD-2023.09.11.ai-aarch64.AppImage", "2023.09.11",
+        "appimage", "openscad", "2023.09.11",
     ),
     ("darwin", "universal"): OpenSCADArtifact(
         "darwin", "universal", "OpenSCAD-2026.09.22.dmg",
-        "https://files.openscad.org/snapshots/OpenSCAD-2026.09.22.dmg",
+        SNAPSHOT_INDEX + "OpenSCAD-2026.09.22.dmg",
         "eb64bc53525e6ce57a756ab7df5339b7f5493739147a9a4f02eae7ca3301ac13",
-        "dmg", "OpenSCAD",
+        "dmg", "OpenSCAD", pattern=r"OpenSCAD-(\d{4}\.\d\d\.\d\d)\.dmg",
     ),
     ("win32", "x86_64"): OpenSCADArtifact(
         "win32", "x86_64", "OpenSCAD-2026.09.22-x86-64.zip",
-        "https://files.openscad.org/snapshots/OpenSCAD-2026.09.22-x86-64.zip",
+        SNAPSHOT_INDEX + "OpenSCAD-2026.09.22-x86-64.zip",
         "40328a7da0127b96d7a06fc9d8031e92f21b9ab32c3530509a0c0888afb556d8",
-        "zip", "openscad.exe",
+        "zip", "openscad.exe", pattern=r"OpenSCAD-(\d{4}\.\d\d\.\d\d)-x86-64\.zip",
     ),
 }
 
 
-def _normalized_system(system: str | None = None) -> str:
-    value = system or sys.platform
-    if value.startswith("linux"):
-        return "linux"
-    if value == "darwin":
-        return "darwin"
-    if value in ("win32", "windows"):
-        return "win32"
-    return value
-
-
-def _normalized_architecture(machine: str | None = None) -> str:
-    value = (machine or platform.machine()).lower()
-    if value in ("x86_64", "amd64", "x64"):
-        return "x86_64"
-    if value in ("aarch64", "arm64"):
-        return "aarch64"
-    return value
-
-
 def artifact_for(system: str | None = None, machine: str | None = None) -> OpenSCADArtifact:
-    normalized_system = _normalized_system(system)
-    architecture = _normalized_architecture(machine)
-    key = (normalized_system, "universal") if normalized_system == "darwin" else (normalized_system, architecture)
-    try:
-        return ARTIFACTS[key]
-    except KeyError as exc:
-        label = f"{normalized_system}/{architecture}"
-        raise BackendError(
-            ErrorCode.UNSUPPORTED_PLATFORM,
-            f"Automatic OpenSCAD installation is unavailable for {label}; install OpenSCAD >=2023 manually.",
-            {"platform": normalized_system, "architecture": architecture},
-        ) from exc
+    system = system or sys.platform
+    system = "linux" if system.startswith("linux") else "win32" if system in ("win32", "windows") else system
+    arch = (machine or platform.machine()).lower()
+    arch = {"amd64": "x86_64", "x64": "x86_64", "arm64": "aarch64"}.get(arch, arch)
+    key = (system, "universal") if system == "darwin" else (system, arch)
+    if key not in ARTIFACTS:
+        raise BackendError(ErrorCode.UNSUPPORTED_PLATFORM,
+                           f"Automatic OpenSCAD setup is unavailable for {system}/{arch}; "
+                           "install an OpenSCAD 2023+ development snapshot and add it to PATH.",
+                           {"platform": system, "architecture": arch})
+    return ARTIFACTS[key]
 
 
 def cache_root(root: str | os.PathLike[str] | None = None) -> Path:
     if root is not None:
         return Path(root).expanduser()
     if sys.platform == "win32":
-        base = os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")
+        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Caches"
     else:
-        base = os.environ.get("XDG_CACHE_HOME") or (Path.home() / ".cache")
+        base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
     return Path(base).expanduser() / "orcad" / "openscad"
 
 
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+# ---------------------------------------------------------------- download
+
+def _fetch(url: str, opener: Callable[..., Any]):
+    request = urllib.request.Request(url, headers={"User-Agent": "orcad-plugin"})
+    response = opener(request, timeout=NETWORK_TIMEOUT)
+    if not str(getattr(response, "geturl", lambda: url)()).startswith("https://"):
+        response.close()
+        raise ValueError("download was redirected to a non-HTTPS URL")
+    return response
 
 
-def _safe_error(message: str, artifact: OpenSCADArtifact, *, cause: Exception | None = None) -> BackendError:
-    details: dict[str, Any] = {
-        "version": artifact.version,
-        "platform": artifact.platform,
-        "architecture": artifact.architecture,
-    }
-    if cause is not None:
-        details["cause"] = str(cause)[:500]
-    return BackendError(ErrorCode.INSTALL_FAILED, message, details)
+def newest_snapshot(artifact: OpenSCADArtifact, opener: Callable[..., Any] = urllib.request.urlopen) -> OpenSCADArtifact:
+    """Resolve the newest upstream snapshot matching *artifact* plus its published digest."""
+    with _fetch(SNAPSHOT_INDEX, opener) as response:
+        index = response.read(8 * 1024 * 1024).decode("utf-8", "replace")
+    found = {match.group(0): match.group(1) for match in re.finditer(artifact.pattern, index)}
+    if not found:
+        raise ValueError("no matching OpenSCAD snapshot is published")
+    filename = max(found, key=lambda name: (found[name], name))
+    with _fetch(SNAPSHOT_INDEX + filename + ".sha256", opener) as response:
+        digest = response.read(4096).decode("ascii", "replace").split()[0].lower()
+    if not re.fullmatch(r"[0-9a-f]{64}", digest):
+        raise ValueError("the published snapshot digest is malformed")
+    return replace(artifact, filename=filename, url=SNAPSHOT_INDEX + filename, sha256=digest, version=found[filename])
 
 
-def _download(
-    artifact: OpenSCADArtifact,
-    destination: Path,
-    *,
-    opener: Callable[..., Any] = urllib.request.urlopen,
-) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    partial = destination.with_name(f".{destination.name}.part")
-    partial.unlink(missing_ok=True)
+def _download(artifact: OpenSCADArtifact, destination: Path, opener: Callable[..., Any]) -> None:
+    partial = destination.with_name(destination.name + ".part")
+    digest, total = hashlib.sha256(), 0
     try:
-        request = urllib.request.Request(
-            artifact.url,
-            headers={"User-Agent": "orcad-plugin/OpenSCAD-bootstrap"},
-        )
-        with opener(request, timeout=DOWNLOAD_TIMEOUT_SECONDS) as response:
-            final_url = str(getattr(response, "geturl", lambda: artifact.url)())
-            if not final_url.startswith("https://"):
-                raise ValueError("OpenSCAD download was redirected to a non-HTTPS URL")
-            content_length = response.headers.get("Content-Length")
-            if content_length and int(content_length) > MAX_DOWNLOAD_BYTES:
-                raise ValueError("OpenSCAD download exceeds the safety size limit")
-            total = 0
-            digest = hashlib.sha256()
-            with partial.open("wb") as stream:
-                while True:
-                    chunk = response.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    total += len(chunk)
-                    if total > MAX_DOWNLOAD_BYTES:
-                        raise ValueError("OpenSCAD download exceeds the safety size limit")
-                    digest.update(chunk)
-                    stream.write(chunk)
+        with _fetch(artifact.url, opener) as response, partial.open("wb") as stream:
+            size = int(response.headers.get("Content-Length") or 0)
+            if size > MAX_DOWNLOAD_BYTES:
+                raise ValueError("the OpenSCAD download is unexpectedly large")
+            while chunk := response.read(1024 * 1024):
+                total += len(chunk)
+                if total > MAX_DOWNLOAD_BYTES:
+                    raise ValueError("the OpenSCAD download is unexpectedly large")
+                digest.update(chunk)
+                stream.write(chunk)
+                _set_progress(total, size)
         if digest.hexdigest() != artifact.sha256:
-            raise ValueError("OpenSCAD download checksum did not match the pinned digest")
+            raise ValueError("the OpenSCAD download failed its checksum")
         os.replace(partial, destination)
-        if os.name != "nt":
-            destination.chmod(0o700)
     finally:
         partial.unlink(missing_ok=True)
 
 
+# ----------------------------------------------------------------- install
+
 def _safe_member_path(root: Path, name: str) -> Path:
-    if "\\" in name:
-        raise ValueError("OpenSCAD archive contains an unsafe path")
     relative = PurePosixPath(name)
-    if relative.is_absolute() or not relative.parts or ".." in relative.parts:
-        raise ValueError("OpenSCAD archive contains an unsafe path")
-    target = (root.joinpath(*relative.parts)).resolve()
-    resolved_root = root.resolve()
-    if target != resolved_root and resolved_root not in target.parents:
-        raise ValueError("OpenSCAD archive contains an unsafe path")
+    if "\\" in name or relative.is_absolute() or ".." in relative.parts or not relative.parts:
+        raise ValueError("the OpenSCAD archive contains an unsafe path")
+    target = root.joinpath(*relative.parts).resolve()
+    if target != root.resolve() and root.resolve() not in target.parents:
+        raise ValueError("the OpenSCAD archive contains an unsafe path")
     return target
 
 
 def _safe_extract_zip(archive_path: Path, destination: Path) -> None:
-    destination.mkdir(parents=True, exist_ok=True, mode=0o700)
-    extracted_bytes = 0
+    extracted = 0
     with zipfile.ZipFile(archive_path) as archive:
         for info in archive.infolist():
-            extracted_bytes += max(0, info.file_size)
-            if extracted_bytes > MAX_EXTRACTED_BYTES:
-                raise ValueError("OpenSCAD archive exceeds the extracted size limit")
+            extracted += max(0, info.file_size)
+            if extracted > MAX_EXTRACTED_BYTES:
+                raise ValueError("the OpenSCAD archive is unexpectedly large")
             target = _safe_member_path(destination, info.filename)
-            mode = (info.external_attr >> 16) & 0o170000
-            if mode == stat.S_IFLNK:
-                raise ValueError("OpenSCAD archive contains a symlink")
+            if stat.S_ISLNK(info.external_attr >> 16):
+                raise ValueError("the OpenSCAD archive contains a symlink")
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
             target.parent.mkdir(parents=True, exist_ok=True)
-            with target.open("wb") as stream:
-                stream.write(archive.read(info))
-            permissions = (info.external_attr >> 16) & 0o777
-            target.chmod(permissions or 0o600)
+            with archive.open(info) as source, target.open("wb") as stream:
+                shutil.copyfileobj(source, stream)
+            target.chmod(((info.external_attr >> 16) & 0o777) or 0o644)
 
 
-def _find_executable(root: Path, executable_name: str) -> Path:
-    wanted = executable_name.casefold()
-    candidates = sorted(
-        path for path in root.rglob("*")
-        if path.is_file() and not path.is_symlink() and path.name.casefold() == wanted
-    )
-    if not candidates:
-        raise FileNotFoundError(f"{executable_name} was not found in the OpenSCAD package")
-    candidate = candidates[0]
-    if os.name != "nt":
-        candidate.chmod(candidate.stat().st_mode | stat.S_IXUSR)
-    return candidate
+def _find_executable(root: Path, name: str) -> Path:
+    for path in sorted(root.rglob("*"), key=lambda item: len(item.parts)):
+        if path.name.casefold() == name.casefold() and path.is_file() and not path.is_symlink():
+            if os.name != "nt":
+                path.chmod(path.stat().st_mode | stat.S_IXUSR)
+            return path
+    raise FileNotFoundError(f"{name} was not found in the OpenSCAD package")
 
 
-def _install_dmg(archive_path: Path, destination: Path) -> Path:
-    destination.mkdir(parents=True, exist_ok=True, mode=0o700)
-    with tempfile.TemporaryDirectory(prefix="orcad-openscad-mount-") as directory:
-        mount = Path(directory)
-        attach = subprocess.run(
-            ["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mount), str(archive_path)],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-            timeout=DOWNLOAD_TIMEOUT_SECONDS,
-        )
-        if attach.returncode:
-            raise RuntimeError("hdiutil could not mount the OpenSCAD disk image")
+def _run_quiet(argv: list[str], cwd: Path | None = None) -> None:
+    result = subprocess.run(argv, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                            check=False, timeout=INSTALL_TIMEOUT, env=child_env(), **popen_flags())
+    if result.returncode:
+        raise RuntimeError(f"{Path(argv[0]).name} failed with exit code {result.returncode}")
+
+
+def _install_appimage(archive: Path, destination: Path) -> Path:
+    """Extract instead of mounting: AppImages need FUSE, which many systems lack."""
+    image = destination / archive.name
+    shutil.copyfile(archive, image)
+    image.chmod(0o755)
+    try:
+        _run_quiet([str(image), "--appimage-extract"], cwd=destination)
+        executable = _find_executable(destination / "squashfs-root" / "usr" / "bin", "openscad")
+    except (OSError, RuntimeError, subprocess.TimeoutExpired):
+        return image  # still works where FUSE is available
+    image.unlink(missing_ok=True)
+    return executable
+
+
+def _install_dmg(archive: Path, destination: Path) -> Path:
+    with tempfile.TemporaryDirectory(prefix="orcad-openscad-mount-") as mount:
+        _run_quiet(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", mount, str(archive)])
         try:
-            apps = sorted(path for path in mount.glob("*.app") if path.is_dir())
-            if not apps:
+            app = next(iter(sorted(Path(mount).glob("*.app"))), None)
+            if app is None:
                 raise FileNotFoundError("OpenSCAD.app was not found in the disk image")
-            app = next((path for path in apps if path.name == "OpenSCAD.app"), apps[0])
-            target = destination / app.name
-            copied = subprocess.run(
-                ["ditto", str(app), str(target)],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-                timeout=DOWNLOAD_TIMEOUT_SECONDS,
-            )
-            if copied.returncode:
-                raise RuntimeError("ditto could not install the OpenSCAD application")
+            _run_quiet(["ditto", str(app), str(destination / app.name)])
         finally:
-            detached = subprocess.run(
-                ["hdiutil", "detach", str(mount), "-force"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-                timeout=DOWNLOAD_TIMEOUT_SECONDS,
-            )
-            if detached.returncode:
-                raise RuntimeError("hdiutil could not detach the OpenSCAD disk image")
+            subprocess.run(["hdiutil", "detach", mount, "-force"], stdout=subprocess.DEVNULL,
+                           stderr=subprocess.DEVNULL, check=False, timeout=INSTALL_TIMEOUT)
     return _find_executable(destination, "OpenSCAD")
 
 
-def _marker_path(install_dir: Path) -> Path:
-    return install_dir / ".orcad-openscad.json"
+def _install(artifact: OpenSCADArtifact, archive: Path, destination: Path) -> Path:
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    if artifact.kind == "appimage":
+        executable = _install_appimage(archive, destination)
+    elif artifact.kind == "zip":
+        _safe_extract_zip(archive, destination)
+        executable = _find_executable(destination, artifact.executable_name)
+    else:
+        executable = _install_dmg(archive, destination)
+    info = probe_openscad(executable)
+    if not info.supported:
+        raise ValueError(info.warning or "the downloaded OpenSCAD build is unsupported")
+    marker = {"version": info.version, "sha256": artifact.sha256, "executable": executable.relative_to(destination).as_posix()}
+    (destination / "orcad-install.json").write_text(json.dumps(marker), encoding="utf-8")
+    return executable
 
 
-def _read_cached_candidate(install_dir: Path, artifact: OpenSCADArtifact) -> Path | None:
-    marker = _marker_path(install_dir)
+def _installed(destination: Path) -> Path | None:
     try:
-        data = json.loads(marker.read_text(encoding="utf-8"))
-        if data.get("artifact_sha256") != artifact.sha256:
-            return None
-        relative = PurePosixPath(str(data["candidate"]))
-        candidate = _safe_member_path(install_dir, relative.as_posix())
-        if not candidate.is_file() or _sha256(candidate) != data.get("executable_sha256"):
-            return None
-        probe_openscad(candidate, timeout=PROBE_TIMEOUT_SECONDS)
-        return candidate
-    except (BackendError, OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        marker = json.loads((destination / "orcad-install.json").read_text(encoding="utf-8"))
+        executable = _safe_member_path(destination, str(marker["executable"]))
+        return executable if probe_openscad(executable).supported else None
+    except (BackendError, OSError, ValueError, KeyError, TypeError):
         return None
 
 
-def _write_marker(install_dir: Path, artifact: OpenSCADArtifact, candidate: Path) -> None:
-    marker = _marker_path(install_dir)
-    temporary = marker.with_name(f".{marker.name}.tmp")
-    data = {
-        "artifact_sha256": artifact.sha256,
-        "candidate": candidate.relative_to(install_dir).as_posix(),
-        "executable_sha256": _sha256(candidate),
-    }
-    temporary.write_text(json.dumps(data, sort_keys=True) + "\n", encoding="utf-8")
-    os.replace(temporary, marker)
-
-
-def _install_artifact(artifact: OpenSCADArtifact, artifact_path: Path, cache: Path) -> Path:
-    base = f"{artifact.version}-{artifact.platform}-{artifact.architecture}-{artifact.sha256[:12]}"
-    for attempt in range(100):
-        name = base if attempt == 0 else f"{base}-{attempt}"
-        install_dir = cache / name
-        cached = _read_cached_candidate(install_dir, artifact)
-        if cached is not None:
-            return cached
-        if install_dir.exists():
-            continue
-        try:
-            install_dir.mkdir(parents=True, mode=0o700)
-        except FileExistsError:
-            continue
-        if artifact.kind == "appimage":
-            candidate = install_dir / artifact.executable_name
-            shutil.copyfile(artifact_path, candidate)
-            candidate.chmod(candidate.stat().st_mode | stat.S_IXUSR)
-        elif artifact.kind == "zip":
-            _safe_extract_zip(artifact_path, install_dir)
-            candidate = _find_executable(install_dir, artifact.executable_name)
-        elif artifact.kind == "dmg":
-            candidate = _install_dmg(artifact_path, install_dir)
-        else:  # pragma: no cover - the checked-in table is exhaustive
-            raise ValueError(f"unknown OpenSCAD artifact kind: {artifact.kind}")
-        info = probe_openscad(candidate, timeout=PROBE_TIMEOUT_SECONDS)
-        if not info.supported:
-            raise ValueError(info.warning or "the downloaded OpenSCAD build is unsupported")
-        _write_marker(install_dir, artifact, candidate)
-        return candidate
-    raise RuntimeError("could not allocate a clean OpenSCAD installation directory")
-
-
-def ensure_openscad(
-    *,
-    root: str | os.PathLike[str] | None = None,
-    system: str | None = None,
-    machine: str | None = None,
-    opener: Callable[..., Any] = urllib.request.urlopen,
-) -> Path:
-    """Return a supported executable, downloading the pinned build if needed."""
+def ensure_openscad(*, root: str | os.PathLike[str] | None = None, system: str | None = None,
+                    machine: str | None = None, opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
+    """Return a supported OpenSCAD executable, installing one per user if needed."""
     try:
         existing = discover_openscad()
-        info = probe_openscad(existing, timeout=PROBE_TIMEOUT_SECONDS)
-        if info.supported:
+        if probe_openscad(existing).supported:
             return existing
-    except (BackendError, OSError):
+    except BackendError:
         pass
-
     artifact = artifact_for(system, machine)
     cache = cache_root(root)
-    cache.mkdir(parents=True, exist_ok=True)
-    if os.name != "nt":
-        cache.chmod(0o700)
-    artifact_path = cache / artifact.filename
+    destination = cache / f"{artifact.platform}-{artifact.architecture}"
     with _INSTALL_LOCK:
-        if artifact_path.is_symlink():
-            artifact_path.unlink(missing_ok=True)
-        if artifact_path.is_file():
-            try:
-                valid_artifact = _sha256(artifact_path) == artifact.sha256
-            except OSError:
-                valid_artifact = False
-            if not valid_artifact:
-                artifact_path.unlink(missing_ok=True)
-        if not artifact_path.is_file():
-            try:
-                _download(artifact, artifact_path, opener=opener)
-            except Exception as exc:
-                raise _safe_error(
-                    "Automatic OpenSCAD installation failed; install OpenSCAD >=2023 manually and retry.",
-                    artifact,
-                    cause=exc,
-                ) from exc
+        installed = _installed(destination)
+        if installed is not None:
+            return installed
+        cache.mkdir(parents=True, exist_ok=True)
         try:
-            candidate = _install_artifact(artifact, artifact_path, cache)
-            return candidate
+            try:
+                archive = cache / artifact.filename
+                _download(artifact, archive, opener)
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (403, 404, 410) or not artifact.pattern:
+                    raise
+                artifact = newest_snapshot(artifact, opener)
+                archive = cache / artifact.filename
+                _download(artifact, archive, opener)
+            try:
+                return _install(artifact, archive, destination)
+            finally:
+                archive.unlink(missing_ok=True)
         except Exception as exc:
-            raise _safe_error(
-                "Automatic OpenSCAD installation failed; install OpenSCAD >=2023 manually and retry.",
-                artifact,
-                cause=exc,
+            shutil.rmtree(destination, ignore_errors=True)
+            raise BackendError(
+                ErrorCode.INSTALL_FAILED,
+                "Automatic OpenSCAD setup failed. Check the network connection and retry, or install an "
+                "OpenSCAD 2023+ development snapshot and add it to PATH.",
+                {"cause": str(exc)[:500], "version": artifact.version},
             ) from exc
 
 
+# ------------------------------------------------------- background state
+
 _INSTALL_LOCK = threading.Lock()
 _STATE_LOCK = threading.Lock()
-_STATE_EVENT = threading.Event()
-_STATE = "idle"
-_STATE_PATH: Path | None = None
-_STATE_ERROR: BackendError | None = None
+_DONE = threading.Event()
+_STATE: dict[str, Any] = {"state": "idle", "path": None, "error": None, "progress": None}
 
 
-def _bootstrap_worker(root: str | os.PathLike[str] | None) -> None:
-    global _STATE, _STATE_PATH, _STATE_ERROR
+def _set_progress(done: int, total: int) -> None:
+    with _STATE_LOCK:
+        _STATE["progress"] = round(done / total, 3) if total else None
+
+
+def _worker(root: str | os.PathLike[str] | None) -> None:
     try:
         path = ensure_openscad(root=root)
+        update = {"state": "ready", "path": str(path), "error": None}
     except BackendError as exc:
-        with _STATE_LOCK:
-            _STATE = "failed"
-            _STATE_ERROR = exc
-    except Exception as exc:  # pragma: no cover - defensive conversion
-        with _STATE_LOCK:
-            _STATE = "failed"
-            _STATE_ERROR = BackendError(ErrorCode.INSTALL_FAILED, str(exc)[:500])
-    else:
-        with _STATE_LOCK:
-            _STATE = "ready"
-            _STATE_PATH = path
-            _STATE_ERROR = None
-    finally:
-        _STATE_EVENT.set()
+        update = {"state": "failed", "path": None, "error": exc}
+    except Exception as exc:  # pragma: no cover - defensive
+        update = {"state": "failed", "path": None, "error": BackendError(ErrorCode.INSTALL_FAILED, str(exc)[:500])}
+    with _STATE_LOCK:
+        _STATE.update(update, progress=None)
+    _DONE.set()
 
 
 def start_openscad_bootstrap(root: str | os.PathLike[str] | None = None) -> None:
-    """Start the non-blocking startup installer once for this plugin process."""
-    global _STATE, _STATE_PATH, _STATE_ERROR
+    """Start (or retry after a failure) the non-blocking setup; idempotent."""
     with _STATE_LOCK:
-        if _STATE in ("starting", "ready"):
+        if _STATE["state"] in ("starting", "ready"):
             return
-        _STATE = "starting"
-        _STATE_PATH = None
-        _STATE_ERROR = None
-        _STATE_EVENT.clear()
-        threading.Thread(
-            target=_bootstrap_worker, args=(root,), name="orcad-openscad-bootstrap", daemon=True
-        ).start()
+        _STATE.update(state="starting", path=None, error=None, progress=None)
+        _DONE.clear()
+    threading.Thread(target=_worker, args=(root,), name="orcad-openscad-setup", daemon=True).start()
 
 
-def openscad_bootstrap_status() -> dict[str, str | None]:
+def openscad_bootstrap_status() -> dict[str, Any]:
     with _STATE_LOCK:
-        return {
-            "state": _STATE,
-            "path": str(_STATE_PATH) if _STATE_PATH else None,
-            "error": str(_STATE_ERROR) if _STATE_ERROR else None,
-        }
+        error = _STATE["error"]
+        return {"state": _STATE["state"], "path": _STATE["path"], "progress": _STATE["progress"],
+                "error": error.message if error else None,
+                "error_details": error.details if error else None}
 
 
-def wait_for_openscad(
-    timeout: float = DOWNLOAD_TIMEOUT_SECONDS + PROBE_TIMEOUT_SECONDS,
-    root: str | os.PathLike[str] | None = None,
-    cancel: Callable[[], bool] | None = None,
-) -> Path:
-    """Wait for startup provisioning, retrying after a previous failed attempt."""
+def wait_for_openscad(cancel: Callable[[], bool] | None = None, timeout: float | None = None,
+                      root: str | os.PathLike[str] | None = None) -> Path:
+    """Block until setup finishes (retrying a failed one), honouring *cancel*."""
     start_openscad_bootstrap(root)
-    deadline = time.monotonic() + max(0.0, float(timeout))
-    while not _STATE_EVENT.is_set():
+    deadline = None if timeout is None else time.monotonic() + timeout
+    while not _DONE.wait(0.1):
         if cancel is not None and cancel():
-            raise BackendError(ErrorCode.CANCELLED, "OpenSCAD setup was cancelled")
-        remaining = deadline - time.monotonic()
-        if remaining <= 0 or _STATE_EVENT.wait(min(0.25, remaining)):
-            break
-    if not _STATE_EVENT.is_set():
-        raise BackendError(
-            ErrorCode.INSTALL_FAILED,
-            "OpenSCAD setup is still in progress; retry the preview after startup finishes.",
-        )
+            raise BackendError(ErrorCode.CANCELLED, "OpenSCAD setup wait was cancelled")
+        if deadline is not None and time.monotonic() > deadline:
+            raise BackendError(ErrorCode.INSTALL_FAILED, "OpenSCAD setup is still running")
     with _STATE_LOCK:
-        if _STATE_PATH is not None and _STATE == "ready":
-            return _STATE_PATH
-        if _STATE_ERROR is not None:
-            error = _STATE_ERROR
-        else:
-            error = BackendError(ErrorCode.INSTALL_FAILED, "OpenSCAD setup did not produce an executable")
-    raise error
-
-
-__all__ = [
-    "ARTIFACTS", "BOOTSTRAP_VERSION", "OpenSCADArtifact", "artifact_for", "cache_root",
-    "ensure_openscad", "openscad_bootstrap_status", "start_openscad_bootstrap", "wait_for_openscad",
-]
+        if _STATE["state"] == "ready":
+            return Path(_STATE["path"])
+        raise _STATE["error"] or BackendError(ErrorCode.INSTALL_FAILED, "OpenSCAD setup did not finish")

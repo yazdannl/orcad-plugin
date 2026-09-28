@@ -1,11 +1,13 @@
 __pycache__/
-node_modules/
-.pytest_cache/
 *.pyc
-exports/
-.openscad-cache/
+.pytest_cache/
+node_modules/
 dist/
 !frontend/dist/
 !frontend/dist/**
 .venv/
+# runtime data created beside orcad.py
+exports/
+.cache/
+.backend/
 .verify-cache/

@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.8.0 — OpenSCAD-only overhaul
+
+- **One CAD engine.** Every model is rendered by OpenSCAD. build123d, OCP and
+  NumPy are gone from the plugin's dependencies, so installing it no longer
+  pulls hundreds of MB of wheels and can no longer fail because no OCP wheel
+  exists for OrcaSlicer's Python. Box, Cylinder, Tube and Mounting plate were
+  ported to `.scad`. Code mode is now an OpenSCAD editor that can
+  `include <src/...>` the bundled Gridfinity library.
+- **Fast renders.** Uses the Manifold kernel (about 50x faster than CGAL for
+  Gridfinity) plus a size-bounded, content-addressed STL cache. Exporting after
+  a preview is instant.
+- **Reliable setup.** The Linux AppImage is extracted, so FUSE is no longer
+  needed. If the pinned snapshot is deleted upstream, the newest one is
+  verified against its published digest. The header reports download progress,
+  failed setups are retried on the next render, and the previous install is
+  reused without touching the network.
+- **Readable errors.** OpenSCAD's stderr is captured. Syntax errors report the
+  line (highlighted in the editor), 2D or empty results are explained, and the
+  full output is shown in a console. Validation errors point at the exact
+  parameters, both client-side and server-side.
+- **Send to plate** launches the running OrcaSlicer with `--single-instance`
+  (`open -a` on macOS) instead of relying on the OS file association.
+- **3MF export** for every model, alongside STL.
+- **New UI.** Gradient styling that follows OrcaSlicer's light/dark theme, and
+  a responsive layout (three columns, two columns, then a single stacked
+  column). Adds object cards, grouped parameters, sliders with number fields,
+  switches, segmented options, orbit/pan/zoom with standard views, wireframe,
+  edge and plate toggles, and toasts.
+- **Fixes:** a WebGL failure no longer blanks the page (software fallback).
+  React no longer wipes the canvas when a notice appears. Host-injected
+  element CSS can no longer restyle the controls, which also let Tailwind go.
+  Parameters are kept per object. Previews are debounced, and the newest
+  preview wins. Windows renders no longer flash a console window. The host's
+  `LD_LIBRARY_PATH` and similar variables no longer leak into OpenSCAD. The
+  backend is loaded under a private module name so it cannot collide with
+  other plugins.
+- **Smaller, stricter protocol.** `hello` / `engine` / `render` / `cancel` /
+  `open_exports` messages. Meshes travel as base64 float32/uint16 buffers
+  instead of JSON number lists (several times smaller).
+- **Dev server** (`dev/serve.py`) that simulates the host for browser work,
+  and a simpler deterministic bundler. The build123d geometry-verification
+  harness and compatibility matrix were removed along with the engine.
+
 ## 0.7.0 — Supported release and parity notes (Supported versions)
 
 - 0.7.0 is the single plugin release version. `compatibility.json` is the

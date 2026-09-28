@@ -1,13 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import tailwindcss from '@tailwindcss/vite'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 
+// One self-contained HTML file: OrcaSlicer loads the page with SetPage(), so
+// there is no server to fetch separate assets from.
 export default defineConfig({
-  plugins: [react(), tailwindcss(), viteSingleFile()],
-  build: {
-    cssCodeSplit: false,
-    assetsInlineLimit: 100_000_000,
-    rollupOptions: { output: { inlineDynamicImports: true } },
-  },
+  plugins: [react(), viteSingleFile()],
+  build: { target: 'es2020', cssCodeSplit: false, assetsInlineLimit: 100_000_000 },
 })

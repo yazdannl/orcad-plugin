@@ -1,52 +1,457 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { EXAMPLES, PRIMS_SPEC_FINGERPRINT } from './primitives.js'
-import { OPENSCAD_PRIMITIVE_KEYS, PRIMS } from './catalog.js'
-import { createBridge } from './bridgeAdapter.js'
-import { buildExportPayload } from './exportPayload.js'
-import { copyPath, handoffMessage } from './handoff.js'
-import { defaultParams, filterPrimitiveEntries, loadSettings, restoreParams, saveSettings } from './objectState.js'
-import { parameterGroups, isParamDisabled, paramUi, validationMessages } from './parameterUi.js'
-import { createDraftState, markDraftEdited, receiveGeneratedCode } from './codeDraft.js'
-import { Viewport } from './Viewport.jsx'
-import { cadReadinessStatus, SETUP_GUIDANCE } from './setupGuidance.js'
-import { meshTriangleCount } from './meshPayload.js'
+import { createBridge } from './bridge.js'
+import { OBJECTS, QUALITY, groups, isDisabled, restoreParams, searchObjects, setParam, defaults } from './catalog.js'
+import { loadSettings, saveSettings } from './storage.js'
+import { decodeMesh, meshStats } from './mesh.js'
+import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js'
+import { copyText } from './clipboard.js'
+import * as fmt from './format.js'
+import { Viewport } from './components/Viewport.jsx'
+import { ParamField } from './components/ParamField.jsx'
+import { CodeEditor } from './components/CodeEditor.jsx'
+import { Icon, Logo } from './components/Icons.jsx'
 
-const DEMO_MESH = { tris: [-10,-10,0, 10,-10,0, 10,10,0, -10,-10,0, 10,10,0, -10,10,0, -10,-10,0, -10,10,0, -10,-10,20, -10,-10,20, -10,10,20, 10,10,0, 10,-10,0, 10,-10,20, 10,-10,20, 10,-10,0, -10,-10,0, -10,-10,20, 10,-10,20, 10,10,0, -10,10,0, -10,10,20, -10,10,20, 10,10,0, 10,10,20, 10,-10,20, -10,-10,20, -10,10,20, 10,10,20 ], total: 12 }
-const QUALITY_TOLERANCE = { draft: 0.02, balanced: 0.005, final: 0.001 }
+const bridge = createBridge()
+const QUALITY_LABELS = { draft: 'Draft', balanced: 'Balanced', final: 'Fine' }
+const QUALITY_HINTS = {
+  draft: 'Coarse curves, fastest renders',
+  balanced: 'Good curves for most prints',
+  final: 'Smoothest curves, larger files',
+}
+const PREVIEW_DELAY = 250
+const AUTO_RENDER_DELAY = 900
+const VIEW_BUTTONS = [['iso', 'Isometric'], ['front', 'Front'], ['right', 'Right'], ['top', 'Top']]
 
-function ErrorNotice({ error, onRetry }) { return error && <div className="notice error" role="alert"><b>{error.title || 'Request failed'}</b><p>{error.message || error}</p>{onRetry && <button className="btn small" onClick={onRetry}>Retry</button>}</div> }
-function Field({ param, value, error, disabled, onChange }) {
-  const [key, label, unit, type, , min, max, step] = param; const options = param.find((item) => Array.isArray(item)) || null; const ui = paramUi(param)
-  return <div className={disabled ? 'field disabled' : 'field'}><label htmlFor={`param-${key}`}><b>{key}</b> {label} <small>{unit}</small></label>{type === 'bool' ? <input id={`param-${key}`} type="checkbox" checked={Boolean(value)} disabled={disabled} onChange={(e) => onChange(key, e.target.checked)} /> : options ? <select id={`param-${key}`} value={value} disabled={disabled} onChange={(e) => onChange(key, Number(e.target.value))}>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <><input id={`param-${key}`} type="number" min={min} max={max} step={step} value={value} disabled={disabled} aria-invalid={Boolean(error)} onChange={(e) => onChange(key, type === 'int' ? Number.parseInt(e.target.value, 10) : Number(e.target.value))} /><input aria-label={`${label} slider`} type="range" min={min} max={max} step={step} value={value} disabled={disabled} onChange={(e) => onChange(key, type === 'int' ? Number.parseInt(e.target.value, 10) : Number(e.target.value))} /></>}{ui.help && <small className="help">{ui.help}</small>}{error && <small className="field-error" role="alert">{error}</small>}</div>
+function exportName(key, params) {
+  const label = OBJECTS[key].label
+  if (params.gridx === undefined) return label
+  return `${label} ${params.gridx}x${params.gridy}${params.gridz !== undefined ? `x${params.gridz}` : ''}`
+}
+
+function fieldErrors(message) {
+  return Object.fromEntries((message.fields || []).map((field) => [field, message.error]))
+}
+
+function EnginePill({ engine, onDetails }) {
+  const { state } = engine
+  const pct = typeof engine.progress === 'number' ? ` ${Math.round(engine.progress * 100)}%` : ''
+  const [tone, text] = state === 'ready' ? ['ok', engine.version ? `OpenSCAD ${engine.version}` : 'OpenSCAD ready']
+    : state === 'failed' ? ['bad', 'OpenSCAD unavailable']
+      : state === 'offline' ? ['idle', 'Not connected']
+        : state === 'connecting' ? ['busy', 'Connecting…'] : ['busy', `Setting up OpenSCAD${pct}`]
+  const title = state === 'failed' ? engine.error : state === 'offline'
+    ? 'Open this page from the orcad tab in OrcaSlicer to render models.' : text
+  return (
+    <button type="button" className={`pill pill-${tone}`} title={title} onClick={onDetails}>
+      <span className="pill-dot" />
+      <span className="pill-text">{text}</span>
+    </button>
+  )
 }
 
 export default function App() {
-  const settings = useMemo(() => loadSettings(), [])
-  const [selected, setSelected] = useState(PRIMS[settings.selected] ? settings.selected : 'gridfinity_bin')
-  const [params, setParams] = useState(() => restoreParams(PRIMS[PRIMS[settings.selected] ? settings.selected : 'gridfinity_bin'], settings.paramsByObject?.[settings.selected]))
-  const [query, setQuery] = useState(settings.query || '')
-  const [quality, setQuality] = useState('balanced'); const [mode, setMode] = useState('objects'); const [format, setFormat] = useState('stl')
-  const [preview, setPreview] = useState(null); const [status, setStatus] = useState('Ready'); const [error, setError] = useState(null); const [validation, setValidation] = useState({}); const [bridgeState, setBridgeState] = useState('checking'); const [draft, setDraft] = useState(createDraftState); const [wireframe, setWireframe] = useState(false); const [spinning, setSpinning] = useState(false)
-  const [lastExport, setLastExport] = useState(null); const [handoffNote, setHandoffNote] = useState(''); const [cadState, setCadState] = useState('unchecked'); const [busy, setBusy] = useState(false); const requestId = useRef(0); const revision = useRef(0); const active = useRef(null); const folderRequest = useRef(null); const bridge = useMemo(() => createBridge(), []); const view = useRef(null)
-  const primitive = PRIMS[selected]; const entries = filterPrimitiveEntries(PRIMS, query); const isOpenScad = OPENSCAD_PRIMITIVE_KEYS.has(selected); const objectUsesStl = mode === 'objects' && isOpenScad; const readiness = cadReadinessStatus(cadState)
-  const handleViewportReady = useCallback((api) => { view.current = api }, [])
-  const persist = useCallback((nextSelected = selected, nextParams = params) => saveSettings({ selected: nextSelected, query, format, tolerance: QUALITY_TOLERANCE[quality], paramsByObject: { [nextSelected]: nextParams } }), [selected, params, query, format, quality])
-  const accept = useCallback((message, expected = active.current) => expected && message.request_id === expected.requestId && message.revision_id === expected.revisionId && (!expected.seq || message.seq === expected.seq), [])
-  const sendPreview = useCallback((nextParams = params, nextSelected = selected, nextQuality = quality) => {
-    const context = { request_id: ++requestId.current, revision_id: revision.current }; const expected = { requestId: context.request_id, revisionId: context.revision_id, seq: requestId.current }; active.current = expected; setBusy(true); setStatus('Building preview…'); setError(null)
-    const message = buildExportPayload({ mode: 'objects', command: 'preview', primitive: nextSelected, params: nextParams, format, tolerance: QUALITY_TOLERANCE[nextQuality], qualityProfile: nextQuality, filename: nextSelected, context }); message.seq = expected.seq
-    if (!bridge.post(message)) { setBridgeState('unavailable'); setBusy(false); setStatus('Demo preview · bridge unavailable'); setPreview(DEMO_MESH) }
-  }, [bridge, selected, params, format, quality])
-  const requestCode = useCallback(() => { const context = { request_id: ++requestId.current, revision_id: revision.current }; active.current = context; setBusy(true); setStatus('Preparing code…'); if (!bridge.post({ command: 'code', kind: 'generate', primitive: selected, params: { ...params }, ...context })) { setBusy(false); setBridgeState('unavailable'); setError({ title: 'Bridge unavailable', message: 'Code generation needs the OrcaSlicer bridge.' }) } }, [bridge, params, selected])
-  const sendOperation = (command) => { const context = { request_id: ++requestId.current, revision_id: revision.current }; active.current = context; setBusy(true); setStatus(command === 'plate' ? 'Sending to plate…' : 'Exporting…'); if (!bridge.post(buildExportPayload({ mode, command, primitive: selected, params, code: draft.codeDraft, format: objectUsesStl ? 'stl' : format, tolerance: QUALITY_TOLERANCE[quality], qualityProfile: quality, filename: selected, context }))) { setBusy(false); setBridgeState('unavailable'); setError({ title: 'Bridge unavailable', message: 'Export actions need the OrcaSlicer bridge.' }) } }
-  const switchMode = (next) => { if (next === mode) return; revision.current += 1; setMode(next); if (next === 'code') requestCode(); else { active.current = null; setBusy(false); setStatus('Ready') } }
-  const openExports = useCallback(() => { const context = { request_id: ++requestId.current, revision_id: revision.current }; folderRequest.current = context; setHandoffNote('Opening exports folder…'); if (!bridge.post({ command: 'open_exports', kind: 'folder', ...context })) { setHandoffNote('Exports folder is unavailable without the OrcaSlicer bridge.'); setBridgeState('unavailable') } }, [bridge])
-  const copyLastExport = useCallback(async () => { const copied = await copyPath(lastExport?.file); setHandoffNote(copied ? 'Export path copied.' : 'Could not copy the export path.') }, [lastExport])
-  useEffect(() => { const cleanup = bridge.subscribe((message) => { setBridgeState('ready'); if (message.type === 'progress' && accept(message, active.current)) { setStatus(message.message || 'Working…'); } else if (message.type === 'preview' && accept(message)) { setBusy(false); if (message.ok && message.preview) { setPreview(message.preview); setCadState('ready'); setStatus(`Preview ready · ${meshTriangleCount(message.preview)} triangles`); setValidation({}); } else { setError({ title: 'Preview failed', message: message.error || 'The backend rejected this preview.' }); setCadState('attention'); setValidation(validationMessages(message.errors)); setStatus('Preview failed; showing last preview') } } else if (message.type === 'code' && accept(message, active.current)) { setBusy(false); if (message.ok) { setStatus('Code ready'); setDraft((old) => { const next = { ...old }; receiveGeneratedCode(next, message.request_id, active.current.requestId, message.code); return next }) } else { setError({ title: 'Code generation failed', message: message.error || 'The backend rejected code generation.' }); setStatus('Code generation failed') } } else if (message.type === 'folder_result' && folderRequest.current && message.request_id === folderRequest.current.request_id && message.revision_id === folderRequest.current.revision_id) { setHandoffNote(message.ok ? handoffMessage(message) : message.error || 'Could not open the exports folder.') } else if (['result', 'plate_result', 'error'].includes(message.type) && accept(message, active.current)) { setBusy(false); setStatus(message.ok === false ? 'Export failed' : 'Export complete'); if (message.preview) setPreview(message.preview); if (message.file) setLastExport(message); if (message.type === 'plate_result') setHandoffNote(handoffMessage(message)); if (message.ok !== false || message.export_ok) { setCadState('ready'); setError(null) } else { setCadState('attention'); setError({ title: 'Export failed', message: message.error || 'The backend rejected the export.' }) } } }); setBridgeState(bridge.available() ? 'ready' : 'unavailable'); return cleanup }, [bridge, accept])
-  useEffect(() => { if (bridge.available()) sendPreview(); else { setPreview(DEMO_MESH); setStatus('Demo preview · connect Orca to render CAD'); } }, []) // initial render only
-  const changeParam = (key, value) => { const next = { ...params, [key]: value }; setParams(next); revision.current += 1; persist(selected, next); sendPreview(next, selected, quality) }
-  const choose = (key) => { const next = restoreParams(PRIMS[key], {}); setSelected(key); if (OPENSCAD_PRIMITIVE_KEYS.has(key)) setFormat('stl'); setParams(next); revision.current += 1; persist(key, next); sendPreview(next, key, quality) }
-  const reset = () => { const next = defaultParams(primitive); setParams(next); revision.current += 1; persist(selected, next); sendPreview(next, selected, quality) }
-  const editCode = (event) => { const next = { ...draft }; markDraftEdited(next, event.target.value); setDraft(next); revision.current += 1 }
-  return <div className="app" data-orcad-spec-fingerprint={PRIMS_SPEC_FINGERPRINT}><div className="sr-only" aria-live="polite">{status}</div><header className="topbar"><strong>orcad <em>CAD</em></strong><span className="status">{busy ? status : status}</span><span className={`badge ${bridgeState}`}>{bridgeState === 'ready' ? 'Bridge ready' : bridgeState === 'unavailable' ? 'Demo mode' : 'Checking bridge'}</span><select aria-label="Export format" value={objectUsesStl ? 'stl' : format} onChange={(e) => setFormat(e.target.value)}><option>stl</option>{!objectUsesStl && <><option>step</option><option>3mf</option></>}</select><button className="btn primary" disabled={busy} onClick={() => sendOperation(mode === 'objects' ? 'generate' : 'run')}>Run / export</button></header><main className="layout"><aside className="panel controls"><div className="tabs"><button className={mode === 'objects' ? 'active' : ''} onClick={() => switchMode('objects')}>Objects</button><button className={mode === 'code' ? 'active' : ''} onClick={() => switchMode('code')}>Code</button></div>{mode === 'objects' ? <section aria-label="Object controls"><label className="eyebrow" htmlFor="search">Catalog</label><input id="search" placeholder="Filter models…" value={query} onChange={(e) => setQuery(e.target.value)} />{entries.length ? <select aria-label="Model" value={selected} onChange={(e) => choose(e.target.value)}>{entries.map(([key, item]) => <option key={key} value={key}>{item.label}</option>)}</select> : <p className="empty">No models match that filter.</p>}<p className="muted">{primitive.blurb}</p><div className="row between"><span className="eyebrow">Parameters</span><button className="btn small" onClick={reset}>Reset</button></div>{parameterGroups(primitive).map((group) => <fieldset key={group.name}><legend>{group.name}</legend>{group.params.map((param) => <Field key={param[0]} param={param} value={params[param[0]]} error={validation[param[0]]} disabled={isParamDisabled(param, params)} onChange={changeParam} />)}</fieldset>)}<button className="btn primary wide" disabled={busy} onClick={() => sendOperation('generate')}>Generate + export</button></section> : <section><label className="eyebrow" htmlFor="code">build123d code</label><textarea id="code" value={draft.codeDraft} onChange={editCode} spellCheck="false" /><div className="row"><select aria-label="Example" defaultValue="calibration_cube"><option value="calibration_cube">Calibration cube</option><option value="bracket">Bracket</option><option value="tube_demo">Tube</option></select><button className="btn" onClick={() => setDraft({ ...draft, codeDraft: EXAMPLES.calibration_cube })}>Load</button><button className="btn primary" disabled={busy} onClick={() => sendOperation('run')}>Run</button></div></section>}</aside><section className="content"><section className="panel preview-panel"><div className="panel-head"><div><h1>Preview</h1><span className="muted">{status}</span></div><div className="row"><button className="btn small" onClick={() => view.current?.view('front')}>Front</button><button className="btn small" onClick={() => view.current?.view('top')}>Top</button><button className="btn small" onClick={() => view.current?.fit()}>Fit</button><button className="btn small" onClick={() => setWireframe(!wireframe)} aria-pressed={wireframe}>Wireframe</button><button className="btn small" onClick={() => setSpinning(!spinning)} aria-pressed={spinning}>Spin</button></div></div><div className="viewport"><Viewport preview={preview} wireframe={wireframe} spinning={spinning} onReady={handleViewportReady} />{!preview && <div className="empty overlay">Choose a catalog model to preview.</div>}</div><ErrorNotice error={error} onRetry={sendPreview}/><div className="panel-foot"><span>{preview ? `${meshTriangleCount(preview)} triangles` : 'No mesh yet'}</span><span className="muted">Drag to orbit · wheel to zoom</span><label>Quality <select value={quality} onChange={(e) => { const next = e.target.value; setQuality(next); revision.current += 1; sendPreview(params, selected, next) }}>{Object.keys(QUALITY_TOLERANCE).map((key) => <option key={key}>{key}</option>)}</select></label><button className="btn primary" disabled={busy} onClick={() => sendOperation('plate')}>Send to plate</button></div></section><section className="bottom-grid"><div className="panel"><h2>Validation & export</h2>{error ? <ErrorNotice error={error} /> : <p className="muted">{bridgeState === 'ready' ? 'CAD bridge connected; readiness is checked by an operation.' : 'Demo mode is ready for UI exploration.'}</p>}<p className="muted"><b>{readiness.label}</b> · {readiness.detail}</p><details className="guidance"><summary>Setup & recovery</summary><p>{SETUP_GUIDANCE.firstRun}</p><p>{SETUP_GUIDANCE.readiness}</p><p>{SETUP_GUIDANCE.recovery}</p>{mode === 'code' && <><p>{SETUP_GUIDANCE.trust}</p><p>{SETUP_GUIDANCE.result}</p><p>{SETUP_GUIDANCE.codeRecovery}</p></>}</details></div><div className="panel"><h2>Last export</h2>{lastExport?.file ? <><code className="export-path">{lastExport.file}</code><div className="row"><button className="btn small" onClick={copyLastExport}>Copy path</button><button className="btn small" onClick={openExports}>Open exports folder</button></div></> : <p className="muted">No export yet.</p>}{handoffNote && <p className="muted" role="status">{handoffNote}</p>}<h2 className="status-heading">Render status</h2><p>{status}</p><p className="muted">Latest accepted result only · request {active.current?.requestId || '—'}</p></div></section></section></main></div>
+  const saved = useMemo(() => loadSettings(), [])
+  const [mode, setMode] = useState(saved.mode === 'code' ? 'code' : 'library')
+  const [objectKey, setObjectKey] = useState(OBJECTS[saved.objectKey] ? saved.objectKey : 'gridfinity_bin')
+  const [paramsByObject, setParamsByObject] = useState(() => Object.fromEntries(
+    Object.keys(OBJECTS).map((key) => [key, restoreParams(key, saved.params?.[key])])))
+  const [query, setQuery] = useState('')
+  const [quality, setQuality] = useState(QUALITY.includes(saved.quality) ? saved.quality : 'balanced')
+  const [format, setFormat] = useState(saved.format === '3mf' ? '3mf' : 'stl')
+  const [code, setCode] = useState(typeof saved.code === 'string' && saved.code.trim() ? saved.code : EXAMPLES[DEFAULT_EXAMPLE].code)
+  const [autoRender, setAutoRender] = useState(saved.autoRender === true)
+  const [pendingExample, setPendingExample] = useState(null)
+  const [view, setView] = useState({ wireframe: false, edges: saved.edges !== false, grid: saved.grid !== false })
+  const [preview, setPreview] = useState(null)
+  const [pending, setPending] = useState(null)
+  const [ops, setOps] = useState({})
+  const [error, setError] = useState(null)
+  const [log, setLog] = useState([])
+  const [exports, setExports] = useState([])
+  const [engine, setEngine] = useState({ state: bridge.available ? 'connecting' : 'offline' })
+  const [toasts, setToasts] = useState([])
+  const viewport = useRef(null)
+  const nextId = useRef(1)
+  const latestPreview = useRef(0)
+  const opsRef = useRef({})
+
+  const object = OBJECTS[objectKey]
+  const params = paramsByObject[objectKey]
+  const busyOps = Object.values(ops)
+  const visibleObjects = searchObjects(query)
+
+  const notify = useCallback((kind, message) => {
+    const id = nextId.current++
+    setToasts((list) => [...list.slice(-3), { id, kind, message }])
+    setTimeout(() => setToasts((list) => list.filter((toast) => toast.id !== id)), kind === 'error' ? 9000 : 5000)
+  }, [])
+
+  // ---- bridge messages --------------------------------------------------
+  useEffect(() => bridge.subscribe((msg) => {
+    if (msg.type === 'hello' || msg.type === 'engine') {
+      setEngine(msg.type === 'hello' ? msg.engine : msg)
+    } else if (msg.type === 'progress') {
+      if (typeof msg.progress === 'number') setEngine({ state: 'starting', progress: msg.progress })
+      if (msg.id === latestPreview.current) setPending((p) => (p?.id === msg.id ? { ...p, message: msg.message, progress: msg.progress } : p))
+      else if (opsRef.current[msg.id]) setOps((o) => ({ ...o, [msg.id]: { ...o[msg.id], message: msg.message } }))
+    } else if (msg.type === 'result' && msg.purpose === 'preview') {
+      if (msg.id !== latestPreview.current) return
+      setPending(null)
+      setLog(Array.isArray(msg.log) ? msg.log : [])
+      if (msg.engine) setEngine({ state: 'ready', version: msg.engine })
+      const mesh = msg.ok ? decodeMesh(msg.mesh) : null
+      if (mesh) {
+        setPreview({ mesh, stats: meshStats(mesh), duration: msg.duration_ms, cached: msg.cached })
+        setError(null)
+      } else {
+        setError({ message: msg.ok ? 'The preview mesh could not be decoded.' : msg.error, fields: fieldErrors(msg), line: msg.line })
+        if (String(msg.error_code).startsWith('openscad_')) setEngine({ state: 'failed', error: msg.error })
+      }
+    } else if (msg.type === 'result') {
+      const op = opsRef.current[msg.id]
+      if (!op) return
+      delete opsRef.current[msg.id]
+      setOps({ ...opsRef.current })
+      if (!msg.ok) {
+        notify('error', `${op.purpose === 'plate' ? 'Send to plate' : 'Export'} failed: ${msg.error}`)
+        return
+      }
+      setExports((list) => [{ ...msg, time: new Date() }, ...list].slice(0, 12))
+      if (op.purpose === 'plate') notify(msg.handoff?.ok ? 'success' : 'error', msg.handoff?.message || 'Exported.')
+      else notify('success', `Saved ${msg.filename}`)
+    } else if (msg.type === 'notice') {
+      notify(msg.ok ? 'info' : 'error', msg.message)
+    } else if (msg.type === 'error') {
+      notify('error', msg.message)
+    }
+  }), [notify])
+
+  useEffect(() => { bridge.send({ type: 'hello' }) }, [])
+  useEffect(() => {
+    if (!['connecting', 'idle', 'starting'].includes(engine.state)) return undefined
+    const timer = setInterval(() => bridge.send({ type: engine.state === 'connecting' ? 'hello' : 'engine' }), 1500)
+    return () => clearInterval(timer)
+  }, [engine.state])
+
+  // ---- persistence --------------------------------------------------------
+  useEffect(() => {
+    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid })
+  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid])
+
+  // ---- rendering ------------------------------------------------------------
+  const source = useCallback(() => (mode === 'library'
+    ? { object: objectKey, params, name: exportName(objectKey, params) }
+    : { code, name: 'openscad-model' }), [mode, objectKey, params, code])
+
+  const requestPreview = useCallback(() => {
+    if (!bridge.available) return
+    const id = nextId.current++
+    latestPreview.current = id
+    setPending({ id, message: 'Rendering…' })
+    if (!bridge.send({ type: 'render', id, purpose: 'preview', quality, ...source() })) {
+      setPending(null)
+      setError({ message: 'Could not reach the plugin. Reopen the orcad tab and try again.', fields: {} })
+    }
+  }, [quality, source])
+
+  // These effects are keyed on the render inputs on purpose (not on requestPreview's identity).
+  useEffect(() => {
+    if (mode !== 'library') return undefined
+    const timer = setTimeout(requestPreview, PREVIEW_DELAY)
+    return () => clearTimeout(timer)
+  }, [mode, objectKey, params, quality])
+
+  useEffect(() => {
+    if (mode === 'code') requestPreview()
+  }, [mode, quality])
+
+  useEffect(() => {
+    if (mode !== 'code' || !autoRender) return undefined
+    const timer = setTimeout(requestPreview, AUTO_RENDER_DELAY)
+    return () => clearTimeout(timer)
+  }, [code])
+
+  const runOperation = (purpose) => {
+    const id = nextId.current++
+    opsRef.current[id] = { purpose, message: purpose === 'plate' ? 'Sending to plate…' : 'Exporting…' }
+    setOps({ ...opsRef.current })
+    if (!bridge.send({ type: 'render', id, purpose, quality, format, ...source() })) {
+      delete opsRef.current[id]
+      setOps({ ...opsRef.current })
+      notify('error', 'Open this page from the orcad tab in OrcaSlicer to export models.')
+    }
+  }
+
+  // ---- editing --------------------------------------------------------------
+  const changeParam = (name, value) => {
+    setParamsByObject((all) => ({ ...all, [objectKey]: setParam(objectKey, all[objectKey], name, value) }))
+  }
+  const resetParams = () => setParamsByObject((all) => ({ ...all, [objectKey]: defaults(objectKey) }))
+  const [renderTick, setRenderTick] = useState(0)
+  useEffect(() => { if (renderTick) requestPreview() }, [renderTick])
+  const loadExample = (key) => {
+    setCode(EXAMPLES[key].code)
+    setPendingExample(null)
+    setRenderTick((n) => n + 1) // render once the new code has landed
+  }
+  const chooseExample = (key) => {
+    if (!key) return
+    const untouched = Object.values(EXAMPLES).some((example) => example.code === code)
+    if (untouched) loadExample(key)
+    else setPendingExample(key)
+  }
+  const copyPath = async (file) => {
+    const copied = await copyText(file)
+    notify(copied ? 'info' : 'error', copied ? 'Path copied to the clipboard.' : 'Could not access the clipboard.')
+  }
+
+  const renderBlocked = Boolean(error?.fields && Object.keys(error.fields).length) && mode === 'library'
+  const exportDisabled = !bridge.available || renderBlocked
+  const fitKey = mode === 'library' ? objectKey : 'code'
+  const stats = preview?.stats
+  const paramLabels = Object.fromEntries(object.parameters.map((p) => [p.variable, p.label]))
+
+  return (
+    <div className="app">
+      <header className="topbar">
+        <div className="brand">
+          <Logo />
+          <div className="brand-text"><strong>orcad</strong><span>Parametric CAD</span></div>
+        </div>
+        <div className="segmented mode-switch" role="tablist" aria-label="Workspace">
+          {[['library', 'Library'], ['code', 'Code']].map(([key, label]) => (
+            <button key={key} type="button" role="tab" aria-selected={mode === key}
+              className={mode === key ? 'is-active' : ''} onClick={() => setMode(key)}>
+              <Icon name={key} size={16} /><span>{label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="topbar-fill" />
+        <EnginePill engine={engine} onDetails={() => engine.error && notify('error', engine.error)} />
+        <div className="topbar-actions">
+          <div className="segmented quality" role="radiogroup" aria-label="Quality">
+            {QUALITY.map((key) => (
+              <button key={key} type="button" role="radio" aria-checked={quality === key} title={QUALITY_HINTS[key]}
+                className={quality === key ? 'is-active' : ''} onClick={() => setQuality(key)}>{QUALITY_LABELS[key] || key}</button>
+            ))}
+          </div>
+          <div className="export-group">
+            <div className="select-wrap select-compact">
+              <select aria-label="Export format" value={format} onChange={(e) => setFormat(e.target.value)}>
+                <option value="stl">STL</option>
+                <option value="3mf">3MF</option>
+              </select>
+            </div>
+            <button type="button" className="btn" disabled={exportDisabled} onClick={() => runOperation('export')}
+              title={`Save a ${format.toUpperCase()} file to the exports folder`}>
+              <Icon name="download" /><span>Export</span>
+            </button>
+          </div>
+          <button type="button" className="btn btn-primary" disabled={exportDisabled} onClick={() => runOperation('plate')}
+            title="Export an STL and load it onto OrcaSlicer's build plate">
+            <Icon name="plate" /><span>Send to plate</span>
+          </button>
+        </div>
+      </header>
+
+      <main className={`workspace workspace-${mode}`}>
+        <aside className={`panel sidebar sidebar-${mode}`} aria-label={mode === 'library' ? 'Model library' : 'Code editor'}>
+          {mode === 'library' ? (
+            <>
+              <div className="sidebar-block">
+                <label className="search">
+                  <Icon name="search" size={16} />
+                  <input type="search" placeholder="Search models" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search models" />
+                </label>
+                <div className="object-grid">
+                  {visibleObjects.map((key) => (
+                    <button key={key} type="button" className={`object-card${key === objectKey ? ' is-active' : ''}`}
+                      aria-pressed={key === objectKey} onClick={() => setObjectKey(key)} title={OBJECTS[key].description}>
+                      <span className="object-icon"><Icon name={OBJECTS[key].icon} size={22} /></span>
+                      <span className="object-name">{OBJECTS[key].label}</span>
+                      <span className="object-cat">{OBJECTS[key].category}</span>
+                    </button>
+                  ))}
+                  {!visibleObjects.length && <p className="muted empty-search">No models match “{query}”.</p>}
+                </div>
+              </div>
+              <div className="sidebar-block params">
+                <div className="section-head">
+                  <div>
+                    <h2>{object.label}</h2>
+                    <p className="muted">{object.description}</p>
+                  </div>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={resetParams} title="Restore default values">
+                    <Icon name="reset" size={15} /><span>Reset</span>
+                  </button>
+                </div>
+                {groups(objectKey).map((group, index) => (
+                  <details key={`${objectKey}-${group.name}`} className="param-group" open={index < 3}>
+                    <summary><span>{group.name}</span><Icon name="chevron" size={16} /></summary>
+                    <div className="param-list">
+                      {group.params.map((param) => (
+                        <ParamField key={param.variable} param={param} value={params[param.variable]}
+                          disabled={isDisabled(param, params)}
+                          disabledHint={`Turn on “${(param.depends_on || []).map((d) => paramLabels[d]).join(', ')}” to use this.`}
+                          serverError={error?.fields?.[param.variable]}
+                          onChange={(value) => changeParam(param.variable, value)} />
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="code-panel">
+              <div className="code-toolbar">
+                <div className="select-wrap">
+                  <select aria-label="Load an example" value="" onChange={(e) => chooseExample(e.target.value)}>
+                    <option value="">Load example…</option>
+                    {Object.entries(EXAMPLES).map(([key, example]) => <option key={key} value={key}>{example.label}</option>)}
+                  </select>
+                </div>
+                <label className="check" title="Render automatically shortly after you stop typing">
+                  <input type="checkbox" checked={autoRender} onChange={(e) => setAutoRender(e.target.checked)} />
+                  <span>Auto</span>
+                </label>
+                <button type="button" className="btn btn-primary btn-sm" onClick={requestPreview} disabled={!bridge.available}
+                  title="Render the code (Ctrl+Enter)">
+                  <Icon name="play" size={15} /><span>Render</span>
+                </button>
+              </div>
+              {pendingExample && (
+                <div className="confirm" role="alert">
+                  <span>Replace your code with “{EXAMPLES[pendingExample].label}”?</span>
+                  <button type="button" className="btn btn-sm btn-danger" onClick={() => loadExample(pendingExample)}>Replace</button>
+                  <button type="button" className="btn btn-sm btn-ghost" onClick={() => setPendingExample(null)}>Keep mine</button>
+                </div>
+              )}
+              <CodeEditor value={code} onChange={setCode} onRun={requestPreview} errorLine={error?.line} />
+              <p className="code-hint">
+                <kbd>Ctrl</kbd>+<kbd>Enter</kbd> renders. <code>include &lt;src/…&gt;</code> loads the bundled Gridfinity library.
+              </p>
+            </div>
+          )}
+        </aside>
+
+        <section className="stage" aria-label="Preview">
+          <Viewport ref={viewport} mesh={preview?.mesh || null} fitKey={fitKey} wireframe={view.wireframe}
+            edges={view.edges} grid={view.grid} dimmed={Boolean(error && preview)} />
+          <div className="stage-toolbar glass" role="toolbar" aria-label="View">
+            {VIEW_BUTTONS.map(([key, label]) => (
+              <button key={key} type="button" className="icon-btn" title={`${label} view`} aria-label={`${label} view`}
+                onClick={() => viewport.current?.setView(key)}><Icon name={key} /></button>
+            ))}
+            <button type="button" className="icon-btn" title="Fit model" aria-label="Fit model" onClick={() => viewport.current?.fit()}>
+              <Icon name="fit" />
+            </button>
+            <span className="toolbar-sep" />
+            {[['wireframe', 'Wireframe'], ['edges', 'Edges'], ['grid', 'Build plate grid']].map(([key, label]) => (
+              <button key={key} type="button" className={`icon-btn${view[key] ? ' is-on' : ''}`} title={label}
+                aria-label={label} aria-pressed={view[key]} onClick={() => setView((v) => ({ ...v, [key]: !v[key] }))}>
+                <Icon name={key} />
+              </button>
+            ))}
+          </div>
+
+          {stats && (
+            <div className="stage-stats glass">
+              <span><b>{fmt.dimensions(stats.size)}</b></span>
+              <span>{fmt.count(stats.triangles)} triangles</span>
+              {preview.duration !== undefined && <span>{preview.cached ? 'cached' : fmt.seconds(preview.duration)}</span>}
+            </div>
+          )}
+
+          {(pending || busyOps.length > 0) && (
+            <div className="stage-progress" role="status">
+              <div className="progress-bar"><span style={pending?.progress ? { width: `${pending.progress * 100}%` } : undefined}
+                className={pending?.progress ? '' : 'is-indeterminate'} /></div>
+              <span className="progress-text glass">{pending?.message || busyOps[0]?.message}</span>
+            </div>
+          )}
+
+          {error && (
+            <div className="stage-error glass" role="alert">
+              <Icon name="alert" />
+              <div>
+                <strong>{preview ? 'Render failed, showing the last good model' : 'Render failed'}</strong>
+                <p>{error.message}</p>
+              </div>
+              <button type="button" className="icon-btn" aria-label="Dismiss" onClick={() => setError(null)}><Icon name="close" size={16} /></button>
+            </div>
+          )}
+
+          {!preview && !pending && !error && (
+            <div className="stage-empty">
+              <div className="empty-art"><Icon name="cube" size={44} /></div>
+              {bridge.available ? <p>Adjust a parameter or press Render to build a model.</p> : (
+                <>
+                  <h3>Not connected to OrcaSlicer</h3>
+                  <p>Open the <b>orcad</b> tab inside OrcaSlicer to render and export models.</p>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+
+        <aside className="panel output" aria-label="Details">
+          <section className="card">
+            <h3 className="card-title">Model</h3>
+            {stats ? (
+              <dl className="stats">
+                <div><dt>Width</dt><dd>{fmt.mm(stats.size[0])} mm</dd></div>
+                <div><dt>Depth</dt><dd>{fmt.mm(stats.size[1])} mm</dd></div>
+                <div><dt>Height</dt><dd>{fmt.mm(stats.size[2])} mm</dd></div>
+                <div><dt>Volume</dt><dd>{fmt.volume(stats.volume)}</dd></div>
+                <div><dt>Triangles</dt><dd>{fmt.count(stats.triangles)}</dd></div>
+                <div><dt>Render</dt><dd>{preview.cached ? 'cached' : fmt.seconds(preview.duration)}</dd></div>
+              </dl>
+            ) : <p className="muted">No model yet.</p>}
+          </section>
+
+          <section className="card">
+            <div className="card-head">
+              <h3 className="card-title">Exports</h3>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={!bridge.available}
+                onClick={() => bridge.send({ type: 'open_exports' })}><Icon name="folder" size={15} /><span>Open folder</span></button>
+            </div>
+            {exports.length ? (
+              <ul className="export-list">
+                {exports.map((item) => (
+                  <li key={item.id}>
+                    <span className={`badge badge-${item.format}`}>{item.format.toUpperCase()}</span>
+                    <div className="export-meta">
+                      <span className="export-name" title={item.file}>{item.filename}</span>
+                      <span className="muted">{fmt.bytesText(item.size_bytes)} · {item.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {item.purpose === 'plate' ? ' · sent to plate' : ''}</span>
+                    </div>
+                    <button type="button" className="icon-btn" title="Copy file path" aria-label={`Copy path of ${item.filename}`}
+                      onClick={() => copyPath(item.file)}><Icon name="copy" size={16} /></button>
+                  </li>
+                ))}
+              </ul>
+            ) : <p className="muted">Exports and plate sends appear here. If a model does not show up on the plate, drag the file from the exports folder onto OrcaSlicer.</p>}
+          </section>
+
+          <section className="card card-console">
+            <h3 className="card-title"><Icon name="terminal" size={15} /> Console</h3>
+            {log.length ? (
+              <pre className="console">{log.map((line, i) => (
+                <span key={i} className={line.startsWith('ERROR') ? 'is-error' : line.startsWith('WARNING') ? 'is-warn' : line.startsWith('ECHO') ? 'is-echo' : ''}>{line}{'\n'}</span>
+              ))}</pre>
+            ) : <p className="muted">OpenSCAD messages (echo, warnings, errors) show up here.</p>}
+          </section>
+        </aside>
+      </main>
+
+      <div className="toasts" aria-live="polite">
+        {toasts.map((toast) => (
+          <div key={toast.id} className={`toast toast-${toast.kind}`}>
+            <Icon name={toast.kind === 'error' ? 'alert' : 'check'} size={16} />
+            <span>{toast.message}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

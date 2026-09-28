@@ -1,28 +1,25 @@
-"""Canonical Gridfinity/OpenSCAD catalog.
-
-The JSON file is deliberately the source of truth so a host bridge can consume
-it without importing the runner.
-"""
-
+"""Canonical object catalog; the JSON file is shared with the frontend build."""
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
 
-from .errors import ErrorCode, BackendError
+from .errors import BackendError, ErrorCode
 
-CATALOG_PATH = Path(__file__).with_name("catalog.json")
-CATALOG: dict[str, Any] = json.loads(CATALOG_PATH.read_text(encoding="utf-8"))
-SOURCE_REVISION = CATALOG["source"]["revision"]
-QUALITY_PROFILES = CATALOG["quality_profiles"]
+ROOT = Path(__file__).resolve().parent
+CATALOG: dict[str, Any] = json.loads((ROOT / "catalog.json").read_text(encoding="utf-8"))
+SOURCE_REVISION: str = CATALOG["source"]["revision"]
+QUALITY_PROFILES: dict[str, dict[str, float]] = CATALOG["quality_profiles"]
+# Code mode resolves `include <src/...>` against the vendored Gridfinity tree.
+LIBRARY_DIR = ROOT / "vendor" / "gridfinity-rebuilt-openscad-910e22d8"
 
 
 def object_spec(name: str) -> dict[str, Any]:
     try:
         return CATALOG["objects"][name]
-    except KeyError as exc:
-        raise BackendError(ErrorCode.INVALID_OBJECT, f"Unknown OpenSCAD object: {name}", {"object": name}) from exc
+    except (KeyError, TypeError):
+        raise BackendError(ErrorCode.INVALID_OBJECT, f"Unknown object: {name}", {"object": name}) from None
 
 
 def parameter_specs(name: str) -> dict[str, dict[str, Any]]:
@@ -34,4 +31,4 @@ def defaults(name: str) -> dict[str, Any]:
 
 
 def source_path(name: str) -> Path:
-    return Path(__file__).with_name("vendor") / "gridfinity-rebuilt-openscad-910e22d8" / object_spec(name)["entry_file"]
+    return ROOT / object_spec(name)["source"]

@@ -1,312 +1,125 @@
-# orcad — OpenSCAD/Gridfinity CAD tab for OrcaSlicer (v0.7.0)
+# orcad: parametric CAD tab for OrcaSlicer (v0.8.0)
 
-The authoritative plugin release version is **0.7.0**, recorded in
-`compatibility.json` as `plugin.version`. `orcad.py`, the frontend package and
-lockfile, and the release documentation must agree with that value; dependency
-and host/API versions remain separate values.
+orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
+lets you pick a parametric model, tune it with live 3D preview, and put it on
+the build plate with one click.
 
-Real Plugin-Hub plugin (Nightly / >2.4.2). Adds a top-level **orcad** tab
-next to Prepare/Preview/Device/Project via `orca.pages.PagesPluginCapabilityBase`
-— same mechanism as a FilamentHub-style tab. Searchable parametric objects
-with **live preview**, a compact native code editor, direct Three.js 3D
-preview, and **Send to plate**. Gridfinity Bin/Baseplate objects render from
-the pinned upstream OpenSCAD source; the optional Code mode and simple objects
-continue to use build123d in Orca's embedded Python.
+- **Library:** Gridfinity Bin and Gridfinity Baseplate, rendered from the pinned
+  upstream [Gridfinity Rebuilt](https://github.com/kennetek/gridfinity-rebuilt-openscad)
+  source, plus a Box, Cylinder, Tube and Mounting plate. Every parameter gets a
+  slider, number field, switch or option picker, with inline validation.
+- **Code:** an OpenSCAD editor with examples, line numbers, error-line
+  highlighting and Ctrl+Enter to render. `include <src/...>` loads the bundled
+  Gridfinity library, so you can build your own bins.
+- **Preview:** Three.js viewport with orbit/pan/zoom, iso/front/right/top views,
+  wireframe, edge and build-plate toggles. It falls back to a software renderer
+  when the webview has no WebGL.
+- **Output:** export **STL** or **3MF**, or **Send to plate**, which hands the
+  STL to the running OrcaSlicer. The side panel shows dimensions, volume,
+  triangle count, render time, recent exports and the OpenSCAD console.
+- **UI:** gradient styling that follows OrcaSlicer's light/dark theme. The
+  layout adapts from wide desktop windows (three columns) through laptops
+  (two columns) down to narrow windows (a single stacked column).
 
-Gridfinity Bin and Baseplate object-mode requests use the unchanged
-kennetek/gridfinity-rebuilt-openscad entry files through the reusable backend:
-compartments, label tabs, scoop, cylindrical compartments, height modes, hole
-options, baseplate styles, and fit-to-drawer controls are described by the
-canonical `openscad/catalog.json` schema. The UI receives a compact indexed
-binary-STL mesh payload for preview. OpenSCAD rendering remains bounded by
-quality profile, timeout, and cancellation controls; sub-second previews are a
-target for supported small cases, not a guarantee for arbitrary models.
+## How it works
 
-The UI is a compact local React app with Tailwind CSS and a direct Three.js
-runtime. `frontend/dist/index.html` is self-contained and loaded beside
-`orcad.py` when present; `orcad.py` also carries a compressed fallback copy so
-single-file installs still work. The reusable OpenSCAD backend and pinned
-vendor tree are also embedded in `orcad.py`; a beside-plugin `openscad/`
-directory is used when the full package is installed and is convenient for
-backend development. Gridfinity object mode still needs a modern OpenSCAD
-executable, which the Pages startup setup provisions when a supported artifact
-is available; Code mode needs the declared build123d dependencies.
+Every model is rendered by **OpenSCAD** with its fast Manifold kernel, so a
+typical Gridfinity bin takes well under a second. The plugin has **no Python
+dependencies** (`dependencies = []`), so installing it downloads nothing.
 
-## Reusable OpenSCAD/Gridfinity backend
+On first start the plugin looks for OpenSCAD 2023 or newer on `PATH`. If it
+finds none, it downloads an official OpenSCAD development snapshot (about 80 MB)
+into a per-user cache, verifies it against a pinned SHA-256 digest, and never
+asks for admin rights:
 
-The reusable backend is in `openscad/`. It vendors the unchanged
-`kennetek/gridfinity-rebuilt-openscad` source at commit
-`910e22d8607fd7f5f51ad5e5cbc5287a76810bfd`, including its MIT license and
-attribution. `openscad/catalog.json` is the canonical Bin/Baseplate schema;
-`openscad/runner.py` uses safe subprocess argv lists, explicitly requests binary
-STL, an opt-in content-addressed STL cache, and draft, balanced, and final
-quality profiles with timing in every result. `openscad/bootstrap.py` owns the
-pinned, checksum-verified per-user OpenSCAD startup setup. These are quality
-choices, not universal sub-second render promises.
-
-OpenSCAD is an external executable dependency. At Pages-plugin startup the
-backend first probes the system PATH; if OpenSCAD is missing or older than
-`>=2023.0`, it silently downloads a pinned official OpenSCAD snapshot, verifies
-its SHA-256 digest, and stores it in a per-user cache without sudo/admin
-privileges. The bootstrap needs network and write access and covers Linux
-x86_64/ARM64,
-universal macOS, and Windows x86_64; unsupported platforms get a manual-install
-error. Local OpenSCAD **2021.01** is rejected because its `$`-scoped grid
-machinery is not reliably supported there. No web framework, build123d, numpy,
-or speculative daemon is required by this slice.
-
-## Files
-
-- `orcad.py` — plugin entry point. It loads the compiled frontend beside it
-  when available and includes a compressed fallback for single-file installs.
-- `frontend/src/` — React/Tailwind source and direct Three.js viewport.
-- `frontend/dist/index.html` — compiled, self-contained frontend artifact,
-  generated by the release command.
-- `frontend/package-lock.json` — pinned Node dependency tree used by the
-  frontend build.
-- `frontend/src/*.test.js` — Node built-in frontend tests, including the
-  mocked-bridge App behavior harness. Run them with `cd frontend && npm test`;
-  they do not require OrcaSlicer, WebGL, build123d, or network access.
-- `objects/<name>.py` — one RUNNABLE build123d program per predefined object.
-  Parameter variables carry `# spec:` comments that declare the UI
-  (e.g. `WALL = 1.2  # spec: number label=Wall unit=mm min=0.8 max=2.4 step=0.2`).
-  Never import these (they execute CAD on import); the spec is extracted
-  textually by the bundler.
-- `packaging/bundle.py` — the single contributor/release build command. It
-  derives object specs, builds the frontend, embeds the exact artifact, runs
-  regression tests, and rejects stale or unexpected output.
-- `tests/test_plugin.py` — pure-logic tests, run without Orca/build123d.
-- `tests/test_geometry_integration.py` — optional build123d/OCP regression suite for
-  default solids, cross-sections, and export success/failure paths.
-- `verify/geometry.py` — bounded integration-test entry point using `.venv`.
-- `README.md`, `CHANGELOG.md`
-- `LICENSE` — AGPL-3.0-only for original project code.
-- `NOTICE` — project, host, and Gridfinity attribution plus upstream MIT terms.
-- `THIRD_PARTY_NOTICES` — separate MIT notices for React, Three.js, and build tools.
-
-## Build and release verification
-
-Prerequisites are Python 3 with pytest, Node.js/npm, and the locked frontend
-packages. From a clean checkout, install the frontend packages once with
-`cd frontend && npm ci`, then run the one complete pipeline from the repository
-root:
-
-```sh
-python3 packaging/bundle.py --release
-```
-
-The command runs in this order: derives `objects/*.py` specs into
-`frontend/src/primitives.js`, builds the self-contained Vite page, verifies its
-object-spec fingerprint, embeds that exact `frontend/dist/index.html` plus
-the reusable OpenSCAD backend and pinned vendor source in `orcad.py`, checks
-generated-file synchronization, runs Python and frontend regression tests,
-checks diff whitespace, and rejects unexpected tracked or untracked output. It
-is intentionally not a signing or packaging system.
-
-CI can run the same pipeline without modifying generated files:
-
-```sh
-python3 packaging/bundle.py --release --check
-```
-
-Check-only also builds into a temporary directory and compares the result byte
-for byte with the tracked `frontend/dist/index.html`, so a changed object spec
-cannot silently use an old frontend or embedded `PAGE_HTML`. The generated
-files owned by this pipeline are `frontend/src/primitives.js`,
-`frontend/dist/index.html`, and `orcad.py`. Contributors should use the full
-`--release` command after object or frontend changes; the lower-level
-`--write`/`--check` options remain available for targeted synchronization but
-`--write` refuses to embed a stale frontend.
-
-The final release check is:
-
-```sh
-python3 -m pytest tests/ -q
-python3 verify/geometry.py
-python3 verify/compatibility.py --run
-(cd frontend && npm test && npm run build)
-python3 packaging/bundle.py --release --check
-git diff --check
-```
-
-## Supported versions and compatibility
-
-`compatibility.json` is the machine-readable source for the release version,
-constraints, and local verification matrix. The declarations distinguish the
-runtime installed for the plugin from tools used only by contributors:
-
-- **Plugin runtime:** Python `>=3.12,<3.15`, `build123d==0.12.0`,
-  `cadquery-ocp-novtk==7.9.3.1.1` (the OCP distribution), and NumPy `>=2,<3`.
-  The exact tested environment here is Python 3.14.4, build123d 0.12.0,
-  cadquery-ocp-novtk 7.9.3.1.1, and NumPy 2.5.3. Orca's bundled `uv`
-  resolves the Python runtime dependencies on the first Code-mode CAD
-  operation; an environment outside these constraints is not silently accepted.
-  **Gridfinity object mode additionally requires OpenSCAD `>=2023.0`; 2021.01
-  is unsupported and is reported as such by the backend.**
-- **Contributor tools:** Python `>=3.12,<3.15` with pytest `>=9.1,<10`, and
-  Node.js `>=20.19.0,<25` with npm `>=10,<12`. The tested tool versions are
-  Python 3.14.4, pytest 9.1.1, Node 24.21.0, and npm 11.19.0.
-  End users do not need Node.js or npm. Run `python3 verify/compatibility.py`
-  to check the local versions; add `--run` to execute the matrix in order.
-- **OrcaSlicer host:** the supported target is a Nightly exposing
-  `orca.pages.PagesPluginCapabilityBase` from the `main` API branch. Stable
-  2.4.2 is explicitly unsupported because it has no `orca.pages`; the plugin
-  registers an upgrade-hint Script capability instead of a CAD tab there. Other
-  stable or nightly builds are not claimed unless they expose the required Pages
-  API and bridge behavior. The compatibility target is Linux, macOS, and
-  Windows (the OS-specific file-open paths are implemented), but this checkout
-  has only exercised Linux x86_64. Non-Linux operation is therefore expected,
-  not verified here; a failed file handoff still has the documented drag-and-drop
-  fallback.
-
-The deterministic local matrix is:
-
-| Check | Command | Status / scope |
+| Platform | Artifact | Cache |
 | --- | --- | --- |
-| Pure Python tests | `python3 -m pytest tests/ -q` | Required; no CAD dependency |
-| Frontend tests + build | `cd frontend && npm test && npm run build` | Required; locked npm tree |
-| Bundle synchronization | `python3 packaging/bundle.py --check` | Required; generated artifacts and embedded page |
-| Geometry integration | `python3 verify/geometry.py` | Optional; `.venv` with the declared CAD versions |
+| Linux x86_64 / ARM64 | AppImage, extracted, so FUSE is not required | `~/.cache/orcad/openscad` |
+| macOS (Intel + Apple Silicon) | universal `.dmg` | `~/Library/Caches/orcad/openscad` |
+| Windows x86_64 | portable `.zip` | `%LOCALAPPDATA%\orcad\openscad` |
 
-No CI provider is configured. `verify/compatibility.py --run` is the local
-replacement and fails on declared tool drift; the optional geometry stage
-skips with repair guidance when `.venv` is absent.
+Upstream eventually deletes old snapshots. When the pinned file is gone, the
+plugin picks the newest snapshot for the platform and verifies it against the
+digest published beside it. The header shows the setup progress. The stable
+OpenSCAD 2021.01 release is too old for the Gridfinity library and is ignored.
 
-## Install, first run, and troubleshooting
+**Send to plate** writes an STL to `exports/` beside the plugin and launches the
+running OrcaSlicer executable with `--single-instance <file>` (on macOS,
+`open -a OrcaSlicer.app <file>`). The window that is already open imports it
+onto the plate; switch to Prepare to see it. If that ever fails, the toast
+says so. Use **Copy path** or **Open folder** and drag the file onto the plate.
 
-1. Use the latest OrcaSlicer **Nightly** exposing the `main` Pages API. Stable
-   2.4.2 has no `orca.pages` and is unsupported.
-2. Install either the single-file `orcad.py` (which embeds the React page,
-   OpenSCAD backend, and pinned vendor source) or the package with
-   `orcad.py`, `frontend/dist/index.html`, and `openscad/` together under
-   `<Orca data dir>/orca_plugins/orcad/`. The beside-plugin assets take
-   precedence for development; the embedded fallbacks keep the core plugin
-   installable as one file.
-3. No separate OpenSCAD installation is required on supported platforms. When
-   the plugin starts, it reuses a supported executable or downloads the pinned
-   official build in the background. The first download needs network/write
-   access and can take time; no sudo/admin prompt is used. If the platform is
-   unsupported or the verified setup fails, install OpenSCAD 2023 or newer
-   manually. The local 2021.01 build is explicitly rejected. Run
-   `python3 -m pytest tests/test_openscad_backend.py -q` to exercise the fake
-   executable path without OpenSCAD.
-4. Restart OrcaSlicer and enable **orcad 0.7.0** in the Plugins dialog. With
-   the Pages API present, an **orcad** tab appears next to the normal tabs.
-5. In **Objects**, Gridfinity Bin is preselected. Adjust a parameter to request
-   a live upstream OpenSCAD preview, then use **Generate + export**. In **Code**,
-   load an example or edit the optional native build123d code and press **Run**.
-   Assign the final solid to `result`.
-6. **Send to plate** always exports an STL and asks the host/OS to open it. A
-   first handoff may ask for a one-time OS permission; allow it if desired.
-   The plugin cannot confirm that the host imported the file, so drag the
-   reported export path onto OrcaSlicer Prepare when association or
-   single-instance handoff does not load it.
+## Install
 
-First Code-mode CAD preview/export setup may install `build123d`, NumPy, and
-OCP through Orca's bundled `uv`. It may take time, can download hundreds of MB,
-and needs network and write access. Gridfinity object mode instead probes
-OpenSCAD and silently bootstraps the pinned per-user build when the system
-executable is missing or unsupported; it reports a stable setup, unsupported-
-version, timeout, or process error if that path cannot complete. **Bridge ready**
-only means that host messaging is available; the UI checks **CAD/model ready**
-only after a preview or export succeeds.
+Requires an OrcaSlicer build with plugin pages (`orca.pages`, the current
+Nightly). Builds without it get an "orcad (needs a newer OrcaSlicer)" entry
+instead of a tab.
 
-Troubleshooting:
+- **Single file (Plugin Hub):** `orcad.py` embeds the compiled page and the
+  OpenSCAD backend with its Gridfinity sources. Put it in
+  `<Orca data dir>/orca_plugins/orcad/orcad.py`.
+- **Folder:** `orcad.py` plus `frontend/dist/index.html` and `openscad/` in the
+  same folder. Files beside `orcad.py` take precedence over the embedded copies.
 
-- Setup or OCP download failure: check network and write permissions, reopen
-  the Plugins dialog or restart OrcaSlicer, retry dependency setup, and retry
-  the preview/export.
-- Build or code failure: read the displayed error and
-  `data_dir()/log/python_*.log`; correct the code or parameters and press
-  **Run**/retry. The last successful preview/export is retained.
-- Missing result or invalid solid: use `result = Box(20, 20, 20)` as a known
-  good code shape; a missing `result`, flat sketch, or non-solid cannot export.
-- Bridge unavailable: restart the host and confirm the plugin is enabled. A
-  build without `orca.pages` registers `orcad (needs Pages build)` with an
-  upgrade hint instead of a CAD tab.
-- Exports are in `.../orca_plugins/orcad/exports/`; use **Copy path** or
-  **Open exports folder** from **Last export**, then drag the file onto Prepare
-  if **Send to plate** did not load it.
+Restart OrcaSlicer and enable **orcad** in the Plugins dialog. Runtime data
+lives next to the plugin: `exports/` (your files), `.cache/` (rendered STL
+cache, capped at 512 MB) and `.backend/` (unpacked backend for single-file
+installs).
 
-Editable Python/build123d code is **trusted** and executes in-process with no security sandbox. Import checks for predefined objects are validation/UX only, not a security boundary. Do not run code you do not trust.
+## Troubleshooting
 
-## Plugin Hub publish
+- **"Setting up OpenSCAD" never finishes or fails:** the first run needs
+  network access to `files.openscad.org`. Hover or click the red pill for the
+  reason. As an alternative, install an OpenSCAD 2023+ development snapshot
+  and put it on `PATH`.
+- **A render fails:** the message appears over the viewport; the Library
+  highlights the fields involved and the Code tab marks the line. Full
+  OpenSCAD output is in the Console card.
+- **Nothing appears on the plate:** use the exports list (Copy path / Open
+  folder) and drag the file onto Prepare.
+- **Tracebacks:** `data_dir()/log/python_*.log`.
 
-OrcaCloud → Plugin Hub → Create listing → upload `orcad.py` for the
-single-file release, or the package containing `orcad.py`,
-`frontend/dist/index.html`, `openscad/`, and the pinned vendor tree. Include a
-thumbnail screenshot of the CAD tab, tags (`cad`, `openscad`, `gridfinity`,
-`parametric`), and compatible Orca = Nightly/>2.4.2.
-Only advertise operating systems and host builds after running the corresponding
-manual checks; this checkout has verified Linux x86_64 only. Include
-`CHANGELOG.md`, `LICENSE`, `NOTICE`, and `THIRD_PARTY_NOTICES` with a release.
+Code-mode OpenSCAD runs as a separate process with your user rights. Only run
+code you trust.
 
-## Feature status and limits (v0.7)
+## Development
 
-**Verified** — pure Python validation, safe OpenSCAD argv construction, version
-probing, cancellation/timeout handling, deterministic cache keys, binary-STL
-parsing, verified bootstrap checks, fake-executable rendering, and a manual
-Linux x86_64 probe plus Bin/Baseplate render/cache smoke test with the pinned
-OpenSCAD artifact; frontend bridge/state/accessibility, indexed-mesh decoding,
-export-payload, recovery, and UI tests; generated object spec synchronization;
-the declared compatibility checks; and the release bundle check. Real
-OpenSCAD rendering remains host-dependent on other target machines.
+```sh
+cd frontend && npm ci && cd ..
+python3 dev/serve.py                 # the real backend + page at http://127.0.0.1:8765/?theme=dark|light
+python3 packaging/bundle.py          # build the page and embed it + openscad/ into orcad.py
+python3 packaging/bundle.py --check  # CI: fail if frontend/dist or orcad.py is stale
+python3 -m pytest                    # backend, bootstrap, plugin and bundle tests
+(cd frontend && npm test)            # bridge, catalog, mesh and storage tests
+```
 
-**Approximate** — the preview transports the complete mesh returned by
-OpenSCAD rather than claiming a decimation budget. Very large models can still
-exceed a sub-second target or consume substantial memory; use Draft quality for
-interactive work and Final only for export-quality geometry. OpenSCAD's STL
-output is mesh geometry, so STEP/3MF are currently unavailable for the
-upstream object-mode path. Optional Code mode retains the legacy build123d
-preview/export path.
+`dev/serve.py` simulates the host: it provides `window.orca`, OrcaSlicer's
+theme variables and its injected element styles. You can work on the UI in a
+normal browser against real OpenSCAD renders. When the real OpenSCAD test finds
+a 2023+ `openscad` on `PATH`, it renders every catalog object.
 
-**Experimental / host-dependent** — the Pages API integration and the
-OS-file-open **Send to plate** handoff have not been exercised on every host
-build or operating system. `orca.host` exposes no plate-mutation API, so the
-handoff depends on file association and OrcaSlicer's single-instance behavior;
-drag-and-drop is the recovery path. Non-Linux operation is expected but not
-verified in this checkout. Arbitrary Code-mode execution is intentionally
-trusted and unsandboxed.
+Layout:
 
-**Unsupported / roadmap** — stable OrcaSlicer 2.4.2 and builds without
-`orca.pages`; OpenSCAD 2021.01; half-grid/lite variants not exposed by the
-current catalog; STEP/3MF export for upstream object mode; and arbitrary
-OpenSCAD customizer scripts. Algebra mode is the optional build123d code path:
-assign the final solid to `result`. OpenSCAD previews cancel the running
-process when a newer request wins; already-running build123d operations remain
-cooperative and their stale result is discarded.
+- `orcad.py`: plugin entry point, message protocol (`Session`), render queue,
+  exports and plate handoff.
+- `openscad/`: the standard-library backend. It holds `catalog.json` (the
+  single source of truth for objects and parameters, shared with the
+  frontend), `validation.py`, `runner.py` (sandboxed argv, Manifold, timeouts,
+  cancellation, STL cache), `mesh.py` (indexed preview meshes, 3MF writer),
+  `bootstrap.py` (verified per-user install), `objects/*.scad` and the
+  unmodified `vendor/` Gridfinity tree.
+- `frontend/`: React + Three.js page, built by Vite into one self-contained
+  `dist/index.html`. It uses plain CSS on purpose, because OrcaSlicer injects
+  unlayered element styles that would override `@layer`-based frameworks.
+- `packaging/bundle.py`: deterministic release embedding.
 
-The original project code is AGPL-3.0-only; see `LICENSE` and `NOTICE`. The
-vendored Gridfinity Rebuilt source is retained unchanged under its upstream
-MIT license, including attribution; the upstream license is preserved verbatim.
-React, React DOM, Three.js, Tailwind CSS, and the build tools remain under
-separate notices in `THIRD_PARTY_NOTICES`.
+To add a catalog object, drop a `.scad` file in `openscad/objects/`, describe
+its parameters in `catalog.json` (add cross-field rules to `validation.py` if
+needed) and run the bundler.
 
-## Verification (reproduce it)
+## License
 
-- `verify/` holds the harness: `w_scad.py` (OpenSCAD drivers from the entry
-  files), `w_b123d.py` (orcad end-to-end STL export), `w_compare.py` (STL
-  metrics: bbox/volume/z-profiles/hole loops), `batch_ref.py` + `matrix.py`
-  (feature matrix, 27 cases).
-- Reference renders need OpenSCAD (dev snapshot ≥2023; 2021.01 cannot evaluate
-  the library's `$`-scoped grid machinery) and an explicit checkout of
-  `gridfinity-rebuilt-openscad`. Set `ORCAD_UPSTREAM=/path/to/checkout` and
-  `ORCAD_OPENSCAD=/path/to/openscad` (or pass `--upstream`/`--openscad`). A full
-  upstream git revision can be pinned with `ORCAD_UPSTREAM_REVISION=<commit>`;
-  otherwise the harness records the checkout's HEAD plus a source fingerprint.
-  It never falls back to the old machine-specific `/tmp` path.
-- Generate all 27 pinned references with:
-  `python3 verify/batch_ref.py --upstream /path/to/upstream --openscad /path/to/openscad`
-  (use `--dry-run` or `--only name1,name2` to inspect a run). Then compare with
-  `python3 verify/matrix.py --cache .verify-cache --upstream /path/to/upstream`.
-  `--help` documents `ORCAD_VERIFY_CACHE`, `ORCAD_PYTHON`, and
-  `ORCAD_SUBPROCESS_TIMEOUT`. STLs and JSON sidecars land in `.verify-cache/`
-  (not committed); sidecars invalidate output when source, case parameters,
-  feature identity, tool version/options, or harness version changes.
-- `w_compare.py` uses explicit bbox/volume/profile tolerances and one-to-one
-  hole matching, including center and equivalent-radius limits. It reports the
-  exact command and timeout when a bounded subprocess fails.
-- Run the optional geometry regressions with `python3 verify/geometry.py`. The
-  harness uses `.venv` for build123d/OCP, keeps exports in pytest temporary
-  directories, and skips with install instructions when the optional dependency
-  is unavailable. Pure tests remain independent: `python3 -m pytest tests/ -q`.
+Original project code is AGPL-3.0-only (see `LICENSE`, `NOTICE`). The vendored
+Gridfinity Rebuilt source is MIT and unmodified. React, Three.js and the build
+tools are listed in `THIRD_PARTY_NOTICES`. Downloaded OpenSCAD binaries remain
+under the OpenSCAD project's licenses.
