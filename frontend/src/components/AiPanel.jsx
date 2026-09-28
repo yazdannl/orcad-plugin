@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Icon } from './Icons.jsx'
 const THINKING_LEVELS = ['off', 'low', 'medium', 'high']
@@ -167,6 +167,9 @@ function Settings({ status, configChoice, onConfigChoice, sendMessage, state, di
     return { ...initial, source: initial.source === 'pi' ? 'pi' : 'managed' }
   })
   const [notice, setNotice] = useState('')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [popoverStyle, setPopoverStyle] = useState(null)
+  const settingsAnchor = useRef(null)
   const [authType, setAuthType] = useState('')
   const [authProvider, setAuthProvider] = useState('')
   const [custom, setCustom] = useState(undefined)
@@ -182,6 +185,29 @@ function Settings({ status, configChoice, onConfigChoice, sendMessage, state, di
   const authNotices = state.authNotices || []
   const customResult = state.providerResult
   const detection = state.providerDetect
+
+  useLayoutEffect(() => {
+    if (!settingsOpen) return undefined
+    const positionPopover = () => {
+      const rect = settingsAnchor.current?.getBoundingClientRect()
+      if (!rect) return
+      const width = Math.max(0, Math.min(420, window.innerWidth - 32))
+      const maxHeight = Math.min(560, window.innerHeight * 0.7)
+      const above = rect.top - 24
+      const below = window.innerHeight - rect.bottom - 24
+      const openBelow = below >= Math.min(maxHeight, 320) || below >= above
+      const available = Math.max(0, Math.min(maxHeight, openBelow ? below : above))
+      const left = Math.max(16, Math.min(rect.right - width, window.innerWidth - width - 16))
+      setPopoverStyle({ left, top: openBelow ? rect.bottom + 8 : Math.max(16, rect.top - available - 8), width, maxHeight: available })
+    }
+    positionPopover()
+    window.addEventListener('resize', positionPopover)
+    window.addEventListener('scroll', positionPopover, true)
+    return () => {
+      window.removeEventListener('resize', positionPopover)
+      window.removeEventListener('scroll', positionPopover, true)
+    }
+  }, [settingsOpen])
 
   useEffect(() => {
     if (configChoice || !status?.config) return
@@ -230,9 +256,10 @@ function Settings({ status, configChoice, onConfigChoice, sendMessage, state, di
 
   return (
     <>
-      <details className="ai-settings">
-        <summary><Icon name="settings" size={15} /> Settings</summary>
-        <div className="ai-settings-body">
+      <details className="ai-settings" onToggle={(event) => setSettingsOpen(event.currentTarget.open)}>
+        <summary ref={settingsAnchor}><Icon name="settings" size={15} /> Settings</summary>
+      </details>
+      {settingsOpen && popoverStyle && createPortal(<div className="ai-settings-body ai-settings-popover" style={popoverStyle}>
           <h3 className="ai-settings-title">Provider and model</h3>
           <label className="ai-field"><span>Mode</span>
             <select value={choice.source} onChange={(event) => updateChoice({ source: event.target.value })}>
@@ -306,8 +333,7 @@ function Settings({ status, configChoice, onConfigChoice, sendMessage, state, di
             </> : <p className="ai-settings-help">Sign in and sign out are managed from your existing pi setup.</p>}
             {notice && <p className="ai-settings-notice" role="status" aria-live="polite">{notice}</p>}
           </div>
-        </div>
-      </details>
+      </div>, document.body)}
       {status?.auth_busy && !authPrompt && createPortal(<div className="ai-modal-scrim" role="presentation">
         <section className="ai-modal" role="dialog" aria-modal="true" aria-labelledby="ai-auth-wait-title">
           <h3 id="ai-auth-wait-title">Provider sign-in</h3>
