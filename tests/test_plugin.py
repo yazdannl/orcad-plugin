@@ -3,11 +3,13 @@ from __future__ import annotations
 
 import base64
 import ctypes
+import os
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import types
 from array import array
 from pathlib import Path
 
@@ -143,6 +145,17 @@ def test_plate_exports_stl_and_hands_it_to_orca(session, monkeypatch):
     assert sent == [Path(result["file"])]
 
 
+def test_windows_copydata_runs_on_render_worker(session, monkeypatch):
+    monkeypatch.setattr(sys, "platform", "win32")
+    workers = []
+    monkeypatch.setattr(orcad, "_windows_copydata_handoff",
+                        lambda path: workers.append(threading.current_thread()) or (True, ""))
+    session.handle({"type": "render", "id": 6, "purpose": "plate", "object": "box"})
+    (result,) = results(session, 1)
+    assert result["handoff"]["ok"]
+    assert workers and workers[0] is not threading.main_thread()
+
+
 def test_engine_setup_progress_is_reported(tmp_path, monkeypatch):
     states = iter([{"state": "starting", "progress": 0.5}] * 2 + [{"state": "ready", "path": "/x", "progress": None}])
     monkeypatch.setattr(scad, "start_openscad_bootstrap", lambda: None)
@@ -164,8 +177,8 @@ def test_large_meshes_switch_to_32_bit_indices(monkeypatch):
 
 
 @pytest.mark.parametrize("platform, exe, expected", [
-    ("linux", "/opt/orca/bin/orca-slicer", ["/opt/orca/bin/orca-slicer", "--single-instance"]),
-    ("win32", r"C:\Program Files\OrcaSlicer\OrcaSlicer.exe", [r"C:\Program Files\OrcaSlicer\OrcaSlicer.exe", "--single-instance"]),
+    ("linux", "/opt/orca/bin/orca-slicer", ["/opt/orca/bin/orca-slicer"]),
+    ("win32", r"C:\Program Files\OrcaSlicer\OrcaSlicer.exe", [r"C:\Program Files\OrcaSlicer\OrcaSlicer.exe"]),
     ("darwin", "/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer", ["open", "-a", "/Applications/OrcaSlicer.app"]),
     ("linux", "/usr/bin/python3", None),
     ("win32", "C:/OrcaSlicer/python.exe", None),
@@ -181,7 +194,7 @@ def orca_cmd():
 
 
 def test_send_to_orca_reports_launch_failures(monkeypatch, tmp_path):
-    monkeypatch.setattr(orcad, "orca_open_command", lambda: ["/missing/orca-slicer", "--single-instance"])
+    monkeypatch.setattr(orcad, "orca_open_command", lambda: ["/missing/orca-slicer"])
     assert orcad.send_to_orca(tmp_path / "x.stl")["ok"] is False
     class Child:
         @staticmethod
@@ -191,32 +204,34 @@ def test_send_to_orca_reports_launch_failures(monkeypatch, tmp_path):
     launched = []
     monkeypatch.setattr(orcad.subprocess, "Popen", lambda argv, **kw: launched.append(argv) or Child())
     assert orcad.send_to_orca(tmp_path / "x.stl")["ok"] is True
-    assert launched == [["/missing/orca-slicer", "--single-instance", str(tmp_path / "x.stl")]]
+    assert launched == [["/missing/orca-slicer", str(tmp_path / "x.stl")]]
 
 
-def test_windows_handoff_uses_hidden_child_and_checks_exit(monkeypatch, tmp_path):
+def test_windows_fallback_uses_hidden_child_and_checks_exit(monkeypatch, tmp_path):
     class Child:
         def wait(self, timeout):
             assert timeout == 2
             return 0
 
     monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(orcad, "_windows_copydata_handoff", lambda path: (False, "mocked IPC miss"))
     monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
-    monkeypatch.setattr(orcad, "orca_open_command", lambda: [r"C:\Orca\OrcaSlicer.exe", "--single-instance"])
+    monkeypatch.setattr(orcad, "orca_open_command", lambda: [r"C:\Orca\OrcaSlicer.exe"])
     launched = []
     monkeypatch.setattr(subprocess, "Popen", lambda argv, **kw: launched.append((argv, kw)) or Child())
     result = orcad.send_to_orca(tmp_path / "part.stl")
     assert result["ok"] and "exited successfully" in result["message"]
     argv, options = launched[0]
-    assert argv == [r"C:\Orca\OrcaSlicer.exe", "--single-instance", str(tmp_path / "part.stl")]
+    assert argv == [r"C:\Orca\OrcaSlicer.exe", str(tmp_path / "part.stl")]
     assert options["creationflags"] == 0x08000000 and options["close_fds"] is True
     assert "start_new_session" not in options
 
 
-def test_windows_handoff_reports_timeout_and_nonzero_exit(monkeypatch, tmp_path):
+def test_windows_fallback_reports_timeout_and_nonzero_exit(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(orcad, "_windows_copydata_handoff", lambda path: (False, "mocked IPC miss"))
     monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
-    monkeypatch.setattr(orcad, "orca_open_command", lambda: [r"C:\Orca\OrcaSlicer.exe", "--single-instance"])
+    monkeypatch.setattr(orcad, "orca_open_command", lambda: [r"C:\Orca\OrcaSlicer.exe"])
 
     class Child:
         def __init__(self, result):
@@ -229,10 +244,121 @@ def test_windows_handoff_reports_timeout_and_nonzero_exit(monkeypatch, tmp_path)
 
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: Child(subprocess.TimeoutExpired("orca", 2)))
     result = orcad.send_to_orca(tmp_path / "part.stl")
-    assert not result["ok"] and "did not finish" in result["message"]
+    assert result["ok"] and "launch is still running" in result["message"]
     monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: Child(7))
     result = orcad.send_to_orca(tmp_path / "part.stl")
     assert not result["ok"] and "status 7" in result["message"]
+
+
+@pytest.mark.parametrize("exit_code", [-1, 0xFFFFFFFF])
+def test_windows_fallback_accepts_orcas_single_instance_exit(monkeypatch, tmp_path, exit_code):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(orcad, "_windows_copydata_handoff", lambda path: (False, "mocked IPC miss"))
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    monkeypatch.setattr(orcad, "orca_open_command", lambda: [r"C:\Orca\OrcaSlicer.exe"])
+
+    class Child:
+        def wait(self, timeout):
+            assert timeout == 2
+            return exit_code
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: Child())
+    result = orcad.send_to_orca(tmp_path / "part.stl")
+    assert result["ok"] and "single-instance forwarding path" in result["message"]
+
+
+def test_windows_instance_payload_matches_orcas_c_style_argv():
+    path = Path('C:\\Grid Models\\part; "A".stl')
+    executable = orcad._host_executable()
+    expected = '"%s";"C:\\\\Grid Models\\\\part; \\"A\\".stl"' % executable
+    assert orcad._windows_instance_payload(path) == expected
+    unicode_path = Path('C:\\模型\\part.stl')
+    assert '模型' in orcad._windows_instance_payload(unicode_path)
+
+
+def fake_windows_user32(monkeypatch, target_pid=None):
+    from ctypes import wintypes
+
+    calls = {}
+
+    class CopyData(ctypes.Structure):
+        _fields_ = [("dwData", ctypes.c_size_t), ("cbData", wintypes.DWORD), ("lpData", ctypes.c_void_p)]
+
+    class User32:
+        @staticmethod
+        def GetClassNameW(hwnd, buffer, size):
+            buffer.value = "wxWindowNR"
+            return len(buffer.value)
+
+        @staticmethod
+        def GetPropW(hwnd, name):
+            return 1
+
+        @staticmethod
+        def GetWindowThreadProcessId(hwnd, pid_pointer):
+            pid = ctypes.cast(pid_pointer, ctypes.POINTER(wintypes.DWORD))
+            pid.contents.value = target_pid if target_pid is not None else os.getpid()
+            return 1
+
+        @staticmethod
+        def EnumWindows(callback, _lparam):
+            callback(0x1234, 0)
+            return 1
+
+        @staticmethod
+        def SendMessageW(hwnd, message, wparam, lparam):
+            data = ctypes.cast(lparam, ctypes.POINTER(CopyData)).contents
+            calls["window"] = hwnd
+            calls["message"] = message
+            calls["wparam"] = wparam
+            calls["dwData"] = data.dwData
+            calls["cbData"] = data.cbData
+            calls["payload"] = ctypes.wstring_at(data.lpData)
+            return 1  # GUI_App's WM_COPYDATA handler returns TRUE after queuing the file event.
+
+    user32 = User32()
+    monkeypatch.setattr(ctypes, "WinDLL", lambda name, **kwargs: user32, raising=False)
+    monkeypatch.setattr(ctypes, "WINFUNCTYPE", ctypes.CFUNCTYPE, raising=False)
+    return calls
+
+
+def test_windows_copydata_is_primary_with_mocked_orca_module(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "win32")
+    fake_orca = types.ModuleType("orca")
+    fake_orca.host = types.SimpleNamespace(plater=lambda: types.SimpleNamespace(model=lambda: None))
+    assert not hasattr(fake_orca.host.plater(), "load_files")
+    monkeypatch.setattr(orcad, "orca", fake_orca)
+    calls = fake_windows_user32(monkeypatch)
+    monkeypatch.setattr(orcad, "orca_open_command", lambda: pytest.fail("process fallback should not run"))
+    monkeypatch.setattr(subprocess, "Popen", lambda *args, **kwargs: pytest.fail("process fallback should not run"))
+
+    path = Path(r"C:\Grid Models\part.stl")
+    result = orcad.send_to_orca(path)
+    assert result["ok"] and "running OrcaSlicer window" in result["message"]
+    payload = orcad._windows_instance_payload(path)
+    # Windows wchar_t is UTF-16; include the trailing WCHAR NUL in cbData.
+    expected_bytes = (len(payload.encode("utf-16-le")) + 2 if ctypes.sizeof(ctypes.c_wchar) == 2
+                      else ctypes.sizeof(ctypes.create_unicode_buffer(payload)))
+    assert calls == {"window": 0x1234, "message": 0x004A, "wparam": 0,
+                     "dwData": 1, "cbData": expected_bytes, "payload": payload}
+
+
+def test_windows_copydata_miss_uses_process_fallback(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    fake_windows_user32(monkeypatch, target_pid=os.getpid() + 1)
+    monkeypatch.setattr(orcad, "orca_open_command", lambda: [r"C:\Orca\OrcaSlicer.exe"])
+
+    class Child:
+        @staticmethod
+        def wait(timeout):
+            return 0
+
+    launched = []
+    monkeypatch.setattr(subprocess, "Popen", lambda argv, **kw: launched.append(argv) or Child())
+    result = orcad.send_to_orca(tmp_path / "part.stl")
+    assert result["ok"] and "no OrcaSlicer main window found" in result["message"]
+    assert launched == [[r"C:\Orca\OrcaSlicer.exe", str(tmp_path / "part.stl")]]
 
 
 def test_windows_host_executable_is_the_process_image(monkeypatch):
@@ -246,7 +372,7 @@ def test_windows_host_executable_is_the_process_image(monkeypatch):
     monkeypatch.setattr(sys, "platform", "win32")
     monkeypatch.setattr(ctypes, "windll", type("WinDLL", (), {"kernel32": Kernel32})(), raising=False)
     assert orcad._host_executable().endswith("OrcaSlicer.exe")
-    assert orcad.orca_open_command() == [r"C:\Program Files\OrcaSlicer\OrcaSlicer.exe", "--single-instance"]
+    assert orcad.orca_open_command() == [r"C:\Program Files\OrcaSlicer\OrcaSlicer.exe"]
 
 
 def test_export_names_are_safe_and_unique(tmp_path, monkeypatch):

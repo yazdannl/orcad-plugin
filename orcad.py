@@ -6,7 +6,7 @@
 # name = "orcad"
 # description = "Parametric CAD tab for OrcaSlicer: Gridfinity bins and baseplates, basic shapes and an OpenSCAD code editor with live 3D preview and one-click Send to plate."
 # author = "orcad"
-# version = "0.9.2"
+# version = "0.9.3"
 # license = "AGPL-3.0-only"
 # ///
 """orcad - parametric CAD tab for OrcaSlicer (Pages capability).
@@ -46,7 +46,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable
 
-PLUGIN_VERSION = "0.9.2"
+PLUGIN_VERSION = "0.9.3"
 HERE = Path(__file__).resolve().parent
 EXPORTS_DIR = HERE / "exports"
 CACHE_DIR = HERE / ".cache"
@@ -208,15 +208,87 @@ def orca_open_command() -> list[str] | None:
         app = next((p for p in Path(exe).parents if p.suffix == ".app"), None)
         return ["open", "-a", str(app)] if app else ["open"]
     if "orca" in Path(exe).name.lower():
-        # --single-instance forwards the file to the open window even when the
-        # "single instance" preference is off.
-        return [exe, "--single-instance"]
+        # CLI setup rejects --single-instance; GUI startup routes positional files
+        # through its configured single-instance handler.
+        return [exe]
     return None
 
 
+def _windows_instance_payload(path: Path) -> str:
+    # OrcaSlicer parses argv using escape_strings_cstyle(): quoted arguments separated by ';'.
+    args = [_host_executable(), os.fspath(path)]
+    return ";".join('"%s"' % arg.replace("\\", "\\\\").replace('"', '\\"') for arg in args)
+
+
+def _windows_copydata_handoff(path: Path) -> tuple[bool, str]:
+    """Forward a model to this process's Orca window; call only from the render worker.
+
+    SendMessageW blocks while Orca's UI thread handles WM_COPYDATA. Calling it from
+    on_message would deadlock; the plate job reaches here only from Session._work.
+    """
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.WinDLL("user32", use_last_error=True)
+
+    class CopyData(ctypes.Structure):
+        _fields_ = [("dwData", ctypes.c_size_t),  # ULONG_PTR
+                    ("cbData", wintypes.DWORD),
+                    ("lpData", ctypes.c_void_p)]
+
+    user32.GetClassNameW.argtypes = (wintypes.HWND, wintypes.LPWSTR, ctypes.c_int)
+    user32.GetPropW.argtypes = (wintypes.HWND, wintypes.LPCWSTR)
+    user32.GetPropW.restype = wintypes.HANDLE
+    user32.GetWindowThreadProcessId.argtypes = (wintypes.HWND, ctypes.POINTER(wintypes.DWORD))
+    user32.SendMessageW.argtypes = (wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM)
+    user32.SendMessageW.restype = ctypes.c_ssize_t
+
+    enum_proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    windows = []
+
+    def visit(hwnd, _lparam):
+        class_name = ctypes.create_unicode_buffer(256)
+        if user32.GetClassNameW(hwnd, class_name, len(class_name)) == 0 or class_name.value != "wxWindowNR":
+            return True
+        # The instance hash distinguishes Orca installs in other processes. Since
+        # this plugin runs inside its target Orca process, its PID is the exact match.
+        if not user32.GetPropW(hwnd, "Instance_Hash_Minor") or not user32.GetPropW(hwnd, "Instance_Hash_Major"):
+            return True
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value != os.getpid():
+            return True
+        windows.append(hwnd)
+        return False
+
+    user32.EnumWindows.argtypes = (enum_proc, wintypes.LPARAM)
+    user32.EnumWindows.restype = wintypes.BOOL
+    callback = enum_proc(visit)  # keep the callback alive through EnumWindows
+    user32.EnumWindows(callback, 0)
+    if not windows:
+        return False, "no OrcaSlicer main window found in this process"
+
+    text = ctypes.create_unicode_buffer(_windows_instance_payload(path))
+    data = CopyData(1, ctypes.sizeof(text), ctypes.cast(text, ctypes.c_void_p))
+    if not user32.SendMessageW(windows[0], 0x004A, 0, ctypes.addressof(data)):
+        return False, "OrcaSlicer did not accept WM_COPYDATA"
+    return True, ""
+
+
 def send_to_orca(path: Path) -> dict[str, Any]:
-    command = orca_open_command()
+    direct_error = ""
+    if sys.platform == "win32":
+        try:
+            sent, direct_error = _windows_copydata_handoff(path)
+            if sent:
+                return {"ok": True, "message": "Sent the STL to the running OrcaSlicer window. "
+                                                   "Switch to Prepare and check that it appeared."}
+        except Exception as exc:
+            direct_error = str(exc)
+
+    fallback_note = f"Direct Windows handoff failed ({direct_error}). " if direct_error else ""
     try:
+        command = orca_open_command()
         if command:
             options = {
                 "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
@@ -230,26 +302,30 @@ def send_to_orca(path: Path) -> dict[str, Any]:
             process = subprocess.Popen([*command, str(path)], **options)
         elif sys.platform == "win32":
             os.startfile(str(path))  # noqa: S606 - user-requested local file open
-            return {"ok": True, "message": "Requested Windows to open the saved STL. Check the plate; "
-                                            "if it is missing, drag the file from exports onto Prepare."}
+            return {"ok": True, "message": fallback_note + "Requested Windows to open the saved STL. Check the plate; "
+                                                           "if it is missing, drag the file from exports onto Prepare."}
         else:
             process = subprocess.Popen(["xdg-open", str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                                        stderr=subprocess.DEVNULL, start_new_session=True, env=scad.child_env())
         try:
             exit_code = process.wait(timeout=2)
         except subprocess.TimeoutExpired:
-            return {"ok": False, "message":
-                    "The file-open handoff did not finish within 2 seconds. The STL is saved in exports; "
-                    "check whether another OrcaSlicer window opened, or drag it onto Prepare."}
+            return {"ok": True, "message": fallback_note +
+                    "The OrcaSlicer launch is still running. Check Prepare; the STL is saved in exports if needed."}
+        if exit_code in (-1, 0xFFFFFFFF):
+            return {"ok": True, "message": fallback_note +
+                    "OrcaSlicer exited after its single-instance forwarding path. Check Prepare; "
+                    "the STL is saved in exports if needed."}
         if exit_code != 0:
-            return {"ok": False, "message":
-                    f"The file-open handoff exited with status {exit_code}. "
+            return {"ok": False, "message": fallback_note +
+                    f"The file-open fallback exited with status {exit_code}. "
                     "The STL is saved in exports; drag it onto Prepare instead."}
     except Exception as exc:
-        return {"ok": False, "message": f"Could not hand the file to OrcaSlicer ({exc}). "
-                                        "Drag it from the exports folder onto the plate instead."}
-    return {"ok": True, "message": "OrcaSlicer's launch process exited successfully; the plate import itself "
-                                    "cannot be confirmed. Check Prepare, or drag the saved STL from exports if missing."}
+        return {"ok": False, "message": fallback_note + f"Could not hand the file to OrcaSlicer ({exc}). "
+                                                           "Drag it from the exports folder onto the plate instead."}
+    return {"ok": True, "message": fallback_note + "OrcaSlicer's fallback launch process exited successfully; "
+                                                "the plate import itself cannot be confirmed. Check Prepare, or drag "
+                                                "the saved STL from exports if missing."}
 
 
 def open_folder(path: Path) -> None:

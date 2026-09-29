@@ -1,4 +1,4 @@
-# orcad: parametric CAD tab for OrcaSlicer (v0.9.2)
+# orcad: parametric CAD tab for OrcaSlicer (v0.9.3)
 
 orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -88,18 +88,30 @@ for inference. OpenSCAD rendering itself runs locally. Do not send designs you
 are not comfortable sharing with that provider. AI-generated code can be unsafe;
 inspect it before using or printing it.
 
-**Send to plate** writes an STL to `exports/` beside the plugin and launches the
-running OrcaSlicer executable with `--single-instance <file>` (on macOS,
-`open -a OrcaSlicer.app <file>`). OrcaSlicer's current Python host API exposes
-Plater/model access but does not bind its C++ `Plater.load_files()` importer, so
-there is no supported direct page-plugin import call; the existing-instance
-command-line handoff is used instead. On Windows, orcad hides the child console
-and checks whether the single-instance process exits successfully or fails/times
-out. OrcaSlicer does not acknowledge to the plugin whether the receiver actually
-loaded the model, so verify it in Prepare. Use **Copy path** or **Open folder**
-and drag the saved STL onto the plate if it is missing. See the [host
-bindings](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/plugin/host/PluginHostApp.cpp)
-and [Windows instance forwarding](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/GUI/InstanceCheck.cpp).
+**Send to plate** writes an STL to `exports/` beside the plugin. On Windows,
+orcad's render worker finds the current-process `wxWindowNR` main frame carrying
+Orca's `Instance_Hash_Minor` and `Instance_Hash_Major` properties, then sends
+`WM_COPYDATA` (`dwData=1`) with Orca's semicolon-separated, C-style escaped
+argv encoded as a NUL-terminated UTF-16 string. The receiver narrows it to
+UTF-8, skips argv[0], and queues existing file paths for `Plater::load_files()`.
+`SendMessageW` is synchronous, so this runs on the render worker—not from page
+`on_message` on the UI thread. The receiver's return only confirms message
+handling, not that import finished; check Prepare.
+
+If Windows IPC is unavailable, the fallback launches `OrcaSlicer.exe <file>`
+without `--single-instance`. Orca's CLI parser returns `CLI_INVALID_PARAMS`
+(-2) for the `--single-instance` form before GUI startup; normal positional file
+arguments are forwarded according to Orca's single-instance preference. The
+Linux executable fallback likewise passes the file positionally; macOS keeps
+`open -a OrcaSlicer.app <file>`. This IPC pattern is implemented by the public
+[Gridfinity generator](https://github.com/JonasMerrell/Gridfinity-Orca-Plugin/blob/71090b9121598de3477ea7ae8cd34522d41bdcf8/build_orca_plugin.py#L333-L382)
+and [Model Search plugin](https://github.com/tommasobbianchi/OrcaSlicer-Model-Search-Plugin/blob/576821fc0ef9a812088d7576bb678d8ec1f3a884/search_engine.py#L123-L185).
+The supported Python host API does not bind `Plater.load_files()`. See Orca's
+[CLI argument parser](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/OrcaSlicer.cpp#L7977-L8013) and [the -2 return](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/OrcaSlicer.cpp#L1350-L1354),
+[GUI instance setup](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/GUI/GUI_Init.cpp#L43-L50),
+[instance serialization and decoding](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/GUI/InstanceCheck.cpp#L65-L145),
+[Windows message receiver](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/GUI/GUI_App.cpp#L700-L707),
+and [plate event handler](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/GUI/Plater.cpp#L8119-L8128). Use **Copy path** or **Open folder** and drag the STL onto Prepare if it is still missing.
 
 ## Install
 
@@ -130,12 +142,12 @@ installs). The separate AI cache location is listed above.
 - **A render fails:** the message appears over the viewport; the Library
   highlights the fields involved and the Code tab marks the line. Full
   OpenSCAD output is in the Console card.
-- **Nothing appears on the plate (especially on Windows):** check the toast for
-  an OrcaSlicer handoff timeout or exit error. The plugin API does not expose
-  `Plater.load_files()`; the Windows fallback sends the saved STL through
-  OrcaSlicer's `--single-instance`/`WM_COPYDATA` path. Check all OrcaSlicer
-  windows and Prepare. If it is still missing, use the exports list (Copy path
-  / Open folder) and drag the STL onto Prepare.
+- **Nothing appears on the plate (especially on Windows):** `4294967294` is
+  the unsigned display of exit code -2 (`CLI_INVALID_PARAMS`), caused by the
+  old `--single-instance <file>` launch argument being rejected before GUI
+  startup. Version 0.9.3 removes that flag and uses the in-process
+  `WM_COPYDATA` path first. Check the toast for IPC/fallback errors, then check
+  Prepare; if missing, drag the STL from the exports list onto the plate.
 - **Tracebacks:** `data_dir()/log/python_*.log`.
 
 Code-mode OpenSCAD runs as a separate process with your user rights. Only run

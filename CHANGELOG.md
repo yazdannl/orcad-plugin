@@ -1,15 +1,30 @@
 # Changelog
 
+## 0.9.3 — Corrected Windows plate handoff
+
+- On Windows, send the saved STL through OrcaSlicer's in-process
+  `WM_COPYDATA` handler from the render worker, using the upstream
+  `wxWindowNR`/instance-property discovery and C-style escaped UTF-16 payload.
+  Orca queues the received path for its normal `Plater::load_files()` importer;
+  the synchronous message return does not confirm the import completed.
+- Corrected the executable fallback to pass the STL as a positional file
+  argument without `--single-instance`. Upstream's CLI parser rejects that flag
+  before GUI startup (`CLI_INVALID_PARAMS`, -2); GUI single-instance behavior is
+  selected from Orca's app configuration. macOS keeps `open -a`.
+- Verified the same Windows IPC pattern in the public Gridfinity Orca plugin and
+  OrcaSlicer Model Search plugin. Added mocked Windows protocol and fallback
+  tests; real Orca/Windows runtime testing is still required.
+
 ## 0.9.2 — Windows plate handoff
 
-- Kept STL handoff through OrcaSlicer's supported `--single-instance` file
-  forwarding: the plugin host exposes Plater/model reads, but does not bind
-  `Plater.load_files()` for direct import.
-- On Windows, create the child without a console, wait for the single-instance
-  process to exit, and report timeout/nonzero-exit failures instead of claiming
-  the file was sent. Success messaging now says to verify the plate.
-- Documented Windows handoff troubleshooting and confirmed that `.stl` paths
-  are parsed by OrcaSlicer's normal file-open forwarding route.
+- Attempted the `--single-instance <file>` executable route. Source review for
+  0.9.3 found that Orca's CLI parser rejects this flag before GUI startup and
+  returns -2, so this release's Windows fallback could not work as intended.
+- On Windows, create the child without a console, wait for the process to exit,
+  and report timeout/nonzero-exit failures instead of claiming the file was
+  sent. Success messaging said to verify the plate.
+- Documented Windows handoff troubleshooting and tested `.stl` file handling
+  in OrcaSlicer's normal file-open forwarding source.
 
 ## 0.9.1 — In-app provider setup
 
@@ -51,8 +66,9 @@
   line (highlighted in the editor), 2D or empty results are explained, and the
   full output is shown in a console. Validation errors point at the exact
   parameters, both client-side and server-side.
-- **Send to plate** launches the running OrcaSlicer with `--single-instance`
-  (`open -a` on macOS) instead of relying on the OS file association.
+- **Send to plate** opens the STL with OrcaSlicer (`open -a` on macOS); the
+  Windows `--single-instance` attempt was corrected in 0.9.3 after source review
+  showed the CLI rejects that flag.
 - **3MF export** for every model, alongside STL.
 - **New UI.** Gradient styling that follows OrcaSlicer's light/dark theme, and
   a responsive layout (three columns, two columns, then a single stacked
