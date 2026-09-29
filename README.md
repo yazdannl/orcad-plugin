@@ -1,4 +1,4 @@
-# orcad: parametric CAD tab for OrcaSlicer (v0.9.1)
+# orcad: parametric CAD tab for OrcaSlicer (v0.9.2)
 
 orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -90,9 +90,16 @@ inspect it before using or printing it.
 
 **Send to plate** writes an STL to `exports/` beside the plugin and launches the
 running OrcaSlicer executable with `--single-instance <file>` (on macOS,
-`open -a OrcaSlicer.app <file>`). The window that is already open imports it
-onto the plate; switch to Prepare to see it. If that ever fails, the toast
-says so. Use **Copy path** or **Open folder** and drag the file onto the plate.
+`open -a OrcaSlicer.app <file>`). OrcaSlicer's current Python host API exposes
+Plater/model access but does not bind its C++ `Plater.load_files()` importer, so
+there is no supported direct page-plugin import call; the existing-instance
+command-line handoff is used instead. On Windows, orcad hides the child console
+and checks whether the single-instance process exits successfully or fails/times
+out. OrcaSlicer does not acknowledge to the plugin whether the receiver actually
+loaded the model, so verify it in Prepare. Use **Copy path** or **Open folder**
+and drag the saved STL onto the plate if it is missing. See the [host
+bindings](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/plugin/host/PluginHostApp.cpp)
+and [Windows instance forwarding](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126903578e2b32f1a3caa6cb848370a496a/src/slic3r/GUI/InstanceCheck.cpp).
 
 ## Install
 
@@ -123,8 +130,12 @@ installs). The separate AI cache location is listed above.
 - **A render fails:** the message appears over the viewport; the Library
   highlights the fields involved and the Code tab marks the line. Full
   OpenSCAD output is in the Console card.
-- **Nothing appears on the plate:** use the exports list (Copy path / Open
-  folder) and drag the file onto Prepare.
+- **Nothing appears on the plate (especially on Windows):** check the toast for
+  an OrcaSlicer handoff timeout or exit error. The plugin API does not expose
+  `Plater.load_files()`; the Windows fallback sends the saved STL through
+  OrcaSlicer's `--single-instance`/`WM_COPYDATA` path. Check all OrcaSlicer
+  windows and Prepare. If it is still missing, use the exports list (Copy path
+  / Open folder) and drag the STL onto Prepare.
 - **Tracebacks:** `data_dir()/log/python_*.log`.
 
 Code-mode OpenSCAD runs as a separate process with your user rights. Only run

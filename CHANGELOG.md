@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.2 — Windows plate handoff
+
+- Kept STL handoff through OrcaSlicer's supported `--single-instance` file
+  forwarding: the plugin host exposes Plater/model reads, but does not bind
+  `Plater.load_files()` for direct import.
+- On Windows, create the child without a console, wait for the single-instance
+  process to exit, and report timeout/nonzero-exit failures instead of claiming
+  the file was sent. Success messaging now says to verify the plate.
+- Documented Windows handoff troubleshooting and confirmed that `.stl` paths
+  are parsed by OrcaSlicer's normal file-open forwarding route.
+
 ## 0.9.1 — In-app provider setup
 
 - Added orcad-managed Pi OAuth/subscription and API-key sign-in/sign-out using Pi's SDK auth API and private `auth.json`.

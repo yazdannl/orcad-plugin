@@ -6,7 +6,7 @@
 # name = "orcad"
 # description = "Parametric CAD tab for OrcaSlicer: Gridfinity bins and baseplates, basic shapes and an OpenSCAD code editor with live 3D preview and one-click Send to plate."
 # author = "orcad"
-# version = "0.9.1"
+# version = "0.9.2"
 # license = "AGPL-3.0-only"
 # ///
 """orcad - parametric CAD tab for OrcaSlicer (Pages capability).
@@ -46,7 +46,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable
 
-PLUGIN_VERSION = "0.9.1"
+PLUGIN_VERSION = "0.9.2"
 HERE = Path(__file__).resolve().parent
 EXPORTS_DIR = HERE / "exports"
 CACHE_DIR = HERE / ".cache"
@@ -184,6 +184,8 @@ def _host_executable() -> str:
         try:
             import ctypes
             buffer = ctypes.create_unicode_buffer(32768)
+            # NULL asks Windows for this process's image path (OrcaSlicer.exe),
+            # not the Python extension/DLL that hosts the embedded interpreter.
             if ctypes.windll.kernel32.GetModuleFileNameW(None, buffer, len(buffer)):
                 return buffer.value
         except Exception:
@@ -216,17 +218,38 @@ def send_to_orca(path: Path) -> dict[str, Any]:
     command = orca_open_command()
     try:
         if command:
-            subprocess.Popen([*command, str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, close_fds=True, start_new_session=os.name != "nt")
+            options = {
+                "stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL,
+                "stderr": subprocess.DEVNULL, "close_fds": True,
+            }
+            if sys.platform == "win32":
+                # Avoid briefly creating a console if this install uses a console wrapper.
+                options["creationflags"] = subprocess.CREATE_NO_WINDOW
+            else:
+                options["start_new_session"] = True
+            process = subprocess.Popen([*command, str(path)], **options)
         elif sys.platform == "win32":
             os.startfile(str(path))  # noqa: S606 - user-requested local file open
+            return {"ok": True, "message": "Requested Windows to open the saved STL. Check the plate; "
+                                            "if it is missing, drag the file from exports onto Prepare."}
         else:
-            subprocess.Popen(["xdg-open", str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                             stderr=subprocess.DEVNULL, start_new_session=True, env=scad.child_env())
+            process = subprocess.Popen(["xdg-open", str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                       stderr=subprocess.DEVNULL, start_new_session=True, env=scad.child_env())
+        try:
+            exit_code = process.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "message":
+                    "The file-open handoff did not finish within 2 seconds. The STL is saved in exports; "
+                    "check whether another OrcaSlicer window opened, or drag it onto Prepare."}
+        if exit_code != 0:
+            return {"ok": False, "message":
+                    f"The file-open handoff exited with status {exit_code}. "
+                    "The STL is saved in exports; drag it onto Prepare instead."}
     except Exception as exc:
         return {"ok": False, "message": f"Could not hand the file to OrcaSlicer ({exc}). "
                                         "Drag it from the exports folder onto the plate instead."}
-    return {"ok": True, "message": "Sent to OrcaSlicer. Switch to Prepare; it appears on the plate in a moment."}
+    return {"ok": True, "message": "OrcaSlicer's launch process exited successfully; the plate import itself "
+                                    "cannot be confirmed. Check Prepare, or drag the saved STL from exports if missing."}
 
 
 def open_folder(path: Path) -> None:
