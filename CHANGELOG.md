@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.9.4 — Release automation
+
+- Added GitHub Actions CI on Linux, Windows and macOS: frontend tests, the
+  pytest suite and `packaging/bundle.py --check`, which fails when the committed
+  `frontend/dist/index.html` or the blobs embedded in `orcad.py` are stale.
+- Pushing a `v*` tag now publishes a GitHub release with the verified
+  `orcad.py` attached and the matching CHANGELOG section as release notes.
+- Documented the release procedure in `RELEASE.md` and documented installing a
+  released file with **Plugins ▾ Install local plugin**.
+
 ## 0.9.3 — Corrected Windows plate handoff
 
 - On Windows, send the saved STL through OrcaSlicer's in-process

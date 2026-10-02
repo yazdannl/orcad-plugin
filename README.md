@@ -1,4 +1,4 @@
-# orcad: parametric CAD tab for OrcaSlicer (v0.9.3)
+# orcad: parametric CAD tab for OrcaSlicer (v0.9.4)
 
 orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -119,7 +119,12 @@ Requires an OrcaSlicer build with plugin pages (`orca.pages`, the current
 Nightly). Builds without it get an "orcad (needs a newer OrcaSlicer)" entry
 instead of a tab.
 
-- **Single file (Plugin Hub):** `orcad.py` embeds the compiled page, OpenSCAD
+- **Release download (recommended):** download `orcad.py` from the
+  [latest release](https://github.com/yazdannl/orcad-plugin/releases/latest), then
+  in OrcaSlicer open **Plugins**, use the arrow next to **Browse plugins** and
+  choose **Install local plugin**, and pick that file. OrcaSlicer installs and
+  enables it for you; every later release is installed the same way.
+- **Single file (manual):** `orcad.py` embeds the compiled page, OpenSCAD
   backend/Gridfinity sources, and AI backend code. Put it in
   `<Orca data dir>/orca_plugins/orcad/orcad.py`.
 - **Folder:** `orcad.py` plus `frontend/dist/index.html`, `openscad/`, and `ai/`
@@ -185,6 +190,8 @@ Layout:
   `dist/index.html`. It uses plain CSS on purpose, because OrcaSlicer injects
   unlayered element styles that would override `@layer`-based frameworks.
 - `packaging/bundle.py`: deterministic release embedding.
+- `.github/workflows/ci.yml`: tests plus the bundle freshness check; pushing a
+  `v*` tag publishes the release with `orcad.py` attached. See `RELEASE.md`.
 
 To add a catalog object, drop a `.scad` file in `openscad/objects/`, describe
 its parameters in `catalog.json` (add cross-field rules to `validation.py` if

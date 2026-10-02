@@ -6,7 +6,7 @@
 # name = "orcad"
 # description = "Parametric CAD tab for OrcaSlicer: Gridfinity bins and baseplates, basic shapes and an OpenSCAD code editor with live 3D preview and one-click Send to plate."
 # author = "orcad"
-# version = "0.9.3"
+# version = "0.9.4"
 # license = "AGPL-3.0-only"
 # ///
 """orcad - parametric CAD tab for OrcaSlicer (Pages capability).
@@ -46,7 +46,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable
 
-PLUGIN_VERSION = "0.9.3"
+PLUGIN_VERSION = "0.9.4"
 HERE = Path(__file__).resolve().parent
 EXPORTS_DIR = HERE / "exports"
 CACHE_DIR = HERE / ".cache"
