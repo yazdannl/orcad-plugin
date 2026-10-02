@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 import openscad.bootstrap as bootstrap
+from fakes import posix_exec_only
 from openscad.errors import BackendError, ErrorCode
 
 
@@ -87,6 +88,7 @@ def test_artifacts_are_pinned_https_snapshots():
     assert info.value.code == ErrorCode.UNSUPPORTED_PLATFORM
 
 
+@posix_exec_only
 def test_zip_install_is_verified_and_reused_without_network(tmp_path, monkeypatch, no_system_openscad):
     payload = zip_with({"OpenSCAD/openscad.exe": version_script()})
     artifact = use_artifact(monkeypatch, ("win32", "x86_64"), sha256=hashlib.sha256(payload).hexdigest())
@@ -108,6 +110,7 @@ def test_checksum_mismatch_installs_nothing(tmp_path, monkeypatch, no_system_ope
     assert not list(tmp_path.glob("*.part"))
 
 
+@posix_exec_only
 def test_missing_pinned_snapshot_falls_back_to_the_newest_published_one(tmp_path, monkeypatch, no_system_openscad):
     payload = zip_with({"openscad.exe": version_script("2026.10.02")})
     artifact = bootstrap.ARTIFACTS[("win32", "x86_64")]
@@ -122,6 +125,7 @@ def test_missing_pinned_snapshot_falls_back_to_the_newest_published_one(tmp_path
     assert server.requests[-1] == bootstrap.SNAPSHOT_INDEX + newest
 
 
+@posix_exec_only
 def test_appimage_is_extracted_so_fuse_is_not_needed(tmp_path, monkeypatch, no_system_openscad):
     inner = version_script().decode()
     appimage = (f"#!{sys.executable}\nimport os, pathlib, sys\n"

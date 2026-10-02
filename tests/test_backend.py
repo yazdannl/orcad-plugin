@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 import json
-import stat
 import struct
-import sys
 import threading
 import time
 import zipfile
@@ -17,6 +15,7 @@ from openscad import (CATALOG, BackendError, OpenSCADRunner, backend_args, build
                       validate_parameters, write_3mf)
 from openscad.errors import ErrorCode
 from openscad.runner import _failure, child_env
+from fakes import fake_command
 
 CUBE = [((0, 0, 0), (1, 1, 0), (1, 0, 0)), ((0, 0, 0), (0, 1, 0), (1, 1, 0)),
         ((0, 0, 1), (1, 0, 1), (1, 1, 1)), ((0, 0, 1), (1, 1, 1), (0, 1, 1)),
@@ -153,9 +152,7 @@ def test_3mf_is_a_valid_package_without_degenerate_triangles(tmp_path):
 # ------------------------------------------------------------------- runner
 
 def fake_openscad(tmp_path: Path, version="2026.09.22", delay=0.0, stderr="", fail=False) -> Path:
-    script = tmp_path / "fake-openscad"
-    script.write_text(
-        f"#!{sys.executable}\n"
+    return fake_command(tmp_path, "fake-openscad",
         "import json, os, pathlib, sys, time\n"
         f"if '--version' in sys.argv:\n    print('OpenSCAD version {version}'); raise SystemExit(0)\n"
         "log = pathlib.Path(__file__).with_name('calls.jsonl')\n"
@@ -164,10 +161,7 @@ def fake_openscad(tmp_path: Path, version="2026.09.22", delay=0.0, stderr="", fa
         f"time.sleep({delay})\n"
         f"sys.stderr.write({stderr!r})\n"
         f"if {fail}: raise SystemExit(1)\n"
-        f"pathlib.Path(sys.argv[sys.argv.index('-o') + 1]).write_bytes({stl()!r})\n",
-        encoding="utf-8")
-    script.chmod(script.stat().st_mode | stat.S_IXUSR)
-    return script
+        f"pathlib.Path(sys.argv[sys.argv.index('-o') + 1]).write_bytes({stl()!r})\n")
 
 
 def calls(tmp_path):

@@ -7,6 +7,9 @@
   `frontend/dist/index.html` or the blobs embedded in `orcad.py` are stale.
 - Pushing a `v*` tag now publishes a GitHub release with the verified
   `orcad.py` attached and the matching CHANGELOG section as release notes.
+- Made the test suite run on Windows: fake OpenSCAD/Pi binaries are created as
+  `.cmd` wrappers there, POSIX file-mode assertions and shebang-only bootstrap
+  tests are skipped, and the POSIX send-to-plate test pins the platform.
 - Documented the release procedure in `RELEASE.md` and documented installing a
   released file with **Plugins ▾ Install local plugin**.
 

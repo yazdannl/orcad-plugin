@@ -18,6 +18,7 @@ import pytest
 import ai.agent as agent_module
 import ai.bootstrap as bootstrap
 import orcad
+from fakes import assert_mode, fake_command
 
 
 class Response(io.BytesIO):
@@ -158,9 +159,7 @@ def _fake_pi(tmp_path: Path, mode: str) -> tuple[Path, Path]:
 
 def _agent(tmp_path, monkeypatch, mode="mapping"):
     script, cli = _fake_pi(tmp_path, mode)
-    openscad = tmp_path / "fake-openscad"
-    openscad.write_text(f"#!{sys.executable}\nprint('OpenSCAD version 2026.09.22')\n", encoding="utf-8")
-    openscad.chmod(openscad.stat().st_mode | stat.S_IXUSR)
+    openscad = fake_command(tmp_path, "fake-openscad", "print('OpenSCAD version 2026.09.22')\n")
     monkeypatch.setattr(bootstrap, "start_ai_bootstrap", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(bootstrap, "wait_for_ai", lambda **_kwargs: {"node": sys.executable, "pi": str(cli)})
     monkeypatch.setattr(bootstrap, "_STATE", {"state": "missing", "node": None, "pi": None,
@@ -326,14 +325,14 @@ def test_custom_provider_models_json_and_key_permissions(tmp_path, monkeypatch):
     private = tmp_path / "data/private-agent"
     models_path = private / "models.json"
     models = json.loads(models_path.read_text(encoding="utf-8"))
-    assert stat.S_IMODE(models_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(private.stat().st_mode) == 0o700
+    assert_mode(models_path, 0o600)
+    assert_mode(private, 0o700)
     assert models["providers"]["local-test"]["models"] == [{"id": "qwen-local", "name": "Qwen local"}]
     assert models["providers"]["local-test"]["apiKey"] == "${ORCAD_CUSTOM_LOCAL_TEST_API_KEY}"
     assert "test-local-key" not in models_path.read_text(encoding="utf-8")
     key_path = private / "custom-keys/local-test.key"
-    assert stat.S_IMODE(key_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE((private / "custom-keys").stat().st_mode) == 0o700
+    assert_mode(key_path, 0o600)
+    assert_mode(private / "custom-keys", 0o700)
     assert instance.status()["custom_providers"][0]["has_key"]
     child = agent_module._clean_pi_environment(
         {}, {**instance._config, "node": sys.executable, "openscad": "openscad", "library": str(tmp_path)},
@@ -381,7 +380,7 @@ def test_private_key_config_is_0600_and_never_echoed(tmp_path, monkeypatch):
     instance, messages = _agent(tmp_path, monkeypatch)
     instance._configure_worker("key", "openai", "model-id", "low", "dummy-test-value")
     keyfile = tmp_path / "data/provider-key"
-    assert stat.S_IMODE(keyfile.stat().st_mode) == 0o600
+    assert_mode(keyfile, 0o600)
     status = instance.status()
     assert status["config"]["source"] == "managed" and status["config"]["has_key"]
     child = agent_module._clean_pi_environment(

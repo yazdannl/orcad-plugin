@@ -194,6 +194,7 @@ def orca_cmd():
 
 
 def test_send_to_orca_reports_launch_failures(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(orcad, "orca_open_command", lambda: ["/missing/orca-slicer"])
     assert orcad.send_to_orca(tmp_path / "x.stl")["ok"] is False
     class Child:
