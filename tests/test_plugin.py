@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import ctypes
+import json
 import os
 import shutil
 import subprocess
@@ -186,7 +187,10 @@ def test_large_meshes_switch_to_32_bit_indices(monkeypatch):
 def test_handoff_targets_the_running_orcaslicer(monkeypatch, platform, exe, expected):
     monkeypatch.setattr(sys, "platform", platform)
     monkeypatch.setattr(orcad, "_host_executable", lambda: exe)
-    assert orca_cmd() == expected
+    command = orca_cmd()
+    if platform == "darwin":  # the command is built with Path(), which uses the host separator
+        command = [part.replace("\\", "/") for part in command]
+    assert command == expected
 
 
 def orca_cmd():
@@ -268,10 +272,10 @@ def test_windows_fallback_accepts_orcas_single_instance_exit(monkeypatch, tmp_pa
     assert result["ok"] and "single-instance forwarding path" in result["message"]
 
 
-def test_windows_instance_payload_matches_orcas_c_style_argv():
+def test_windows_instance_payload_matches_orcas_c_style_argv(monkeypatch):
+    monkeypatch.setattr(orcad, "_host_executable", lambda: r"C:\Orca\OrcaSlicer.exe")
     path = Path('C:\\Grid Models\\part; "A".stl')
-    executable = orcad._host_executable()
-    expected = '"%s";"C:\\\\Grid Models\\\\part; \\"A\\".stl"' % executable
+    expected = r'"C:\\Orca\\OrcaSlicer.exe";"C:\\Grid Models\\part; \"A\".stl"'
     assert orcad._windows_instance_payload(path) == expected
     unicode_path = Path('C:\\模型\\part.stl')
     assert '模型' in orcad._windows_instance_payload(unicode_path)
@@ -391,4 +395,6 @@ def test_single_file_install_uses_the_embedded_page_and_backend(tmp_path):
     code = ("import orcad, json; s = orcad.Session(print); "
             "print(json.dumps([orcad.scad.__file__, orcad.page_html()[:15], sorted(orcad.scad.CATALOG['objects'])]))")
     out = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True, check=True).stdout
-    assert str(tmp_path / ".backend") in out and "<!doctype html>" in out and "gridfinity_bin" in out
+    module_path, page, objects = json.loads(out.strip().splitlines()[-1])
+    assert Path(module_path).is_relative_to(tmp_path / ".backend")
+    assert page.startswith("<!doctype html>") and "gridfinity_bin" in objects
