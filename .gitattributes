@@ -1,0 +1,9 @@
+# The bundle check compares byte-for-byte identical builds, so Windows and
+# macOS checkouts must not rewrite frontend/dist/index.html or orcad.py.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.zip binary
+*.whl binary
+*.ico binary

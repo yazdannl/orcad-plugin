@@ -62,6 +62,8 @@ dialog.
 
 - Tag order matters: push `main` first, so the tag cannot point at an unpushed
   commit.
-- Rolling a tag back is a new patch release, not a moved tag.
+- A tag that never produced a release (CI failed, or the tag was a mistake) can
+  be deleted and recreated: `git push --delete origin v0.9.4`. Once a release
+  exists, never move a published tag; roll forward with a new patch version.
 - There is no changelog or version handling inside the plugin itself beyond the
   metadata above; the Plugins dialog reads it from there.
