@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import base64
 import gzip
+import hashlib
 import io
 import re
 import shutil
@@ -80,6 +81,23 @@ def run_tests() -> None:
     subprocess.run(["npm", "test"], cwd=FRONTEND, check=True, shell=sys.platform == "win32")
 
 
+def embedded_blob(text: str, variable: str) -> bytes:
+    """Decode the committed blob of one region, e.g. _EMBEDDED_BACKEND."""
+    match = re.search(rf'^{variable} = "([^"]*)"$', text, re.M)
+    if not match:
+        raise SystemExit(f"{TARGET.name}: missing {variable}")
+    return gzip.decompress(base64.b64decode(match.group(1)))
+
+
+def archive_members(data: bytes) -> dict[str, str]:
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        return {name: hashlib.sha256(archive.read(name)).hexdigest() for name in archive.namelist()}
+
+
+def stale_members(committed: dict[str, str], fresh: dict[str, str]) -> list[str]:
+    return sorted(name for name in committed.keys() | fresh.keys() if committed.get(name) != fresh.get(name))
+
+
 def check() -> int:
     with tempfile.TemporaryDirectory() as directory:
         build_frontend(Path(directory))
@@ -89,7 +107,17 @@ def check() -> int:
         problems.append("frontend/dist/index.html is stale")
     current = TARGET.read_text(encoding="utf-8")
     if render_target(current, fresh) != current:
-        problems.append("orcad.py embedded blobs are stale")
+        detail = []
+        try:
+            changed = stale_members(archive_members(embedded_blob(current, "_EMBEDDED_BACKEND")),
+                                    archive_members(backend_archive()))
+        except (KeyError, zipfile.BadZipFile) as error:
+            detail = [f"backend blob unreadable: {error}"]
+        else:
+            detail = [f"{len(changed)} backend file(s) differ: {', '.join(changed[:5]) or 'none by content'}"]
+            detail.append("frontend blob differs" if _blob(fresh.encode("utf-8")) !=
+                          _blob(embedded_blob(current, "_EMBEDDED_FRONTEND")) else "frontend blob matches")
+        problems.append("orcad.py embedded blobs are stale: " + "; ".join(detail))
     for problem in problems:
         print(f"error: {problem}; run `python3 packaging/bundle.py`", file=sys.stderr)
     return 1 if problems else 0
