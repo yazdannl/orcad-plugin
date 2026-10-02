@@ -10,6 +10,10 @@
 - Made the test suite run on Windows: fake OpenSCAD/Pi binaries are created as
   `.cmd` wrappers there, POSIX file-mode assertions and shebang-only bootstrap
   tests are skipped, and the POSIX send-to-plate test pins the platform.
+- Fixed the embedded backend archive recording the build host: `ZipInfo`
+  defaults `create_system` to Windows, so a Windows or macOS build produced
+  different blob bytes than the committed one. The archive is now byte-identical
+  everywhere, with a regression test.
 - Documented the release procedure in `RELEASE.md` and documented installing a
   released file with **Plugins ▾ Install local plugin**.
 
