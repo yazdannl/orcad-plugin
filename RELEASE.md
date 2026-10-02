@@ -9,7 +9,7 @@ and then publish the GitHub release with the bundled `orcad.py` attached.
 ```sh
 cd frontend && npm ci && cd ..
 python3 packaging/bundle.py --release   # build frontend, embed into orcad.py, run every test
-python3 packaging/bundle.py --check     # must report nothing stale
+python3 packaging/check.py              # the CI gate: pytest, then the bundle freshness check
 ```
 
 `--release` runs `python3 -m pytest -q tests` and `npm test`. The OpenSCAD
@@ -34,6 +34,9 @@ publishing an empty description.
 Rebuild after every change to `frontend/`, `openscad/`, `ai/` or the version
 header: `python3 packaging/bundle.py`. `--check` in CI compares the committed
 `orcad.py` against a fresh build, so a forgotten rebuild fails the tag.
+
+A release is published only if the whole matrix is green, so run
+`python3 packaging/check.py` (pytest plus the bundle check) before tagging.
 
 ## 3. Commit, tag, push
 

@@ -36,14 +36,13 @@ jobs:
       - name: Frontend tests
         working-directory: frontend
         run: npm test
-      - name: Backend, plugin and bundle tests
+      - name: Tests and bundle freshness
         run: python packaging/check.py
-      - name: Release bundle is up to date
-        run: python packaging/bundle.py --check
 
   release:
     name: GitHub release
     needs: verify
+    # needs: verify already ran packaging/check.py against this exact commit
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -61,8 +60,6 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
-      - name: Release bundle is up to date
-        run: python packaging/bundle.py --check
       - name: Release notes from CHANGELOG.md
         run: python packaging/release_notes.py "$GITHUB_REF_NAME" > notes.md
       - name: Publish the release with orcad.py attached
