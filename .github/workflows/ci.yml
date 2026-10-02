@@ -37,7 +37,7 @@ jobs:
         working-directory: frontend
         run: npm test
       - name: Backend, plugin and bundle tests
-        run: python -m pytest -q tests
+        run: python packaging/check.py
       - name: Release bundle is up to date
         run: python packaging/bundle.py --check
 
