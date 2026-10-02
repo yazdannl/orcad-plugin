@@ -44,7 +44,11 @@ def _blob(data: bytes) -> str:
 
 
 def backend_archive() -> bytes:
-    """Deterministic zip of openscad/ (fixed timestamps, sorted names)."""
+    """Deterministic zip of openscad/ and ai/ (fixed timestamps, sorted names).
+
+    The bytes must not depend on the build host: the committed blob is verified
+    on Linux, Windows and macOS, and ZipInfo records the creating platform.
+    """
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         files = (path for package in (BACKEND, AI_BACKEND) for path in package.rglob("*"))
@@ -52,6 +56,7 @@ def backend_archive() -> bytes:
             name = path.relative_to(ROOT).as_posix()
             if path.is_file() and not _SKIP.search(name):
                 info = zipfile.ZipInfo(name, date_time=(2020, 1, 1, 0, 0, 0))
+                info.create_system = 3  # Unix; ZipInfo would otherwise record the build host
                 info.external_attr = 0o644 << 16
                 info.compress_type = zipfile.ZIP_DEFLATED
                 archive.writestr(info, path.read_bytes())

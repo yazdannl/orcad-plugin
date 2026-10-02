@@ -24,6 +24,13 @@ def test_backend_archive_is_deterministic_and_complete():
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)
 
 
+def test_archive_records_a_fixed_creating_system():
+    # ZipInfo defaults to the build host, so a Windows build would embed a
+    # different blob than the committed one and every CI check would fail.
+    infos = zipfile.ZipFile(io.BytesIO(bundle.backend_archive())).infolist()
+    assert infos and {info.create_system for info in infos} == {3}
+
+
 def test_render_target_fills_both_regions_idempotently():
     source = ("x = 1\n# BEGIN EMBEDDED OPENSCAD BACKEND\n_EMBEDDED_BACKEND = \"\"\n# END EMBEDDED OPENSCAD BACKEND\n"
               "# BEGIN BUNDLED FRONTEND\n_EMBEDDED_FRONTEND = \"\"\n# END BUNDLED FRONTEND\n")
