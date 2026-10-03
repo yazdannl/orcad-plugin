@@ -27,14 +27,15 @@ fi
 
 # Build the metadata JSON and refuse a tag that disagrees with the plugin's own
 # version, which the API would reject anyway with a less obvious message.
-metadata="$(FILES="$PLUGIN_FILES" python3 - <<'PY'
+version="${GITHUB_REF_NAME#v}"
+metadata="$(VERSION="$version" FILES="$PLUGIN_FILES" python3 - <<'PY'
 import json
 import os
 import pathlib
 import re
 import sys
 
-version = os.environ["GITHUB_REF_NAME"].removeprefix("v")
+version = os.environ["VERSION"]
 event = json.loads(pathlib.Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
 changelog = (event.get("release", {}).get("body") or "").strip()[:4000]
 
@@ -51,8 +52,15 @@ print(json.dumps(metadata))
 PY
 )"
 
-oidc_token="$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-  "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=orcacloud" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])')"
+oidc_response="$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+  "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=orcacloud")" || {
+  echo "::error title=Orca Cloud::could not request an OIDC token (is id-token: write granted?)"
+  exit 1
+}
+oidc_token="$(printf '%s' "$oidc_response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["value"])' 2>/dev/null)" || {
+  echo "::error title=Orca Cloud::the OIDC token request returned no token: ${oidc_response:0:400}"
+  exit 1
+}
 
 args=(-F "metadata=$metadata")
 for file in "${files[@]}"; do
@@ -64,12 +72,15 @@ trap 'rm -f "$response"' EXIT
 status="$(curl -sS -o "$response" -w '%{http_code}' \
   -H "Authorization: Bearer $oidc_token" "${args[@]}" \
   https://api.orcaslicer.com/api/v1/plugin-publish/releases)"
-cat "$response"
-echo
+body="$(cat "$response")"
+echo "$body"
 if [ "$status" != "201" ]; then
   case "$status" in
-    401) echo "Orca Cloud rejected the identity: is $GITHUB_REPOSITORY connected to one of your plugins?" >&2 ;;
-    *)   echo "Orca Cloud publish failed with HTTP $status (a version error means the tag is not higher than the published one)" >&2 ;;
+    401) reason="Orca Cloud rejected the identity: is $GITHUB_REPOSITORY connected to one of your plugins?" ;;
+    *)   reason="HTTP $status (a version error means the tag is not higher than the published one)" ;;
   esac
+  echo "::error title=Orca Cloud publish failed::$reason: ${body:0:500}"
+  echo "$reason" >&2
   exit 1
 fi
+echo "::notice title=Orca Cloud::published orcad $version"

@@ -70,10 +70,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          gh release create "$GITHUB_REF_NAME" \
-            --title "orcad $GITHUB_REF_NAME" \
-            --notes-file notes.md \
-            orcad.py
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME exists; refreshing its notes instead of failing."
+            gh release edit "$GITHUB_REF_NAME" --title "orcad $GITHUB_REF_NAME" --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              --title "orcad $GITHUB_REF_NAME" \
+              --notes-file notes.md \
+              orcad.py
+          fi
       # GitHub suppresses workflow triggers for events created with the
       # built-in GITHUB_TOKEN, so publish-orcacloud.yml would never fire for
       # this release; publish from here instead. A release published from the
