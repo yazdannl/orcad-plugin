@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 import ctypes
+import hashlib
 import json
 import os
 import shutil
@@ -388,13 +389,51 @@ def test_export_names_are_safe_and_unique(tmp_path, monkeypatch):
     assert first.parent == tmp_path and first.name.startswith("etc_passwd_bin_") and second != first
 
 
-def test_single_file_install_uses_the_embedded_page_and_backend(tmp_path):
+def test_single_file_install_uses_the_embedded_page_and_backend(tmp_path, monkeypatch):
     if not orcad._EMBEDDED_BACKEND or not orcad._EMBEDDED_FRONTEND:
         pytest.skip("run packaging/bundle.py to embed the release blobs")
     shutil.copy(Path(orcad.__file__), tmp_path / "orcad.py")
+    cache = tmp_path / "cache-home"
+    monkeypatch.setenv("LOCALAPPDATA", str(cache))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
     code = ("import orcad, json; s = orcad.Session(print); "
             "print(json.dumps([orcad.scad.__file__, orcad.page_html()[:15], sorted(orcad.scad.CATALOG['objects'])]))")
     out = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True, check=True).stdout
     module_path, page, objects = json.loads(out.strip().splitlines()[-1])
-    assert Path(module_path).is_relative_to(tmp_path / ".backend")
+    # unpacked into the short per-user cache, not next to the plugin: the cloud install
+    # directory is already ~160 characters, and the vendored paths are 93 more
+    assert Path(module_path).is_relative_to(cache / "orcad" / "backend")
     assert page.startswith("<!doctype html>") and "gridfinity_bin" in objects
+
+
+def test_blocked_rename_still_loads_the_backend_from_the_staging_tree(tmp_path, monkeypatch):
+    if not orcad._EMBEDDED_BACKEND:
+        pytest.skip("run packaging/bundle.py to embed the release blobs")
+    shutil.copy(Path(orcad.__file__), tmp_path / "orcad.py")
+    cache = tmp_path / "cache-home"
+    monkeypatch.setenv("LOCALAPPDATA", str(cache))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    digest = hashlib.sha256(base64.b64decode(orcad._EMBEDDED_BACKEND)).hexdigest()[:16]
+    blocked = cache / "orcad" / "backend" / digest
+    blocked.mkdir(parents=True)
+    (blocked / "in-the-way").write_text("x")  # rename() cannot replace a non-empty directory
+    result = subprocess.run([sys.executable, "-c", "import orcad; print(orcad.scad.__file__)"],
+                            cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    loaded = Path(result.stdout.strip())
+    assert loaded.parent.parent.name.endswith(".tmp") and loaded.is_relative_to(blocked.parent)
+    assert (blocked / "in-the-way").is_file()
+
+
+def test_unpackable_backend_reports_the_target_path(monkeypatch, tmp_path):
+    monkeypatch.setattr(orcad, "HERE", tmp_path / "plugin")
+    monkeypatch.setattr(orcad, "_cache_root", lambda: tmp_path / "cache")
+
+    def too_long(self, path):
+        raise OSError(206, "The filename or extension is too long")
+
+    monkeypatch.setattr(orcad.zipfile.ZipFile, "extractall", too_long)
+    with pytest.raises(RuntimeError, match="could not unpack the embedded backend"):
+        orcad._load_backend()

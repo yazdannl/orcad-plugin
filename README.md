@@ -139,9 +139,12 @@ instead of a tab.
   copies.
 
 Restart OrcaSlicer and enable **orcad** in the Plugins dialog. Runtime data
-lives next to the plugin: `exports/` (your files), `.cache/` (rendered STL
-cache, capped at 512 MB), and `.backend/` (unpacked code for single-file
-installs). The separate AI cache location is listed above.
+lives next to the plugin: `exports/` (your files) and `.cache/` (rendered STL
+cache, capped at 512 MB). For a single-file install the OpenSCAD backend is
+unpacked into the per-user cache instead of beside the file
+(`%LOCALAPPDATA%\orcad\backend`, `~/Library/Caches/orcad/backend`,
+`~/.cache/orcad/backend`), because a plugin directory installed from Orca Cloud
+is already a long path. The AI cache location is listed above.
 
 ## Troubleshooting
 

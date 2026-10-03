@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.9.5 — Backend unpacked to a short cache path
+
+- The embedded OpenSCAD backend is now unpacked into the per-user cache
+  (`%LOCALAPPDATA%\orcad\backend\<hash>`, `~/Library/Caches/orcad/backend`,
+  `~/.cache/orcad/backend`) instead of `.backend/` beside `orcad.py`. A plugin
+  installed from Orca Cloud lives in
+  `orca_plugins/_subscribed/<user>/<uuid>/`, which is already ~160 characters;
+  together with the vendored Gridfinity paths the deepest extracted file reached
+  270 characters, past Windows' 260-character limit, and the single-file plugin
+  failed to load from there with an import error that carried no detail.
+- If the unpacked tree cannot be renamed into place (a Windows lock, or another
+  process winning the race) the complete staging tree is used instead of being
+  deleted, so a load never ends up pointing at a directory that does not exist.
+- An unpack failure now raises a message naming the target directory instead of
+  surfacing an empty import error in the Plugins dialog.
+
 ## 0.9.4 — Release automation
 
 - Added GitHub Actions CI on Linux, Windows and macOS: frontend tests, the

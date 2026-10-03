@@ -6,7 +6,7 @@
 # name = "orcad"
 # description = "Parametric CAD tab for OrcaSlicer: Gridfinity bins and baseplates, basic shapes and an OpenSCAD code editor with live 3D preview and one-click Send to plate."
 # author = "orcad"
-# version = "0.9.4"
+# version = "0.9.5"
 # license = "AGPL-3.0-only"
 # ///
 """orcad - parametric CAD tab for OrcaSlicer (Pages capability).
@@ -46,7 +46,7 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable
 
-PLUGIN_VERSION = "0.9.4"
+PLUGIN_VERSION = "0.9.5"
 HERE = Path(__file__).resolve().parent
 EXPORTS_DIR = HERE / "exports"
 CACHE_DIR = HERE / ".cache"
@@ -65,25 +65,45 @@ _EMBEDDED_FRONTEND = "H4sIAAAAAAAC/9S961obSbIo+n89hajNYVRDSi2BrxJlFs3FNm2wG7DBpt
 _BACKEND_ROOT = HERE
 
 
+def _cache_root() -> Path:
+    """Per-user cache directory. Kept short on purpose: the embedded backend has
+    93-character vendored paths, and the cloud install directory alone is ~160
+    characters, which pushes extraction past Windows' 260-character path limit."""
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
+    elif sys.platform == "darwin":
+        base = Path.home() / "Library" / "Caches"
+    else:
+        base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+    return Path(base) / "orcad"
+
+
 def _load_backend():
-    """Import ./openscad under a private module name (plugins share one interpreter)."""
+    """Import the bundled OpenSCAD backend under a private module name (plugins share one interpreter)."""
     global _BACKEND_ROOT
     root = HERE
     if not (root / "openscad" / "__init__.py").is_file():
         blob = base64.b64decode(_EMBEDDED_BACKEND)
-        root = HERE / ".backend" / hashlib.sha256(blob).hexdigest()[:16]
+        root = _cache_root() / "backend" / hashlib.sha256(blob).hexdigest()[:16]
         if not (root / "openscad" / "__init__.py").is_file():
             staging = root.with_name(root.name + f".{os.getpid()}.tmp")
             shutil.rmtree(staging, ignore_errors=True)
-            with zipfile.ZipFile(io.BytesIO(gzip.decompress(blob))) as archive:
-                for name in archive.namelist():
-                    if name.startswith(("/", "\\")) or ".." in Path(name).parts:
-                        raise RuntimeError("invalid embedded backend path")
-                archive.extractall(staging)
+            try:
+                with zipfile.ZipFile(io.BytesIO(gzip.decompress(blob))) as archive:
+                    for name in archive.namelist():
+                        if name.startswith(("/", "\\")) or ".." in Path(name).parts:
+                            raise RuntimeError("invalid embedded backend path")
+                    archive.extractall(staging)
+            except OSError as exc:  # a full disk, a locked path, an over-long name
+                shutil.rmtree(staging, ignore_errors=True)
+                raise RuntimeError(f"could not unpack the embedded backend into {staging}: {exc}") from exc
             try:
                 staging.rename(root)
-            except OSError:  # another process won the race
-                shutil.rmtree(staging, ignore_errors=True)
+            except OSError:
+                if (root / "openscad" / "__init__.py").is_file():
+                    shutil.rmtree(staging, ignore_errors=True)  # another process won the race
+                else:
+                    root = staging  # rename blocked (Windows locks); the staging tree is complete
     _BACKEND_ROOT = root
     package = root / "openscad"
     spec = importlib.util.spec_from_file_location(
