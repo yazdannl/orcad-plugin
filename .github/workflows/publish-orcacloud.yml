@@ -1,0 +1,34 @@
+name: Publish to Orca Cloud
+
+# The documented Orca Cloud flow: every published GitHub release becomes a new
+# plugin version in Orca Cloud, authenticated with a GitHub-signed OIDC token
+# (no secret). The repository must be connected under
+# Edit plugin > GitHub publishing in Orca Cloud.
+#
+# Note: releases created by .github/workflows/ci.yml with the built-in
+# GITHUB_TOKEN do not trigger this workflow, because GitHub suppresses runs
+# started by that token. That path publishes from the ci.yml release job.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  publish:
+    name: Publish to Orca Cloud
+    runs-on: ubuntu-latest
+    env:
+      # Space-separated globs matching the plugin files to upload (.py / .whl).
+      # The filename must end in a supported target OS/arch suffix; orcad is
+      # pure Python, so the universal "_any" suffix covers every platform.
+      PLUGIN_FILES: "orcad_any.py"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Stage the plugin under its cloud filename
+        run: cp orcad.py orcad_any.py
+      - name: Publish release to Orca Cloud
+        run: bash packaging/publish_orcacloud.sh

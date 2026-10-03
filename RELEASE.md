@@ -61,6 +61,30 @@ file and install it with **Plugins ▾ Install local plugin**, or drop it into
 (including Nightly) is required, and the plugin must be activated in the Plugins
 dialog.
 
+## Orca Cloud
+
+The plugin is published in the [Orca Cloud](https://cloud.orcaslicer.com)
+Plugin Hub. A one-time setup in the web UI is required: in **Plugins → Shared
+Plugins → Edit plugin → GitHub publishing**, connect `yazdannl/orcad-plugin`.
+Nothing else is stored: each release authenticates with a GitHub-signed OIDC
+token, so there is no secret in this repository.
+
+After that, tagging a release publishes both places:
+
+- `ci.yml`'s `release` job creates the GitHub release and then runs
+  `packaging/publish_orcacloud.sh`, which uploads `orcad_any.py` to
+  `https://api.orcaslicer.com/api/v1/plugin-publish/releases`.
+- `publish-orcacloud.yml` does the same for a release published from the GitHub
+  UI. It cannot cover tag-push releases, because GitHub does not start workflow
+  runs for events created with the built-in `GITHUB_TOKEN`.
+
+The script refuses a tag that disagrees with the plugin's own `version`, and
+fails with a readable reason otherwise: HTTP 401 means the repository is not
+connected to one of your plugins, and a version error means the tag is not
+higher than the published one. Orca Cloud requires the uploaded filename to end
+in a supported target OS/arch suffix, hence the `orcad_any.py` copy of
+`orcad.py` (universal, pure Python).
+
 ## Notes
 
 - Tag order matters: push `main` first, so the tag cannot point at an unpushed

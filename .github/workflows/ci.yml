@@ -47,6 +47,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write # Orca Cloud trusted publishing (OIDC, no secret)
+    env:
+      PLUGIN_FILES: "orcad_any.py"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -71,3 +74,11 @@ jobs:
             --title "orcad $GITHUB_REF_NAME" \
             --notes-file notes.md \
             orcad.py
+      # GitHub suppresses workflow triggers for events created with the
+      # built-in GITHUB_TOKEN, so publish-orcacloud.yml would never fire for
+      # this release; publish from here instead. A release published from the
+      # GitHub UI instead does trigger that workflow.
+      - name: Stage the plugin under its cloud filename
+        run: cp orcad.py orcad_any.py
+      - name: Publish this version to Orca Cloud
+        run: bash packaging/publish_orcacloud.sh

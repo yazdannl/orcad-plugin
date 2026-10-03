@@ -126,6 +126,11 @@ instead of a tab.
   in OrcaSlicer open **Plugins**, use the arrow next to **Browse plugins** and
   choose **Install local plugin**, and pick that file. OrcaSlicer installs and
   enables it for you; every later release is installed the same way.
+- **Orca Cloud:** published in the Plugin Hub at
+  [cloud.orcaslicer.com](https://cloud.orcaslicer.com). Sign in with the same
+  account in OrcaSlicer, subscribe, then open **Plugins → Refresh** and tick
+  **Activate**. Updates arrive from each new release. Loading cloud plugins is
+  currently a Beta feature of the Nightly builds.
 - **Single file (manual):** `orcad.py` embeds the compiled page, OpenSCAD
   backend/Gridfinity sources, and AI backend code. Put it in
   `<Orca data dir>/orca_plugins/orcad/orcad.py`.
