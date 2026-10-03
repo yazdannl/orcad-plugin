@@ -8,10 +8,11 @@ name: Publish to Orca Cloud
 # Note: releases created by .github/workflows/ci.yml with the built-in
 # GITHUB_TOKEN do not trigger this workflow, because GitHub suppresses runs
 # started by that token. That path publishes from the ci.yml release job.
+# No workflow_dispatch on purpose: a manual run has no release tag, so there is
+# no version or changelog to publish. Use the Orca Cloud web upload for that.
 on:
   release:
     types: [published]
-  workflow_dispatch:
 
 permissions:
   id-token: write
