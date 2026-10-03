@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.9.6 — Diagnosable release runs
+
+- The Orca Cloud publish step now reports its failure as a GitHub Actions
+  annotation with the API's own message, so a rejected publish is visible in the
+  run summary instead of only in the job log.
+- Creating the GitHub release is idempotent: re-running the release job refreshes
+  the notes of an existing release instead of failing, so a failed publish can be
+  retried.
+
 ## 0.9.5 — Backend unpacked to a short cache path
 
 - The embedded OpenSCAD backend is now unpacked into the per-user cache
