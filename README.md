@@ -1,3 +1,5 @@
+<img src="assets/orcad-logo.png" width="96" align="right" alt="orcad logo">
+
 # orcad: parametric CAD tab for OrcaSlicer (v0.9.4)
 
 orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
@@ -190,6 +192,8 @@ Layout:
   `dist/index.html`. It uses plain CSS on purpose, because OrcaSlicer injects
   unlayered element styles that would override `@layer`-based frameworks.
 - `packaging/bundle.py`: deterministic release embedding.
+- `assets/`: the app icon (`orcad-logo.png`) and a transparent-background
+  mark (`orcad-mark.png`) for light documents.
 - `.github/workflows/ci.yml`: tests plus the bundle freshness check; pushing a
   `v*` tag publishes the release with `orcad.py` attached. See `RELEASE.md`.
 
