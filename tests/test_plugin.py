@@ -389,21 +389,27 @@ def test_export_names_are_safe_and_unique(tmp_path, monkeypatch):
     assert first.parent == tmp_path and first.name.startswith("etc_passwd_bin_") and second != first
 
 
+def _redirect_cache(monkeypatch, tmp_path):
+    """Point every per-user cache location the plugin may use at a temp directory."""
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+
 def test_single_file_install_uses_the_embedded_page_and_backend(tmp_path, monkeypatch):
     if not orcad._EMBEDDED_BACKEND or not orcad._EMBEDDED_FRONTEND:
         pytest.skip("run packaging/bundle.py to embed the release blobs")
     shutil.copy(Path(orcad.__file__), tmp_path / "orcad.py")
-    cache = tmp_path / "cache-home"
-    monkeypatch.setenv("LOCALAPPDATA", str(cache))
-    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    _redirect_cache(monkeypatch, tmp_path)
     code = ("import orcad, json; s = orcad.Session(print); "
             "print(json.dumps([orcad.scad.__file__, orcad.page_html()[:15], sorted(orcad.scad.CATALOG['objects'])]))")
     out = subprocess.run([sys.executable, "-c", code], cwd=tmp_path, capture_output=True, text=True, check=True).stdout
     module_path, page, objects = json.loads(out.strip().splitlines()[-1])
     # unpacked into the short per-user cache, not next to the plugin: the cloud install
     # directory is already ~160 characters, and the vendored paths are 93 more
-    assert Path(module_path).is_relative_to(cache / "orcad" / "backend")
+    assert Path(module_path).is_relative_to(orcad._cache_root() / "backend")
     assert page.startswith("<!doctype html>") and "gridfinity_bin" in objects
 
 
@@ -411,12 +417,9 @@ def test_blocked_rename_still_loads_the_backend_from_the_staging_tree(tmp_path, 
     if not orcad._EMBEDDED_BACKEND:
         pytest.skip("run packaging/bundle.py to embed the release blobs")
     shutil.copy(Path(orcad.__file__), tmp_path / "orcad.py")
-    cache = tmp_path / "cache-home"
-    monkeypatch.setenv("LOCALAPPDATA", str(cache))
-    monkeypatch.setenv("XDG_CACHE_HOME", str(cache))
-    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    _redirect_cache(monkeypatch, tmp_path)
     digest = hashlib.sha256(base64.b64decode(orcad._EMBEDDED_BACKEND)).hexdigest()[:16]
-    blocked = cache / "orcad" / "backend" / digest
+    blocked = orcad._cache_root() / "backend" / digest
     blocked.mkdir(parents=True)
     (blocked / "in-the-way").write_text("x")  # rename() cannot replace a non-empty directory
     result = subprocess.run([sys.executable, "-c", "import orcad; print(orcad.scad.__file__)"],
