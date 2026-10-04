@@ -31,13 +31,16 @@ def test_archive_records_a_fixed_creating_system():
     assert infos and {info.create_system for info in infos} == {3}
 
 
-def test_render_target_fills_both_regions_idempotently():
+def test_render_target_fills_every_region_idempotently():
     source = ("x = 1\n# BEGIN EMBEDDED OPENSCAD BACKEND\n_EMBEDDED_BACKEND = \"\"\n# END EMBEDDED OPENSCAD BACKEND\n"
-              "# BEGIN BUNDLED FRONTEND\n_EMBEDDED_FRONTEND = \"\"\n# END BUNDLED FRONTEND\n")
+              "# BEGIN BUNDLED FRONTEND\n_EMBEDDED_FRONTEND = \"\"\n# END BUNDLED FRONTEND\n"
+              "# BEGIN EMBEDDED TAB ICON\n_EMBEDDED_ICON = \"\"\n# END EMBEDDED TAB ICON\n")
     once = bundle.render_target(source, "<html>page</html>")
     assert bundle.render_target(once, "<html>page</html>") == once
     blob = re.search(r'_EMBEDDED_FRONTEND = "([^"]+)"', once).group(1)
     assert gzip.decompress(base64.b64decode(blob)) == b"<html>page</html>"
+    icon = re.search(r'_EMBEDDED_ICON = "([^"]+)"', once).group(1)
+    assert gzip.decompress(base64.b64decode(icon)) == bundle.ICON.read_bytes()
 
 
 def test_versions_agree():

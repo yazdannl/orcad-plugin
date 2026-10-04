@@ -30,8 +30,10 @@ test('saved parameters are restored only when still valid', () => {
 
 test('enabling an option switches off its conflicts; dependencies disable fields', () => {
   const bin = defaults('gridfinity_bin')
-  assert.equal(bin.refined_holes, true)
-  const next = setParam('gridfinity_bin', bin, 'magnet_holes', true)
+  assert.equal(bin.refined_holes, false)
+  const refined = setParam('gridfinity_bin', bin, 'refined_holes', true)
+  assert.equal(refined.refined_holes, true)
+  const next = setParam('gridfinity_bin', refined, 'magnet_holes', true)
   assert.equal(next.magnet_holes, true)
   assert.equal(next.refined_holes, false)
   const crush = OBJECTS.gridfinity_bin.parameters.find((p) => p.variable === 'crush_ribs')

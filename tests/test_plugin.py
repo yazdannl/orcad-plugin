@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import ctypes
 import hashlib
+import importlib
 import json
 import os
 import shutil
@@ -440,3 +441,85 @@ def test_unpackable_backend_reports_the_target_path(monkeypatch, tmp_path):
     monkeypatch.setattr(orcad.zipfile.ZipFile, "extractall", too_long)
     with pytest.raises(RuntimeError, match="could not unpack the embedded backend"):
         orcad._load_backend()
+
+
+ICON = Path(__file__).resolve().parents[1] / "assets" / "orcad-icon.png"
+
+
+def test_tab_icon_uses_a_real_file_beside_the_plugin(monkeypatch, tmp_path):
+    beside = tmp_path / "orcad-icon.png"
+    beside.write_bytes(b"not really a png")
+    monkeypatch.setattr(orcad, "HERE", tmp_path)
+    assert orcad._icon_path() == str(beside)
+
+
+def test_tab_icon_is_materialised_from_the_embedded_blob(monkeypatch, tmp_path):
+    if not orcad._EMBEDDED_ICON:
+        pytest.skip("run packaging/bundle.py to embed the tab icon")
+    monkeypatch.setattr(orcad, "HERE", tmp_path / "plugin")  # nothing beside the module
+    monkeypatch.setattr(orcad, "_cache_root", lambda: tmp_path / "cache")
+    icon = Path(orcad._icon_path())
+    assert icon == tmp_path / "cache" / "orcad-icon.png"
+    assert icon.read_bytes() == ICON.read_bytes()
+    assert icon.read_bytes()[:8] == b"\x89PNG\r\n\x1a\n"  # OrcaSlicer loads the path as a bitmap
+    assert not list(icon.parent.glob("*.tmp"))  # the staging file is gone
+    assert orcad._icon_path() == str(icon)  # reused as-is on the next call
+
+
+def test_tab_icon_failure_is_silent(monkeypatch, tmp_path):
+    monkeypatch.setattr(orcad, "HERE", tmp_path / "plugin")
+    blocked = tmp_path / "cache"
+    blocked.write_text("not a directory")  # so creating the icon directory fails
+    monkeypatch.setattr(orcad, "_cache_root", lambda: blocked)
+    assert orcad._icon_path() == ""  # the tab simply gets no icon
+
+
+class _PagesBase:
+    def post_message(self, _message):
+        pass
+
+
+class _ScriptBase:
+    def execute(self):
+        raise AssertionError("not used")
+
+
+def _load_with_orca(monkeypatch, pages=True):
+    """Import orcad.py the way OrcaSlicer would, against a stub `orca` module.
+
+    Returns the capability classes the module defined for that stub; the module
+    itself is left reloaded without them, so no test sees a leaked class.
+    """
+    fake = types.ModuleType("orca")
+    fake.base = object
+    fake.plugin = lambda cls: cls
+    fake.register_capability = lambda _capability: None
+    fake.script = types.SimpleNamespace(ScriptPluginCapabilityBase=_ScriptBase)
+    if pages:
+        fake.pages = types.SimpleNamespace(PagesPluginCapabilityBase=_PagesBase)
+    monkeypatch.setitem(sys.modules, "orca", fake)
+    monkeypatch.setattr(orcad, "orca", fake)
+    try:
+        importlib.reload(orcad)
+        return {name: getattr(orcad, name) for name in ("OrcadPage", "OrcadNeedsPages")
+                if hasattr(orcad, name)}
+    finally:
+        monkeypatch.setattr(orcad, "orca", None)
+        monkeypatch.setitem(sys.modules, "orca", None)
+        importlib.reload(orcad)
+        for name in ("OrcadPage", "OrcadNeedsPages", "OrcadPlugin"):  # a reload keeps the old names
+            orcad.__dict__.pop(name, None)
+
+
+def test_page_capability_names_the_tab_and_carries_the_icon(monkeypatch):
+    if not orcad._EMBEDDED_ICON:
+        pytest.skip("run packaging/bundle.py to embed the tab icon")
+    page = _load_with_orca(monkeypatch)["OrcadPage"]()
+    assert page.get_name() == "OrCAD"
+    assert Path(page.get_icon()).is_file()
+
+
+def test_old_oraslicer_builds_get_a_named_fallback(monkeypatch):
+    classes = _load_with_orca(monkeypatch, pages=False)  # no orca.pages: the build is too old
+    assert classes["OrcadNeedsPages"]().get_name() == "OrCAD (needs a newer OrcaSlicer)"
+    assert "OrcadPage" not in classes

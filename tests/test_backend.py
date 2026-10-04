@@ -66,7 +66,8 @@ def test_validation_is_strict_and_names_the_offending_fields():
 @pytest.mark.parametrize("name, params, fields", [
     ("tube", {"inner_diameter": 30}, {"inner_diameter", "outer_diameter"}),
     ("bracket", {"hole_spacing": 58}, {"hole_spacing", "hole_diameter", "length"}),
-    ("gridfinity_bin", {"magnet_holes": True}, {"refined_holes", "magnet_holes"}),
+    ("gridfinity_bin", {"magnet_holes": True, "refined_holes": True},
+     {"refined_holes", "magnet_holes"}),
     ("gridfinity_bin", {"divx": 0}, {"divx", "divy"}),
     ("gridfinity_baseplate", {"gridx": 0}, {"gridx", "distancex"}),
 ])

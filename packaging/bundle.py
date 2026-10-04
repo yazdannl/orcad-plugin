@@ -32,9 +32,11 @@ FRONTEND = ROOT / "frontend"
 DIST = FRONTEND / "dist" / "index.html"
 BACKEND = ROOT / "openscad"
 AI_BACKEND = ROOT / "ai"
+ICON = ROOT / "assets" / "orcad-icon.png"
 REGIONS = {
     "backend": ("# BEGIN EMBEDDED OPENSCAD BACKEND", "# END EMBEDDED OPENSCAD BACKEND", "_EMBEDDED_BACKEND"),
     "frontend": ("# BEGIN BUNDLED FRONTEND", "# END BUNDLED FRONTEND", "_EMBEDDED_FRONTEND"),
+    "icon": ("# BEGIN EMBEDDED TAB ICON", "# END EMBEDDED TAB ICON", "_EMBEDDED_ICON"),
 }
 _SKIP = re.compile(r"(^|/)(__pycache__|\.pytest_cache)(/|$)|\.py[co]$")
 
@@ -64,7 +66,8 @@ def backend_archive() -> bytes:
 
 
 def render_target(text: str, frontend_html: str) -> str:
-    values = {"backend": _blob(backend_archive()), "frontend": _blob(frontend_html.encode("utf-8"))}
+    values = {"backend": _blob(backend_archive()), "frontend": _blob(frontend_html.encode("utf-8")),
+              "icon": _blob(ICON.read_bytes())}
     for key, (begin, end, variable) in REGIONS.items():
         pattern = re.compile(re.escape(begin) + r"\n.*?\n" + re.escape(end), re.S)
         if not pattern.search(text):
@@ -122,6 +125,8 @@ def check() -> int:
             detail = [f"{len(changed)} backend file(s) differ: {', '.join(changed[:5]) or 'none by content'}"]
             detail.append("frontend blob differs" if _blob(fresh.encode("utf-8")) !=
                           _blob(embedded_blob(current, "_EMBEDDED_FRONTEND")) else "frontend blob matches")
+            detail.append("icon blob differs" if _blob(ICON.read_bytes()) !=
+                          _blob(embedded_blob(current, "_EMBEDDED_ICON")) else "icon blob matches")
         problems.append("orcad.py embedded blobs are stale: " + "; ".join(detail))
     for problem in problems:
         print(f"error: {problem}; run `python3 packaging/bundle.py`", file=sys.stderr)
@@ -133,7 +138,7 @@ def write() -> None:
     TARGET.write_text(render_target(TARGET.read_text(encoding="utf-8"), DIST.read_text(encoding="utf-8")),
                       encoding="utf-8")
     shutil.rmtree(BACKEND / "__pycache__", ignore_errors=True)
-    print(f"embedded {DIST.relative_to(ROOT)}, openscad/ and ai/ into {TARGET.name} "
+    print(f"embedded {DIST.relative_to(ROOT)}, openscad/, ai/ and the tab icon into {TARGET.name} "
           f"({TARGET.stat().st_size // 1024} KB)")
 
 

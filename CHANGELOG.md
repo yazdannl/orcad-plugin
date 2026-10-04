@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.8 — OrCAD tab icon and name, refined holes opt-in
+
+- The tab now reads **OrCAD** instead of `orcad`, matching the plugin's display
+  name in the Plugins dialog and on Orca Cloud. The plugin key (`orcad`) and the
+  file name are unchanged, so installs keep resolving the same way.
+- The tab carries the plugin logo. `get_icon()` returns `orcad-icon.png` from
+  beside `orcad.py` when it exists and otherwise unpacks the embedded copy into
+  the per-user cache (`%LOCALAPPDATA%\orcad`, `~/Library/Caches/orcad`,
+  `~/.cache/orcad`) and returns that path. A failure there is silent: the tab
+  simply draws no icon, which is what an empty path means upstream.
+- Gridfinity **refined holes are now off by default**. They change the base
+  profile of every bin, so a fresh bin is the classic one unless refined holes
+  are switched on; magnet holes still conflict with them.
+
 ## 0.9.7 — Publish from the workflow Orca Cloud knows
 
 - The GitHub release now carries `orcad_any.py` next to `orcad.py` (identical
