@@ -28,7 +28,10 @@ fi
 # Build the metadata JSON and refuse a tag that disagrees with the plugin's own
 # version, which the API would reject anyway with a less obvious message.
 version="${GITHUB_REF_NAME#v}"
-metadata="$(VERSION="$version" FILES="$PLUGIN_FILES" python3 - <<'PY'
+# A release event carries the notes in the event payload; a tag push does not,
+# so fall back to the CHANGELOG.md section for this version.
+changelog="$(python3 packaging/release_notes.py "v$version" 2>/dev/null || true)"
+metadata="$(VERSION="$version" FILES="$PLUGIN_FILES" CHANGELOG="$changelog" python3 - <<'PY'
 import json
 import os
 import pathlib
@@ -37,7 +40,8 @@ import sys
 
 version = os.environ["VERSION"]
 event = json.loads(pathlib.Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
-changelog = (event.get("release", {}).get("body") or "").strip()[:4000]
+changelog = (event.get("release", {}).get("body") or "").strip() or os.environ.get("CHANGELOG", "").strip()
+changelog = changelog[:4000]
 
 for name in os.environ["FILES"].split():
     text = pathlib.Path(name).read_text(encoding="utf-8", errors="replace")
@@ -76,7 +80,7 @@ body="$(cat "$response")"
 echo "$body"
 if [ "$status" != "201" ]; then
   case "$status" in
-    401) reason="Orca Cloud rejected the identity: is $GITHUB_REPOSITORY connected to one of your plugins?" ;;
+    401) reason="Orca Cloud rejected the identity from ${GITHUB_WORKFLOW_REF:-${GITHUB_WORKFLOW:-unknown}}: is $GITHUB_REPOSITORY connected to one of your plugins, and is that connection bound to this workflow?" ;;
     *)   reason="HTTP $status (a version error means the tag is not higher than the published one)" ;;
   esac
   echo "::error title=Orca Cloud publish failed::$reason: ${body:0:500}"

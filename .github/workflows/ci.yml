@@ -47,9 +47,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      id-token: write # Orca Cloud trusted publishing (OIDC, no secret)
-    env:
-      PLUGIN_FILES: "orcad_any.py"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -65,25 +62,25 @@ jobs:
         run: npm ci
       - name: Release notes from CHANGELOG.md
         run: python packaging/release_notes.py "$GITHUB_REF_NAME" > notes.md
-      - name: Publish the release with orcad.py attached
+      - name: Publish the release with the plugin attached
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
+          # orcad.py is the friendly name; orcad_any.py is the same bytes under
+          # the target suffix Orca Cloud requires, attached as well so either
+          # name resolves to a valid upload.
+          cp orcad.py orcad_any.py
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo "Release $GITHUB_REF_NAME exists; refreshing its notes instead of failing."
             gh release edit "$GITHUB_REF_NAME" --title "orcad $GITHUB_REF_NAME" --notes-file notes.md
+            gh release upload "$GITHUB_REF_NAME" orcad_any.py --clobber
           else
             gh release create "$GITHUB_REF_NAME" \
               --title "orcad $GITHUB_REF_NAME" \
               --notes-file notes.md \
-              orcad.py
+              orcad.py orcad_any.py
           fi
-      # GitHub suppresses workflow triggers for events created with the
-      # built-in GITHUB_TOKEN, so publish-orcacloud.yml would never fire for
-      # this release; publish from here instead. A release published from the
-      # GitHub UI instead does trigger that workflow.
-      - name: Stage the plugin under its cloud filename
-        run: cp orcad.py orcad_any.py
-      - name: Publish this version to Orca Cloud
-        run: bash packaging/publish_orcacloud.sh
+      # Publishing to Orca Cloud lives in publish-orcacloud.yml, which the
+      # connection in the Orca Cloud portal refers to and which runs on this
+      # tag push.

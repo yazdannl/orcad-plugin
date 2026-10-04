@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.7 — Publish from the workflow Orca Cloud knows
+
+- The GitHub release now carries `orcad_any.py` next to `orcad.py` (identical
+  bytes): `orcad_any.py` is the name carrying the universal target suffix that
+  Orca Cloud requires, so an upload or a release picked up from GitHub finds a
+  valid file whichever name it looks for.
+- Publishing to Orca Cloud moved out of `ci.yml` into
+  `.github/workflows/publish-orcacloud.yml`, the release workflow named in the
+  portal connection, and now also runs on the tag push itself. The API rejects a
+  token from a workflow that is not the connected release workflow with
+  "A valid GitHub Actions OIDC token from a connected release workflow is
+  required.", which is what publishing from `ci.yml` was hitting.
+- The publish step reports which workflow it ran as when the API rejects the
+  identity, so the connection can be matched against the run that failed.
+
 ## 0.9.6 — Diagnosable release runs
 
 - The Orca Cloud publish step now reports its failure as a GitHub Actions
