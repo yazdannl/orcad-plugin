@@ -267,12 +267,12 @@ function Settings({ status, configChoice, onConfigChoice, sendMessage, state, di
           <h3 className="ai-settings-title">Provider and model</h3>
           <label className="ai-field"><span>Mode</span>
             <select value={choice.source} onChange={(event) => updateChoice({ source: event.target.value })}>
-              <option value="pi">Use my pi setup</option><option value="managed">orcad-managed</option>
+              <option value="pi">Use my pi setup</option><option value="managed">OrcaCAD-managed</option>
             </select>
           </label>
           <p className="ai-settings-help">{choice.source === 'pi'
             ? 'Uses your existing ~/.pi/agent setup. Provider credentials stay there.'
-            : 'Sign-ins and custom providers are isolated in orcad’s private pi directory.'}</p>
+            : 'Sign-ins and custom providers are isolated in OrcaCAD’s private pi directory.'}</p>
           <label className="ai-field"><span>Provider</span>
             <select aria-label="AI provider" value={choice.provider} onChange={(event) => {
               const provider = event.target.value
@@ -302,7 +302,7 @@ function Settings({ status, configChoice, onConfigChoice, sendMessage, state, di
 
           <div className="ai-provider-section">
             <div className="ai-section-head"><strong>Configured providers</strong>
-              <span>{choice.source === 'managed' ? 'orcad-managed' : 'pi setup'}</span></div>
+              <span>{choice.source === 'managed' ? 'OrcaCAD-managed' : 'pi setup'}</span></div>
             {!configuredProviders.length && !customProviders.length && <p className="ai-settings-help">No providers configured yet.</p>}
             {configuredProviders.map((provider) => <div className="ai-provider-row" key={provider.id}>
               <span className="ai-provider-name">{provider.name}</span><span className="ai-provider-status">{provider.status}</span>

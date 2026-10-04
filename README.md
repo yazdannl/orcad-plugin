@@ -1,8 +1,8 @@
-<img src="assets/orcad-logo.png" width="96" align="right" alt="orcad logo">
+<img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# orcad: parametric CAD tab for OrcaSlicer (v0.9.9)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.10)
 
-orcad adds an **orcad** tab next to Prepare / Preview / Device in OrcaSlicer. It
+OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
 the build plate with one click.
 
@@ -57,7 +57,7 @@ pinned per supported platform) and installs `@earendil-works/pi-coding-agent`
 compressed depending on platform; the Pi package tarball is about **7.3 MB**
 (23 MB unpacked), plus its npm dependencies. No admin rights are required.
 
-The runtime, `model.scad` workspace, orcad-managed Pi agent directory, and
+The runtime, `model.scad` workspace, OrcaCAD-managed Pi agent directory, and
 custom endpoint key files live under the per-user `orcad/ai` cache:
 
 | Platform | AI cache |
@@ -67,11 +67,11 @@ custom endpoint key files live under the per-user `orcad/ai` cache:
 | Windows | `%LOCALAPPDATA%\orcad\ai` |
 
 In Code → Settings, choose **Use my pi setup** to reuse `~/.pi/agent`, or
-**orcad-managed** for a separate account/configuration under the cache above.
+**OrcaCAD-managed** for a separate account/configuration under the cache above.
 Managed setup supports Pi's built-in browser/device sign-in and API-key login
 (e.g. GitHub Copilot, Anthropic Claude Pro/Max, and OpenAI ChatGPT), plus Sign
 out. Pi itself stores those credentials in
-`orcad/ai/private-agent/auth.json`; orcad never returns the saved values to the
+`orcad/ai/private-agent/auth.json`; OrcaCAD never returns the saved values to the
 page or writes them to chat/history. One-time authorization links/device codes
 and the prompts needed to complete sign-in appear only in a transient dialog.
 
@@ -84,14 +84,14 @@ stored separately in a mode-`0600` file beneath the private agent directory.
 Keyless/local endpoints use a placeholder key when required by Pi.
 
 The AI subprocess is restricted to `read`, `edit`, and `write` for `model.scad`,
-plus orcad's local OpenSCAD render tool; it has no shell tool. **Privacy:**
+plus OrcaCAD's local OpenSCAD render tool; it has no shell tool. **Privacy:**
 prompts and the current OpenSCAD source are sent to the selected model provider
 for inference. OpenSCAD rendering itself runs locally. Do not send designs you
 are not comfortable sharing with that provider. AI-generated code can be unsafe;
 inspect it before using or printing it.
 
 **Send to plate** writes an STL to `exports/` beside the plugin. On Windows,
-orcad's render worker finds the current-process `wxWindowNR` main frame carrying
+OrcaCAD's render worker finds the current-process `wxWindowNR` main frame carrying
 Orca's `Instance_Hash_Minor` and `Instance_Hash_Major` properties, then sends
 `WM_COPYDATA` (`dwData=1`) with Orca's semicolon-separated, C-style escaped
 argv encoded as a NUL-terminated UTF-16 string. The receiver narrows it to
@@ -118,7 +118,7 @@ and [plate event handler](https://github.com/OrcaSlicer/OrcaSlicer/blob/46fb5126
 ## Install
 
 Requires an OrcaSlicer build with plugin pages (`orca.pages`, the current
-Nightly). Builds without it get an "orcad (needs a newer OrcaSlicer)" entry
+Nightly). Builds without it get an "OrcaCAD (needs a newer OrcaSlicer)" entry
 instead of a tab.
 
 - **Release download (recommended):** download `orcad.py` from the
@@ -138,7 +138,7 @@ instead of a tab.
   in the same folder. Files beside `orcad.py` take precedence over embedded
   copies.
 
-Restart OrcaSlicer and enable **orcad** in the Plugins dialog. Runtime data
+Restart OrcaSlicer and enable **OrcaCAD** in the Plugins dialog. Runtime data
 lives next to the plugin: `exports/` (your files) and `.cache/` (rendered STL
 cache, capped at 512 MB). For a single-file install the OpenSCAD backend is
 unpacked into the per-user cache instead of beside the file

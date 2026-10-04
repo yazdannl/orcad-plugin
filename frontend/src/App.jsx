@@ -42,7 +42,7 @@ function EnginePill({ engine, onDetails }) {
       : state === 'offline' ? ['idle', 'Not connected']
         : state === 'connecting' ? ['busy', 'Connecting…'] : ['busy', `Setting up OpenSCAD${pct}`]
   const title = state === 'failed' ? engine.error : state === 'offline'
-    ? 'Open this page from the orcad tab in OrcaSlicer to render models.' : text
+    ? 'Open this page from the OrcaCAD tab in OrcaSlicer to render models.' : text
   return (
     <button type="button" className={`pill pill-${tone}`} title={title} onClick={onDetails}>
       <span className="pill-dot" />
@@ -179,7 +179,7 @@ export default function App() {
     setPending({ id, message: 'Rendering…' })
     if (!bridge.send({ type: 'render', id, purpose: 'preview', quality, ...source() })) {
       setPending(null)
-      setError({ message: 'Could not reach the plugin. Reopen the orcad tab and try again.', fields: {} })
+      setError({ message: 'Could not reach the plugin. Reopen the OrcaCAD tab and try again.', fields: {} })
     }
   }, [quality, source])
 
@@ -207,7 +207,7 @@ export default function App() {
     if (!bridge.send({ type: 'render', id, purpose, quality, format, ...source() })) {
       delete opsRef.current[id]
       setOps({ ...opsRef.current })
-      notify('error', 'Open this page from the orcad tab in OrcaSlicer to export models.')
+      notify('error', 'Open this page from the OrcaCAD tab in OrcaSlicer to export models.')
     }
   }
 
@@ -245,7 +245,7 @@ export default function App() {
       <header className="topbar">
         <div className="brand">
           <Logo />
-          <div className="brand-text"><strong>orcad</strong><span>Parametric CAD</span></div>
+          <div className="brand-text"><strong>OrcaCAD</strong><span>Parametric CAD</span></div>
         </div>
         <div className="segmented mode-switch" role="tablist" aria-label="Workspace">
           {[['library', 'Library'], ['code', 'Code']].map(([key, label]) => (
@@ -424,7 +424,7 @@ export default function App() {
               {bridge.available ? <p>Adjust a parameter or press Render to build a model.</p> : (
                 <>
                   <h3>Not connected to OrcaSlicer</h3>
-                  <p>Open the <b>orcad</b> tab inside OrcaSlicer to render and export models.</p>
+                  <p>Open the <b>OrcaCAD</b> tab inside OrcaSlicer to render and export models.</p>
                 </>
               )}
             </div>

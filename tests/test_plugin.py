@@ -515,11 +515,11 @@ def test_page_capability_names_the_tab_and_carries_the_icon(monkeypatch):
     if not orcad._EMBEDDED_ICON:
         pytest.skip("run packaging/bundle.py to embed the tab icon")
     page = _load_with_orca(monkeypatch)["OrcadPage"]()
-    assert page.get_name() == "OrCAD"
+    assert page.get_name() == "OrcaCAD"
     assert Path(page.get_icon()).is_file()
 
 
 def test_old_oraslicer_builds_get_a_named_fallback(monkeypatch):
     classes = _load_with_orca(monkeypatch, pages=False)  # no orca.pages: the build is too old
-    assert classes["OrcadNeedsPages"]().get_name() == "OrCAD (needs a newer OrcaSlicer)"
+    assert classes["OrcadNeedsPages"]().get_name() == "OrcaCAD (needs a newer OrcaSlicer)"
     assert "OrcadPage" not in classes

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.10 — Renamed to OrcaCAD
+
+- The plugin is now **OrcaCAD**. "OrCAD" is a registered trademark of Cadence
+  Design Systems, so the display name no longer uses it: the tab, the plugin name
+  in the Plugins dialog, the page header and window title, the AI panel labels,
+  every message the plugin shows, the README and the release guide.
+- Installs keep updating in place. The plugin key is OrcaSlicer's, derived from
+  the file stem for a local install and from the cloud UUID for a cloud install,
+  so the file names (`orcad.py`, `orcad_any.py`) and the repository name are
+  unchanged - renaming those would break the cloud connection and the upload
+  suffix rule.
+- The on-disk locations also keep their names on purpose: `%LOCALAPPDATA%\orcad`
+  and its siblings hold the downloaded OpenSCAD build, the private Pi agent
+  credentials and the render cache, and the `orcad.settings` localStorage key
+  holds the UI settings. Renaming any of them would make every existing install
+  start over.
+
 ## 0.9.9 — Publishing matches the setup guide
 
 - The publish workflow is now named `Publish to OrcaCloud` with the guide's job

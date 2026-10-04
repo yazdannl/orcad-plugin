@@ -1,4 +1,4 @@
-# Releasing orcad
+# Releasing OrcaCAD
 
 A release is one commit on `main` that passes every check, plus a `v*` tag.
 Pushing the tag makes GitHub Actions verify the tag on Linux, Windows and macOS
