@@ -25,12 +25,40 @@ if [ ${#files[@]} -eq 0 ]; then
   exit 1
 fi
 
+# Which version to publish: a tag push names it, a release event carries it, and
+# a manual re-run falls back to the newest published release so a failed publish
+# can be retried without cutting another tag.
+tag=""
+case "${GITHUB_REF_NAME:-}" in
+  v[0-9]*) tag="$GITHUB_REF_NAME" ;;
+esac
+if [ -z "$tag" ]; then
+  tag="$(TAG_EVENT="$GITHUB_EVENT_PATH" python3 - <<'PY'
+import json
+import os
+import pathlib
+
+event = json.loads(pathlib.Path(os.environ["TAG_EVENT"]).read_text(encoding="utf-8"))
+print((event.get("release") or {}).get("tag_name") or "")
+PY
+)"
+fi
+if [ -z "$tag" ]; then
+  tag="$(curl -sS "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" |
+    python3 -c 'import json,sys; print(json.load(sys.stdin).get("tag_name") or "")')"
+  if [ -z "$tag" ]; then
+    echo "::error title=Orca Cloud::cannot tell which version to publish: no tag, no release event and no published release"
+    exit 1
+  fi
+  echo "Re-publishing the newest release, $tag."
+fi
+version="${tag#v}"
+
 # Build the metadata JSON and refuse a tag that disagrees with the plugin's own
 # version, which the API would reject anyway with a less obvious message.
-version="${GITHUB_REF_NAME#v}"
 # A release event carries the notes in the event payload; a tag push does not,
 # so fall back to the CHANGELOG.md section for this version.
-changelog="$(python3 packaging/release_notes.py "v$version" 2>/dev/null || true)"
+changelog="$(python3 packaging/release_notes.py "$tag" 2>/dev/null || true)"
 metadata="$(VERSION="$version" FILES="$PLUGIN_FILES" CHANGELOG="$changelog" python3 - <<'PY'
 import json
 import os

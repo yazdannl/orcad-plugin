@@ -1,4 +1,4 @@
-name: Publish to Orca Cloud
+name: Publish to OrcaCloud
 
 # Publishes every tagged release to Orca Cloud. Identity is a short-lived OIDC
 # token signed by GitHub (audience "orcacloud"), so there is no secret to store,
@@ -6,20 +6,18 @@ name: Publish to Orca Cloud
 # Orca Cloud plugins under Edit plugin > GitHub publishing, otherwise the API
 # answers 401.
 #
-# Publishing happens from this workflow on purpose: the connection is made for a
-# release workflow, and Orca Cloud matches the token against it, so a publish
-# step bolted onto an unrelated workflow is rejected as "not a connected
-# release workflow".
-#
-# The tag trigger is what normally runs this. The release trigger additionally
-# covers releases published from the GitHub UI (releases created by ci.yml with
-# the built-in GITHUB_TOKEN do not trigger workflows, so ci.yml does not publish
-# and this workflow cannot be triggered by its own release).
+# The workflow name and the job permissions follow the published setup guide,
+# since the OIDC token carries this workflow's name. The tag trigger is what
+# normally runs this: releases created by ci.yml with the built-in GITHUB_TOKEN
+# do not trigger workflows, so a tag-push run is the automatic path. The release
+# trigger covers releases published from the GitHub UI, and workflow_dispatch
+# re-publishes the newest release after a failure without cutting a new tag.
 on:
   push:
     tags: ["v*"]
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -27,7 +25,7 @@ permissions:
 
 jobs:
   publish:
-    name: Publish to Orca Cloud
+    name: Publish to OrcaCloud
     runs-on: ubuntu-latest
     env:
       # Space-separated globs matching the plugin files to upload (.py / .whl).
@@ -38,5 +36,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: Stage the plugin under its cloud filename
         run: cp orcad.py orcad_any.py
-      - name: Publish release to Orca Cloud
+      - name: Publish release to OrcaCloud
         run: bash packaging/publish_orcacloud.sh

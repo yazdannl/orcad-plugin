@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.9 — Publishing matches the setup guide
+
+- The publish workflow is now named `Publish to OrcaCloud` with the guide's job
+  permissions, since the OIDC token carries the workflow name.
+- Publishing can be re-run by hand: with no tag and no release event the script
+  falls back to the newest published release, so a rejected publish is one
+  **Run workflow** click away instead of a new tag.
+
 ## 0.9.8 — OrCAD tab icon and name, refined holes opt-in
 
 - The tab now reads **OrCAD** instead of `orcad`, matching the plugin's display
