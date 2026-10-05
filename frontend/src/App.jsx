@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { createBridge } from './bridge.js'
 import { aiReducer, initialAIState } from './ai.js'
-import { OBJECTS, QUALITY, groups, isDisabled, restoreParams, searchObjects, setParam, defaults } from './catalog.js'
+import { OBJECTS, QUALITY, activePreset, applyPreset, categories, groups, isDisabled, presets, restoreParams, resultCounts, searchObjects, setParam, defaults } from './catalog.js'
 import { loadSettings, saveSettings } from './storage.js'
 import { decodeMesh, meshStats } from './mesh.js'
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js'
@@ -21,6 +21,7 @@ const QUALITY_HINTS = {
   final: 'Smoothest curves, larger files',
 }
 const PREVIEW_DELAY = 250
+const ALL = 'all'
 const AUTO_RENDER_DELAY = 900
 const VIEW_BUTTONS = [['iso', 'Isometric'], ['front', 'Front'], ['right', 'Right'], ['top', 'Top']]
 
@@ -58,6 +59,7 @@ export default function App() {
   const [paramsByObject, setParamsByObject] = useState(() => Object.fromEntries(
     Object.keys(OBJECTS).map((key) => [key, restoreParams(key, saved.params?.[key])])))
   const [query, setQuery] = useState('')
+  const [category, setCategory] = useState(ALL)
   const [quality, setQuality] = useState(QUALITY.includes(saved.quality) ? saved.quality : 'balanced')
   const [format, setFormat] = useState(saved.format === '3mf' ? '3mf' : 'stl')
   const [code, setCode] = useState(typeof saved.code === 'string' && saved.code.trim() ? saved.code : EXAMPLES[DEFAULT_EXAMPLE].code)
@@ -83,7 +85,11 @@ export default function App() {
   const object = OBJECTS[objectKey]
   const params = paramsByObject[objectKey]
   const busyOps = Object.values(ops)
-  const visibleObjects = searchObjects(query)
+  const visibleObjects = searchObjects(query, category)
+  const counts = resultCounts(query, category)
+  const objectPresets = presets(objectKey)
+  const activeName = activePreset(objectKey, params)
+  const chips = [ALL, ...categories()]
 
   const notify = useCallback((kind, message) => {
     const id = nextId.current++
@@ -215,6 +221,9 @@ export default function App() {
   const changeParam = (name, value) => {
     setParamsByObject((all) => ({ ...all, [objectKey]: setParam(objectKey, all[objectKey], name, value) }))
   }
+  const usePreset = (preset) => {
+    setParamsByObject((all) => ({ ...all, [objectKey]: applyPreset(objectKey, all[objectKey], preset) }))
+  }
   const resetParams = () => setParamsByObject((all) => ({ ...all, [objectKey]: defaults(objectKey) }))
   const [renderTick, setRenderTick] = useState(0)
   useEffect(() => { if (renderTick) requestPreview() }, [renderTick])
@@ -287,21 +296,36 @@ export default function App() {
         <aside className={`panel sidebar sidebar-${mode}`} aria-label={mode === 'library' ? 'Model library' : 'Code editor'}>
           {mode === 'library' ? (
             <>
-              <div className="sidebar-block">
-                <label className="search">
-                  <Icon name="search" size={16} />
-                  <input type="search" placeholder="Search models" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search models" />
-                </label>
-                <div className="object-grid">
-                  {visibleObjects.map((key) => (
-                    <button key={key} type="button" className={`object-card${key === objectKey ? ' is-active' : ''}`}
-                      aria-pressed={key === objectKey} onClick={() => setObjectKey(key)} title={OBJECTS[key].description}>
-                      <span className="object-icon"><Icon name={OBJECTS[key].icon} size={22} /></span>
-                      <span className="object-name">{OBJECTS[key].label}</span>
-                      <span className="object-cat">{OBJECTS[key].category}</span>
-                    </button>
-                  ))}
-                  {!visibleObjects.length && <p className="muted empty-search">No models match “{query}”.</p>}
+              <div className="sidebar-block library">
+                <div className="library-head">
+                  <label className="search">
+                    <Icon name="search" size={16} />
+                    <input type="search" placeholder="Search models" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search models" />
+                  </label>
+                  <div className="category-chips" role="group" aria-label="Filter models by category">
+                    {chips.map((name) => (
+                      <button key={name} type="button" className={`chip${category === name ? ' is-active' : ''}`}
+                        aria-pressed={category === name} onClick={() => setCategory(name)}>
+                        {name === ALL ? 'All' : name}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="result-count muted" role="status">{counts.shown} of {counts.total} models</p>
+                </div>
+                <div className="object-scroll" role="group" aria-label="Models" tabIndex={0}>
+                  <div className="object-grid">
+                    {visibleObjects.map((key) => (
+                      <button key={key} type="button" className={`object-card${key === objectKey ? ' is-active' : ''}`}
+                        aria-pressed={key === objectKey} onClick={() => setObjectKey(key)} title={OBJECTS[key].description}>
+                        <span className="object-icon"><Icon name={OBJECTS[key].icon} size={22} /></span>
+                        <span className="object-name">{OBJECTS[key].label}</span>
+                        <span className="object-cat">{OBJECTS[key].category}</span>
+                      </button>
+                    ))}
+                    {!visibleObjects.length && (
+                      <p className="muted empty-search">No models match{query.trim() ? ` “${query.trim()}”` : ` the “${category}” category`}.</p>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="sidebar-block params">
@@ -314,6 +338,21 @@ export default function App() {
                     <Icon name="reset" size={15} /><span>Reset</span>
                   </button>
                 </div>
+                {!!objectPresets.length && (
+                  <section className="preset-block" aria-label="Presets">
+                    <h3 className="preset-title">Presets</h3>
+                    <div className="preset-row">
+                      {objectPresets.map((preset) => (
+                        <button key={preset.name} type="button" className={`preset${activeName === preset.name ? ' is-active' : ''}`}
+                          aria-pressed={activeName === preset.name} onClick={() => usePreset(preset)}
+                          title={preset.description || preset.name}
+                          aria-label={preset.description ? `${preset.name}: ${preset.description}` : preset.name}>
+                          {preset.name}
+                        </button>
+                      ))}
+                    </div>
+                  </section>
+                )}
                 {groups(objectKey).map((group, index) => (
                   <details key={`${objectKey}-${group.name}`} className="param-group" open={index < 3}>
                     <summary><span>{group.name}</span><Icon name="chevron" size={16} /></summary>

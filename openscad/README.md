@@ -6,9 +6,14 @@ also embeds it into the single-file plugin.
 - `catalog.json` is the single source of truth for every object: label,
   category, icon, description, `.scad` source, and each parameter's exact
   OpenSCAD variable, type, default, range, step, unit, options, group, help,
-  `depends_on` and `conflicts_with`. The frontend imports the same file at
-  build time. It also holds the quality profiles (`$fa`/`$fs`: draft 12/0.8,
-  balanced 6/0.3, final 3/0.1).
+  `depends_on` and `conflicts_with`. Every object also carries a `tags` list
+  (search terms the frontend matches on top of key, label and description) and
+  a `presets` list of ready-made parameter sets: `[{name, description?,
+  params: {variable: value}}]`, where every `params` key is one of that
+  object's own variables and the result validates against the defaults. The
+  frontend imports the same file at build time. It also holds the quality
+  profiles (`$fa`/`$fs`: draft 12/0.8, balanced 6/0.3, final 3/0.1) and the
+  `libraries` map described below.
 - `validation.py` validates parameters strictly (types, ranges, steps, options,
   cross-field rules) and reports errors as `{"fields": [...]}`.
 - `runner.py` probes OpenSCAD (2023 or newer; 2021.01 is rejected) and
@@ -17,12 +22,76 @@ also embeds it into the single-file plugin.
   with a scrubbed environment. stderr is captured into readable errors with
   line numbers. Results go into a size-bounded, content-addressed STL cache
   keyed by object/code, parameters, quality, engine version and library
-  revision. Code mode sets `OPENSCADPATH` to the vendored Gridfinity tree.
+  revision. `OPENSCADPATH` holds every library root, joined with `os.pathsep`
+  (`;` on Windows) in catalog order, plus `vendor/` itself; `catalog.py`
+  exposes that list as `LIBRARY_SEARCH_PATH` and the combined digest of all
+  pinned revisions as `LIBRARY_REVISION`.
 - `mesh.py` validates STL output, deduplicates vertices for compact preview
   meshes, and writes 3MF.
 - `bootstrap.py` installs a verified official OpenSCAD snapshot per user when
   none is on `PATH`. See the main README for the platform table and the
   newest-snapshot fallback.
-- `objects/*.scad` holds the basic shapes.
-- `vendor/gridfinity-rebuilt-openscad-910e22d8/` is the unmodified upstream
-  Gridfinity Rebuilt source (MIT, see its `LICENSE` and `REVISION`).
+- `objects/*.scad` holds the original shapes, written for this plugin and
+  editable in place.
+
+## Objects: originals and wrappers
+
+Most catalog objects are either an original file under `objects/` or a
+**wrapper** under `objects/wrappers/`. A wrapper is a small original `.scad`
+file that points at an unmodified vendored library and exposes it as a catalog
+object:
+
+- It declares every catalog parameter with upstream's own default, so `-D`
+  overrides work whether or not the vendored file is `include`d or `use`d
+  (`use` imports no variables, which is why those values are restated).
+- It instantiates the upstream module with those parameters, usually laying
+  several copies out on one bed.
+- Where a pinned revision is broken, it may define the missing functions or
+  modules around the upstream call instead of patching the vendored file. The
+  comment at the top of the wrapper records why.
+- `objects/wrappers/splitflap_flap.scad` also repeats a small upstream module
+  (`flap_2d()`), because the only file that exports it pulls in font binaries
+  that are deliberately not vendored.
+
+Eleven objects need no wrapper at all: upstream already renders them the way
+the catalog wants, so their `source` points straight into the vendored tree and
+the catalog owns only the parameter ranges.
+
+## Vendored libraries
+
+`catalog.json`'s `libraries` map is the registry: one entry per vendored tree
+with `label`, `root` (relative to `openscad/`), `revision` (the pinned commit),
+`license` and `repository`. `catalog.py` turns it into `LIBRARIES`,
+`LIBRARY_DIRS` (absolute paths) and `LIBRARY_SEARCH_PATH`. The **first** root is
+Gridfinity Rebuilt, so `include <src/core/standard.scad>` written for it keeps
+resolving; `vendor/` is on the path too, so a wrapper can address one library
+unambiguously as `<rackstack-8e296e93/rack-mount/tray/tray.scad>`.
+
+Nothing under `vendor/` is ever edited. Every tree keeps a `REVISION` file
+whose first line is the pinned commit and which also records the upstream URL,
+the license, the copyright holder and the vendored file list, next to the
+upstream `LICENSE`. `tests/test_backend.py` fails if a revision drifts from the
+catalog, if a license file goes missing, or if a library is no longer reachable
+from the catalog.
+
+| Catalog key | Vendored files | License | Copyright | Pinned revision |
+| --- | --- | --- | --- | --- |
+| `gridfinity-rebuilt-openscad` | `src/core`, `src/helpers`, `src/external`, the two top-level library files, upstream `README.md` | MIT | Kenneth Hodson; Zachary Freedman and Voidstar Lab LLC | `910e22d8607fd7f5f51ad5e5cbc5287a76810bfd` |
+| `gridfinity-openscad` | 9 Gridfinity modules (baseplate, basic cup, cup modules, chess, FLSUN Q5 cup, glue stick, modules, silverware, socket holder) | MIT | Jamie (vector76) | `0e7308cd8fc7fb4191aa69d81175a90d10de751c` |
+| `openscad-gridfinity-block` | `gridfinity_block.scad` | Apache-2.0 | wromijn and the Gridfinity Block contributors | `6ef6d644fff81283c810c2b90197901ce6657f84` |
+| `gridfinity-basket-openscad` | `gridfinityBasket.scad` | MIT | LeKoYa and the Gridfinity Block contributors | `549dc4015e4511daeb7b942de96d2531101701db` |
+| `threads-scad` | `threads.scad` | CC0-1.0 | rcolyer and contributors (public domain dedication) | `4ae9aeb3b136f9858200f77a304b909a000ce3b4` |
+| `splitflap` | the 25 `3d/**.scad` files (flap, spool, front panel, PCB, tools) | Apache-2.0 | Scott Bezek and the splitflap contributors | `87b17c531ca57b0bf10e86754e9d6b404b11a131` |
+| `rackstack` | the `rack-mount/`, `helper/`, `config/` and `rack/` OpenSCAD sources | MIT | Zhao Wang (jazwa) | `8e296e935aad89a6d1a5023da79becc634c10c2d` |
+
+Upstream URLs are in the catalog and in each `REVISION` file; the full
+attribution is in `NOTICE` and `THIRD_PARTY_NOTICES` in the repository root.
+
+**No font files are vendored.** The split-flap tree ships Roboto and Epilogue
+TTF files that `flap.scad` and `label.scad` `use` for their optional letter
+previews, so any object that reaches those files renders with
+`Can't read font` errors even with the letters disabled. The catalog therefore
+uses only the font-free parts of that tree: the flap card, spool and the jigs
+and tools under `3d/tools/`. Upstream's front panel (`3d/combined_front_panel.scad`)
+is vendored but not exposed as an object, because its own include chain reaches
+the font files.

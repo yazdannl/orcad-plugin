@@ -207,6 +207,33 @@ html:root .search input { flex: 1; min-width: 0; height: 100%; color: var(--text
 .search input::placeholder { color: var(--muted); }
 .search input::-webkit-search-cancel-button { filter: grayscale(1); }
 
+/* model library: pinned head + a bounded list so 40+ models never push the
+   parameter panel off screen */
+.library-head {
+  position: sticky; top: 0; z-index: 2; margin-bottom: 10px;
+  background: linear-gradient(var(--panel), var(--panel)), var(--bg);
+}
+.library-head .search { margin-bottom: 10px; }
+.category-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+html:root .chip {
+  display: inline-flex; align-items: center; height: 24px; padding: 0 9px; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--raised); color: var(--muted);
+  font-size: .76rem; font-weight: 600; white-space: nowrap; transition: border-color .15s, background .15s, color .15s;
+}
+html:root .chip:hover { border-color: var(--line-strong); background: var(--raised-2); color: var(--text); }
+html:root .chip.is-active { border-color: transparent; background: var(--soft); color: var(--soft-text); box-shadow: 0 0 0 1px var(--accent); }
+.result-count { margin-top: 8px; font-size: .78rem; font-variant-numeric: tabular-nums; }
+
+.object-scroll {
+  max-height: min(52vh, 560px); overflow-y: auto; overscroll-behavior: contain;
+  scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
+}
+.object-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
+.object-scroll::-webkit-scrollbar-track { background: transparent; }
+.object-scroll::-webkit-scrollbar-thumb { background: var(--line-strong); border: 2px solid transparent; background-clip: padding-box; }
+.object-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
+html:root .object-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 10px; }
+
 .object-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 html:root .object-card {
   position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px;
@@ -214,6 +241,7 @@ html:root .object-card {
   transition: border-color .15s, box-shadow .15s, transform .1s;
 }
 html:root .object-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
+html:root .object-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 html:root .object-card.is-active {
   border-color: transparent;
   background: linear-gradient(var(--raised-2), var(--raised-2)) padding-box, var(--grad) border-box;
@@ -235,6 +263,18 @@ html:root .object-card.is-active {
 }
 html:root .section-head h2 { color: transparent; }
 .section-head p { font-size: .88rem; margin-top: 2px; }
+
+.preset-block { display: grid; gap: 8px; margin: 2px 0 12px; }
+html:root .preset-title { color: var(--muted); }
+.preset-title { font-size: .76rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.preset-row { display: flex; flex-wrap: wrap; gap: 7px; }
+html:root .preset {
+  display: inline-flex; align-items: center; height: 28px; padding: 0 11px; border-radius: 999px;
+  border: 1px solid var(--line-strong); background: var(--raised); color: var(--text);
+  font-size: .85rem; font-weight: 600; transition: border-color .15s, background .15s, color .15s;
+}
+html:root .preset:hover { border-color: var(--accent); background: var(--raised-2); }
+html:root .preset.is-active { border-color: transparent; background: var(--soft); color: var(--soft-text); box-shadow: 0 0 0 1px var(--accent); }
 
 .param-group { border-top: 1px solid var(--line); }
 .param-group summary {
@@ -574,6 +614,8 @@ html:root .card-title { color: var(--muted); }
   .workspace-code { grid-template-columns: minmax(0, 1fr); }
   .stage { height: max(340px, 56vh); }
   .panel { overflow: visible; }
+  .object-scroll { max-height: min(60vh, 620px); }
+  .library-head { position: static; }
   .sidebar-code { overflow: visible; }
   .ai-panel { flex-basis: auto; min-height: 330px; }
   .editor { min-height: 360px; }
@@ -603,6 +645,7 @@ html:root .card-title { color: var(--muted); }
   .topbar { padding-block: 7px; }
   .workspace { padding: 8px; gap: 8px; }
   .sidebar-block { padding: 12px; }
+  .object-scroll { max-height: min(44vh, 460px); }
   .param-list { gap: 11px; }
 }
 

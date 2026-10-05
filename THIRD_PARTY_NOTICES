@@ -1,3 +1,96 @@
+Vendored OpenSCAD libraries
+===========================
+
+Seven upstream OpenSCAD libraries are vendored unmodified under
+`openscad/vendor/`. Each one keeps its upstream LICENSE and a `REVISION` file
+that records the pinned commit, the license, the copyright holder and the
+vendored file list; the same revisions are registered in the `libraries` map
+of `openscad/catalog.json` and are checked by the test suite. These libraries
+remain under their own licenses and are not relicensed under AGPL-3.0-only.
+
+gridfinity-rebuilt-openscad
+--------------------------
+Upstream:  https://github.com/kennetek/gridfinity-rebuilt-openscad
+Pinned at: 910e22d8607fd7f5f51ad5e5cbc5287a76810bfd
+License:   MIT. Copyright (c) 2023 Kenneth Hodson and Copyright (c) 2023
+           Zachary Freedman and Voidstar Lab LLC; both notices are in the
+           vendored LICENSE file.
+Vendored:  openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/ - the nine
+           src/core modules, the six src/helpers modules,
+           src/external/threads-scad/threads.scad, the two top-level library
+           files (gridfinity-rebuilt-baseplate.scad, gridfinity-rebuilt-bins.scad),
+           the upstream README.md and LICENSE. Every Gridfinity object in the
+           catalog is rendered from this tree, and code mode's
+           `include <src/core/standard.scad>` resolves against it.
+
+gridfinity_openscad (vector76)
+-----------------------------
+Upstream:  https://github.com/vector76/gridfinity_openscad
+Pinned at: 0e7308cd8fc7fb4191aa69d81175a90d10de751c
+License:   MIT. Copyright (c) 2022 Jamie (vector76).
+Vendored:  openscad/vendor/gridfinity_openscad-0e7308cd/ - the nine Gridfinity
+           modules (baseplate, basic cup, chess, cup modules, FLSUN Q5 cup,
+           glue stick, modules, silverware, socket holder) and the upstream
+           LICENSE. Supplies the cups, the baseplate frame, the chess set and
+           the accessory bins.
+
+openscad-gridfinity-block (wromijn)
+-----------------------------------
+Upstream:  https://github.com/wromijn/openscad-gridfinity-block
+Pinned at: 6ef6d644fff81283c810c2b90197901ce6657f84
+License:   Apache-2.0. Copyright wromijn and the Gridfinity Block contributors.
+Vendored:  openscad/vendor/openscad-gridfinity-block-6ef6d644/ - the
+           gridfinity_block.scad library module and the upstream LICENSE.
+           Supplies the blank block and the printable block-in-pocket models.
+
+gridfinity-basket-openscad (LeKoYa)
+-----------------------------------
+Upstream:  https://github.com/LeKoYa/gridfinity-basket-openscad
+Pinned at: 549dc4015e4511daeb7b942de96d2531101701db
+License:   MIT. Copyright (c) 2025 LeKoYa and The Gridfinity Block Contributors.
+Vendored:  openscad/vendor/gridfinity-basket-openscad-549dc401/ - the
+           gridfinityBasket.scad model and the upstream LICENSE.
+
+threads-scad (rcolyer)
+----------------------
+Upstream:  https://github.com/rcolyer/threads-scad
+Pinned at: 4ae9aeb3b136f9858200f77a304b909a000ce3b4
+License:   CC0-1.0. rcolyer and contributors; CC0 1.0 Universal dedicates the
+           work to the public domain, so no attribution is required - it is
+           given here anyway.
+Vendored:  openscad/vendor/threads-scad-4ae9aeb3/ - the threads.scad library
+           module and the upstream CC0 LICENSE.txt. Supplies the metric
+           fasteners (bolts, nuts, screws, threaded rod, hole coupon).
+
+splitflap (scottbez1)
+---------------------
+Upstream:  https://github.com/scottbez1/splitflap
+Pinned at: 87b17c531ca57b0bf10e86754e9d6b404b11a131
+License:   Apache-2.0. Copyright 2015-2021 Scott Bezek and the splitflap
+           contributors.
+Vendored:  openscad/vendor/splitflap-87b17c53/ - the 25 OpenSCAD modules under
+           3d/ (flap, spool, front panel, PCB, stepper and projection helpers,
+           and the 3d/tools/ jigs and brackets) and the upstream LICENSE.txt.
+           The Roboto and Epilogue TTF files upstream ships are deliberately
+           NOT vendored: they only draw the optional letter previews, and font
+           binaries are not redistributed here. The flap card model is
+           therefore built from upstream's font-free dimension files plus a
+           wrapper (openscad/objects/wrappers/splitflap_flap.scad) that
+           repeats flap_2d() with Apache-2.0 attribution. Upstream's front
+           panel (3d/combined_front_panel.scad) is vendored but is not a
+           catalog object: its own include chain reaches the fonts.
+
+rackstack (jazwa)
+-----------------
+Upstream:  https://github.com/jazwa/rackstack
+Pinned at: 8e296e935aad89a6d1a5023da79becc634c10c2d
+License:   MIT. Copyright (c) 2023 Zhao Wang (jazwa).
+Vendored:  openscad/vendor/rackstack-8e296e93/ - the 99 OpenSCAD sources under
+           rack-mount/ (33), rack/ (51), helper/ (10) and config/ (5), plus the
+           upstream LICENSE. Excluded: misc/bomAnimations.scad, whose upstream
+           includes are broken, the rbuild.py generator and the STL/media
+           assets. Supplies every rack case, tray, plate and panel model.
+
 Third-party frontend notices
 ============================
 

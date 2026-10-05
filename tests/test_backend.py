@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import struct
 import threading
 import time
@@ -13,6 +15,7 @@ import pytest
 from openscad import (CATALOG, BackendError, OpenSCADRunner, backend_args, build_argv, clean_log, defaults,
                       encode_define, index_stl, probe_openscad, source_path, triangle_count,
                       validate_parameters, write_3mf)
+from openscad.catalog import LIBRARIES, LIBRARY_DIRS, LIBRARY_SEARCH_PATH, ROOT
 from openscad.errors import ErrorCode
 from openscad.runner import _failure, child_env
 from fakes import fake_command
@@ -23,6 +26,7 @@ CUBE = [((0, 0, 0), (1, 1, 0), (1, 0, 0)), ((0, 0, 0), (0, 1, 0), (1, 1, 0)),
         ((0, 1, 0), (0, 1, 1), (0, 0, 1)), ((0, 1, 0), (0, 0, 1), (0, 0, 0)),
         ((0, 0, 0), (0, 0, 1), (0, 1, 1)), ((0, 0, 0), (0, 1, 1), (0, 1, 0)),
         ((1, 0, 0), (1, 1, 0), (1, 1, 1)), ((1, 0, 0), (1, 1, 1), (1, 0, 1))]
+INCLUDE_RE = re.compile(r"\b(?:include|use)\s*<([^>]+)>")
 
 
 def stl(triangles=CUBE) -> bytes:
@@ -30,6 +34,12 @@ def stl(triangles=CUBE) -> bytes:
     for tri in triangles:
         out += struct.pack("<12fH", 0, 0, 0, *tri[0], *tri[1], *tri[2], 0)
     return bytes(out)
+
+
+def _scad_text(path: Path) -> str:
+    """.scad source without comments, so prose about an include is not mistaken for one."""
+    text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8", errors="replace"), flags=re.S)
+    return re.sub(r"//[^\n]*", "", text)
 
 
 # ------------------------------------------------------------------ catalog
@@ -43,6 +53,77 @@ def test_every_catalog_object_is_complete_and_its_defaults_validate():
             assert param["type"] in ("boolean", "integer", "number")
             assert param["variable"] not in ("$fa", "$fs")
         assert validate_parameters(name, {}) == defaults(name)
+
+
+def test_every_object_documents_itself_and_its_presets_validate():
+    for name, spec in CATALOG["objects"].items():
+        variables = {param["variable"] for param in spec["parameters"]}
+        assert spec["parameters"], f"{name} has no parameters"
+        assert spec["tags"] and all(tag.strip() for tag in spec["tags"]), name
+        assert spec["description"].strip(), name
+        for preset in spec["presets"]:
+            assert preset["name"].strip(), name
+            assert set(preset["params"]) <= variables, (name, preset["name"])
+            assert validate_parameters(name, preset["params"]) == {**defaults(name), **preset["params"]}
+
+
+# ---------------------------------------------------------------- libraries
+
+def _revision_metadata(tree: Path) -> dict[str, str]:
+    """Upstream provenance the REVISION files carry next to the pinned commit."""
+    lines = (tree / "REVISION").read_text(encoding="utf-8").splitlines()[1:]
+    return dict(line.split(": ", 1) for line in lines if not line.startswith((" ", "\t")) and ": " in line)
+
+
+def test_every_library_is_pinned_to_its_revision_and_keeps_its_license():
+    assert list(LIBRARIES) == list(LIBRARY_DIRS), "the search path must follow the catalog order"
+    assert LIBRARY_SEARCH_PATH[:-1] == list(LIBRARY_DIRS.values()), "gridfinity-rebuilt has to come first"
+    assert LIBRARY_SEARCH_PATH[-1] == ROOT / "vendor", "vendor/ itself addresses one library as <root/file>"
+    for key, spec in LIBRARIES.items():
+        tree = LIBRARY_DIRS[key]
+        assert tree.is_dir(), key
+        assert re.fullmatch(r"[0-9a-f]{40}", spec["revision"]), key
+        revision = (tree / "REVISION").read_text(encoding="utf-8")
+        assert revision.splitlines()[0].strip() == spec["revision"], f"{key} REVISION disagrees with the catalog"
+        assert any((tree / name).is_file() for name in ("LICENSE", "LICENCE", "LICENSE.txt", "COPYING")), key
+        assert spec["label"] and spec["license"] and spec["repository"].startswith("https://"), key
+        metadata = _revision_metadata(tree)
+        assert spec["license"] == metadata.get("License", spec["license"]), key
+        assert spec["repository"] == metadata.get("Upstream", spec["repository"]), key
+
+
+def test_every_library_is_reachable_from_the_catalog():
+    """Nothing vendored is dead weight, and no object points outside the backend tree."""
+    reached = {key: 0 for key in LIBRARIES}
+    for name in CATALOG["objects"]:
+        source = source_path(name)
+        owner = next((key for key, root in LIBRARY_DIRS.items() if source.is_relative_to(root)), None)
+        assert owner is not None or source.is_relative_to(ROOT / "objects"), name
+        if owner is not None:
+            reached[owner] += 1
+        for target in INCLUDE_RE.findall(_scad_text(source)):
+            # OpenSCAD looks next to the including file first, then on every OPENSCADPATH root.
+            found = next((path for path in (source.parent / target, *(root / target for root in LIBRARY_SEARCH_PATH))
+                          if path.exists()), None)
+            for key, tree in LIBRARY_DIRS.items():
+                if found is not None and found.is_relative_to(tree):
+                    reached[key] += 1
+    assert set(reached) == set(LIBRARIES)
+    assert all(reached.values()), reached
+
+
+# -------------------------------------------------------------- .scad sources
+
+def test_every_parameter_is_used_in_its_source_and_every_include_resolves():
+    for name, spec in CATALOG["objects"].items():
+        source = source_path(name)
+        text = _scad_text(source)
+        for param in spec["parameters"]:
+            assert re.search(rf"\b{re.escape(param['variable'])}\b", text), f"{name}.{param['variable']}"
+        for target in INCLUDE_RE.findall(text):
+            # OpenSCAD looks next to the including file first, then on every OPENSCADPATH root.
+            assert any((root / target).exists() for root in (source.parent, *LIBRARY_SEARCH_PATH)), \
+                f"{name} includes {target}"
 
 
 def test_validation_is_strict_and_names_the_offending_fields():
@@ -107,7 +188,11 @@ def test_child_env_drops_host_library_paths_and_exposes_the_library(monkeypatch)
     monkeypatch.setenv("PYTHONHOME", "/orca/python")
     env = child_env()
     assert "LD_LIBRARY_PATH" not in env and "PYTHONHOME" not in env
-    assert Path(env["OPENSCADPATH"]).joinpath("src", "core", "standard.scad").is_file()
+    roots = env["OPENSCADPATH"].split(os.pathsep)
+    assert roots == [str(path) for path in LIBRARY_SEARCH_PATH]
+    assert roots[0] == str(LIBRARY_DIRS["gridfinity-rebuilt-openscad"]), "gridfinity-rebuilt resolves src/... includes"
+    assert all(Path(root).is_dir() for root in roots), roots
+    assert Path(roots[0]).joinpath("src", "core", "standard.scad").is_file()
 
 
 def test_logs_are_cleaned_and_failures_are_readable(tmp_path):

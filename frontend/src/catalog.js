@@ -19,12 +19,31 @@ export function groups(key) {
   return [...result].map(([name, params]) => ({ name, params }))
 }
 
-export function searchObjects(query) {
-  const needle = String(query || '').trim().toLowerCase()
-  return OBJECT_KEYS.filter((key) => {
-    const o = OBJECTS[key]
-    return !needle || [key, o.label, o.category, o.description].some((text) => String(text).toLowerCase().includes(needle))
-  })
+function normalize(text) {
+  return String(text ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+export function categories() {
+  return [...new Set(OBJECT_KEYS.map((key) => OBJECTS[key].category).filter(Boolean))]
+}
+
+// Every word an object can be found by: key, label, category, description, tags.
+export function objectMatches(object, key, query = '', category = 'all') {
+  if (normalize(category) && normalize(category) !== 'all'
+    && normalize(object.category) !== normalize(category)) return false
+  const needle = normalize(query)
+  if (!needle) return true
+  const tags = Array.isArray(object.tags) ? object.tags : []
+  return [key, object.label, object.category, object.description, ...tags]
+    .some((text) => normalize(text).includes(needle))
+}
+
+export function searchObjects(query = '', category = 'all') {
+  return OBJECT_KEYS.filter((key) => objectMatches(OBJECTS[key], key, query, category))
+}
+
+export function resultCounts(query = '', category = 'all') {
+  return { shown: searchObjects(query, category).length, total: OBJECT_KEYS.length }
 }
 
 // Mirrors the backend rules so an obviously bad value never costs a render.
@@ -51,6 +70,39 @@ export function restoreParams(key, saved) {
     if (value !== undefined && checkValue(param, value) === null) result[param.variable] = value
   }
   return result
+}
+
+// Presets are optional catalog data: [{ name, description?, params: { variable: value } }].
+export function presetList(list) {
+  if (!Array.isArray(list)) return []
+  return list.filter((preset) => preset && typeof preset === 'object'
+    && typeof preset.name === 'string' && preset.name && preset.params && typeof preset.params === 'object')
+}
+
+export function presets(key) {
+  return presetList(OBJECTS[key]?.presets)
+}
+
+// Applies known parameter names only; anything unknown or invalid for the parameter is ignored.
+// Conflicts resolve the same way a manual edit does, so a preset can never land on an illegal pair.
+export function applyPreset(key, values, preset) {
+  let next = { ...values }
+  if (!preset || typeof preset.params !== 'object') return next
+  for (const param of OBJECTS[key]?.parameters || []) {
+    const value = preset.params[param.variable]
+    if (value === undefined || checkValue(param, value) !== null) continue
+    next = setParam(key, next, param.variable, value)
+  }
+  return next
+}
+
+export function presetMatches(values, preset) {
+  const entries = Object.entries(preset?.params || {})
+  return entries.length > 0 && entries.every(([name, value]) => values?.[name] === value)
+}
+
+export function activePreset(key, values) {
+  return presets(key).find((preset) => presetMatches(values, preset))?.name || null
 }
 
 export function isDisabled(param, values) {

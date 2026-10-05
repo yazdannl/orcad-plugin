@@ -1,0 +1,19 @@
+0e7308cd8fc7fb4191aa69d81175a90d10de751c
+
+Upstream: https://github.com/vector76/gridfinity_openscad
+License: MIT
+Copyright: Copyright (c) 2022 Jamie (vector76)
+
+All .scad sources plus the upstream LICENSE, copied verbatim from the pinned commit.
+
+Files:
+  LICENSE
+  gridfinity_baseplate.scad
+  gridfinity_basic_cup.scad
+  gridfinity_chess.scad
+  gridfinity_cup_modules.scad
+  gridfinity_flsun_q5.scad
+  gridfinity_glue_stick.scad
+  gridfinity_modules.scad
+  gridfinity_silverware.scad
+  gridfinity_socket_holder.scad

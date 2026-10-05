@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased — Expanded model catalog
+
+- **49 models in six categories.** Gridfinity grew from two objects to 19
+  (bins, baseplates, blocks, pockets, baskets, a full chess set, glue stick,
+  silverware, socket holder, FLSUN Q5 cup) and three more categories joined it:
+  Organization, Cases and Panels. Fasteners and Basics came along with the
+  pinned libraries they need.
+- **Seven pinned upstream libraries.** Gridfinity Rebuilt, gridfinity_openscad,
+  openscad-gridfinity-block, gridfinity-basket-openscad, threads-scad, splitflap
+  and rackstack are vendored unmodified under `openscad/vendor/`, each with its
+  upstream `LICENSE` and a `REVISION` file naming the commit, the license, the
+  copyright holder and the vendored file list. `NOTICE` and
+  `THIRD_PARTY_NOTICES` carry the attribution; `tests/test_backend.py` fails if
+  a revision drifts from `catalog.json` or a license file goes missing.
+- **Multi-library code mode.** `OPENSCADPATH` now holds every library root,
+  joined with the platform path separator and ordered so `include <src/...>`
+  still resolves Gridfinity Rebuilt first. The render cache key includes every
+  pinned revision, so upgrading one library cannot serve another's cached STL.
+- **Presets and tags.** Every object carries a `tags` list for search and a
+  `presets` list of named parameter sets; a preset applies on top of the
+  current values, shows as active until you edit a value, and can never set an
+  illegal combination of options. All 153 presets are validated against their
+  object's own parameters by the test suite.
+- **Original models.** battery holder, PCB mount, cable clip, device stand,
+  wall hook, bit holder, drawer divider and wall plate are new `.scad` written
+  for this plugin, alongside the six original shapes.
+- **Split-flap flap cards are blank by design.** Upstream draws the flap
+  letters with `text()` and reaches its Roboto/Epilogue fonts through files that
+  are not vendored, so every render of those models ended in
+  `Can't read font` errors. The flap card is now built from upstream's
+  font-free dimension files plus its own `flap_2d()` outline - byte-identical
+  card geometry, no font dependency, score it and write the characters by hand.
+  The connector case and the front panel are dropped from the catalog for the
+  same reason: upstream's `combined_front_panel.scad` reaches the font files
+  through its own include chain, so it can only be exposed once that is split
+  upstream. Their font-free parts - the spool, the jigs and the flap itself -
+  all stay.
+
 ## 0.9.10 — Renamed to OrcaCAD
 
 - The plugin is now **OrcaCAD**. "OrCAD" is a registered trademark of Cadence

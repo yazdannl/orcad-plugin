@@ -1,9 +1,60 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "source": {
     "repository": "https://github.com/kennetek/gridfinity-rebuilt-openscad",
     "revision": "910e22d8607fd7f5f51ad5e5cbc5287a76810bfd",
     "license": "MIT"
+  },
+  "libraries": {
+    "gridfinity-rebuilt-openscad": {
+      "label": "Gridfinity Rebuilt",
+      "root": "vendor/gridfinity-rebuilt-openscad-910e22d8",
+      "revision": "910e22d8607fd7f5f51ad5e5cbc5287a76810bfd",
+      "license": "MIT",
+      "repository": "https://github.com/kennetek/gridfinity-rebuilt-openscad"
+    },
+    "gridfinity-openscad": {
+      "label": "Gridfinity OpenSCAD (vector76)",
+      "root": "vendor/gridfinity_openscad-0e7308cd",
+      "revision": "0e7308cd8fc7fb4191aa69d81175a90d10de751c",
+      "license": "MIT",
+      "repository": "https://github.com/vector76/gridfinity_openscad"
+    },
+    "openscad-gridfinity-block": {
+      "label": "Gridfinity Block (wromijn)",
+      "root": "vendor/openscad-gridfinity-block-6ef6d644",
+      "revision": "6ef6d644fff81283c810c2b90197901ce6657f84",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/wromijn/openscad-gridfinity-block"
+    },
+    "gridfinity-basket-openscad": {
+      "label": "Gridfinity Basket (LeKoYa)",
+      "root": "vendor/gridfinity-basket-openscad-549dc401",
+      "revision": "549dc4015e4511daeb7b942de96d2531101701db",
+      "license": "MIT",
+      "repository": "https://github.com/LeKoYa/gridfinity-basket-openscad"
+    },
+    "threads-scad": {
+      "label": "threads.scad (rcolyer)",
+      "root": "vendor/threads-scad-4ae9aeb3",
+      "revision": "4ae9aeb3b136f9858200f77a304b909a000ce3b4",
+      "license": "CC0-1.0",
+      "repository": "https://github.com/rcolyer/threads-scad"
+    },
+    "splitflap": {
+      "label": "splitflap (scottbez1)",
+      "root": "vendor/splitflap-87b17c53",
+      "revision": "87b17c531ca57b0bf10e86754e9d6b404b11a131",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/scottbez1/splitflap"
+    },
+    "rackstack": {
+      "label": "rackstack (jazwa)",
+      "root": "vendor/rackstack-8e296e93",
+      "revision": "8e296e935aad89a6d1a5023da79becc634c10c2d",
+      "license": "MIT",
+      "repository": "https://github.com/jazwa/rackstack"
+    }
   },
   "quality_profiles": {
     "draft": {
@@ -338,7 +389,15 @@
           "group": "Base holes",
           "help": "Add Gridfinity refined thumbscrew holes."
         }
-      ]
+      ],
+      "tags": [
+        "gridfinity",
+        "bin",
+        "drawer",
+        "storage",
+        "organizer"
+      ],
+      "presets": []
     },
     "gridfinity_baseplate": {
       "label": "Gridfinity Baseplate",
@@ -550,7 +609,14 @@
           ],
           "help": "Chamfer magnet holes."
         }
-      ]
+      ],
+      "tags": [
+        "gridfinity",
+        "baseplate",
+        "drawer",
+        "storage"
+      ],
+      "presets": []
     },
     "box": {
       "label": "Box",
@@ -604,7 +670,13 @@
           "group": "Size",
           "help": "Rounds the vertical edges; 0 keeps them sharp."
         }
-      ]
+      ],
+      "tags": [
+        "box",
+        "container",
+        "basics"
+      ],
+      "presets": []
     },
     "cylinder": {
       "label": "Cylinder",
@@ -635,7 +707,12 @@
           "unit": "mm",
           "group": "Size"
         }
-      ]
+      ],
+      "tags": [
+        "cylinder",
+        "basics"
+      ],
+      "presets": []
     },
     "tube": {
       "label": "Tube",
@@ -678,7 +755,13 @@
           "unit": "mm",
           "group": "Size"
         }
-      ]
+      ],
+      "tags": [
+        "tube",
+        "pipe",
+        "basics"
+      ],
+      "presets": []
     },
     "bracket": {
       "label": "Mounting plate",
@@ -753,6 +836,5577 @@
           "unit": "mm",
           "group": "Holes",
           "help": "Center-to-center distance between the two holes."
+        }
+      ],
+      "tags": [
+        "bracket",
+        "basics"
+      ],
+      "presets": []
+    },
+    "gridfinity_cup": {
+      "label": "Gridfinity Cup",
+      "category": "Gridfinity",
+      "icon": "bin",
+      "source": "objects/wrappers/gf_cup.scad",
+      "description": "Open-top storage cup with rounded label tab, finger slide and optional magnet or screw holes in the base.",
+      "tags": [
+        "gridfinity",
+        "cup",
+        "storage",
+        "bin",
+        "organizer"
+      ],
+      "parameters": [
+        {
+          "variable": "cup_width",
+          "label": "Width",
+          "type": "number",
+          "default": 2,
+          "min": 0.5,
+          "max": 13,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Size along X in 42 mm grid units; 0.5 is a half-unit."
+        },
+        {
+          "variable": "cup_depth",
+          "label": "Depth",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 13,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Size along Y in 42 mm grid units."
+        },
+        {
+          "variable": "cup_height",
+          "label": "Height",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 20,
+          "step": 1,
+          "group": "Height",
+          "unit": "units",
+          "help": "Height in 7 mm grid units, excluding the stacking lip."
+        },
+        {
+          "variable": "cup_chambers",
+          "label": "Compartments",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 13,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "Number of internal compartments along X."
+        },
+        {
+          "variable": "label_option",
+          "label": "Label tab",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2,
+          "step": 1,
+          "group": "Style",
+          "options": [
+            {
+              "value": 0,
+              "label": "Disabled"
+            },
+            {
+              "value": 1,
+              "label": "Left"
+            },
+            {
+              "value": 2,
+              "label": "Right"
+            }
+          ],
+          "help": "Adds a curved overhang on the front wall for a paper label."
+        },
+        {
+          "variable": "lip_option",
+          "label": "Stacking lip",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2,
+          "step": 1,
+          "group": "Style",
+          "options": [
+            {
+              "value": 0,
+              "label": "Normal"
+            },
+            {
+              "value": 1,
+              "label": "Reduced"
+            },
+            {
+              "value": 2,
+              "label": "None"
+            }
+          ],
+          "help": "How much of the stacking lip is printed."
+        },
+        {
+          "variable": "cup_fingerslide",
+          "label": "Finger slide",
+          "type": "boolean",
+          "default": true,
+          "group": "Style",
+          "help": "Large corner fillet so the bin is easy to pull off the baseplate."
+        },
+        {
+          "variable": "cup_label_width",
+          "label": "Label width",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 12,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Width of the label tab in grid units; zero spans the full front."
+        },
+        {
+          "variable": "cup_wall_thickness",
+          "label": "Wall thickness",
+          "type": "number",
+          "default": 0.95,
+          "min": 0,
+          "max": 3,
+          "step": 0.05,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Side wall thickness; Zack's design uses 0.95."
+        },
+        {
+          "variable": "cup_floor_thickness",
+          "label": "Floor thickness",
+          "type": "number",
+          "default": 0.7,
+          "min": 0.1,
+          "max": 3,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Minimum material left under the base cutouts."
+        },
+        {
+          "variable": "cup_magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 6.5,
+          "min": 0,
+          "max": 10,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets; zero prints no magnet holes."
+        },
+        {
+          "variable": "cup_screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 6,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes; zero prints no screw holes."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Small parts bin",
+          "description": "Two by one bin with a single compartment.",
+          "params": {
+            "cup_width": 2,
+            "cup_depth": 1,
+            "cup_height": 3,
+            "cup_chambers": 1
+          }
+        },
+        {
+          "name": "Pen cup",
+          "description": "Tall one-unit cup split into three compartments.",
+          "params": {
+            "cup_width": 1,
+            "cup_depth": 1,
+            "cup_height": 4,
+            "cup_chambers": 3
+          }
+        },
+        {
+          "name": "Tool tray",
+          "description": "Flat four by two tray with eight compartments.",
+          "params": {
+            "cup_width": 4,
+            "cup_depth": 2,
+            "cup_height": 2,
+            "cup_chambers": 8
+          }
+        },
+        {
+          "name": "Labeled bin",
+          "description": "Bin with a left justified label tab.",
+          "params": {
+            "cup_width": 2,
+            "cup_depth": 1,
+            "cup_height": 3,
+            "label_option": 1
+          }
+        },
+        {
+          "name": "Flush stacking",
+          "description": "Bin without a stacking lip so it nests flush in a drawer.",
+          "params": {
+            "lip_option": 2,
+            "cup_fingerslide": true
+          }
+        },
+        {
+          "name": "Magnet and screw mounts",
+          "description": "Bin with 6.5 mm magnet pockets and 6 mm M3 screw holes.",
+          "params": {
+            "cup_magnet_diameter": 6.5,
+            "cup_screw_depth": 6
+          }
+        }
+      ]
+    },
+    "gridfinity_block": {
+      "label": "Gridfinity Block",
+      "category": "Gridfinity",
+      "icon": "cube",
+      "source": "objects/wrappers/gf_block.scad",
+      "description": "Solid Gridfinity block with rounded corners, magnet feet and an optional stacking lip, ready to be drilled by hand or with a mill.",
+      "tags": [
+        "gridfinity",
+        "block",
+        "cube",
+        "base",
+        "blank"
+      ],
+      "parameters": [
+        {
+          "variable": "grid_x",
+          "label": "Grid X",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Size along X in 42 mm grid units."
+        },
+        {
+          "variable": "grid_y",
+          "label": "Grid Y",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Size along Y in 42 mm grid units."
+        },
+        {
+          "variable": "grid_z",
+          "label": "Grid Z",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Height",
+          "unit": "units",
+          "help": "Height in 7 mm grid units."
+        },
+        {
+          "variable": "stacking_lip",
+          "label": "Stacking lip",
+          "type": "boolean",
+          "default": true,
+          "group": "Height",
+          "help": "Adds the lip that lets another bin stack on top."
+        },
+        {
+          "variable": "center",
+          "label": "Center on origin",
+          "type": "boolean",
+          "default": true,
+          "group": "General",
+          "help": "Center the block on the print bed instead of one corner."
+        },
+        {
+          "variable": "magnets",
+          "label": "Magnets",
+          "type": "boolean",
+          "default": true,
+          "group": "Hardware",
+          "help": "Cut 6.5 mm magnet pockets in the feet."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Single unit block",
+          "description": "One grid cube, one unit tall.",
+          "params": {
+            "grid_x": 1,
+            "grid_y": 1,
+            "grid_z": 1
+          }
+        },
+        {
+          "name": "Default 2x1x3",
+          "description": "Two by one block, three units tall.",
+          "params": {
+            "grid_x": 2,
+            "grid_y": 1,
+            "grid_z": 3
+          }
+        },
+        {
+          "name": "Tall post",
+          "description": "One by one column, six units tall.",
+          "params": {
+            "grid_x": 1,
+            "grid_y": 1,
+            "grid_z": 6
+          }
+        },
+        {
+          "name": "Desk riser",
+          "description": "Four by two platform, four units tall.",
+          "params": {
+            "grid_x": 4,
+            "grid_y": 2,
+            "grid_z": 4
+          }
+        },
+        {
+          "name": "Wide tray",
+          "description": "Six by four slab, one unit tall.",
+          "params": {
+            "grid_x": 6,
+            "grid_y": 4,
+            "grid_z": 1
+          }
+        },
+        {
+          "name": "No stacking lip",
+          "description": "Plain block without the lip so blocks sit flush next to each other.",
+          "params": {
+            "stacking_lip": false
+          }
+        }
+      ]
+    },
+    "gridfinity_block_pocket": {
+      "label": "Gridfinity Block with Pockets",
+      "category": "Gridfinity",
+      "icon": "cylinder",
+      "source": "objects/wrappers/gf_block_pocket.scad",
+      "description": "Gridfinity block with a row of round, flat bottomed pockets drilled into the top for pens, bits or cells.",
+      "tags": [
+        "gridfinity",
+        "block",
+        "pocket",
+        "holder",
+        "drill",
+        "organizer"
+      ],
+      "parameters": [
+        {
+          "variable": "grid_x",
+          "label": "Grid X",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Size along X in 42 mm grid units."
+        },
+        {
+          "variable": "grid_y",
+          "label": "Grid Y",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Size along Y in 42 mm grid units."
+        },
+        {
+          "variable": "grid_z",
+          "label": "Grid Z",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Height",
+          "unit": "units",
+          "help": "Height in 7 mm grid units."
+        },
+        {
+          "variable": "pocket_diameter",
+          "label": "Pocket diameter",
+          "type": "number",
+          "default": 14.5,
+          "min": 0.5,
+          "max": 60,
+          "step": 0.05,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Diameter of every pocket; the pocket wall is 0.6 mm thinner."
+        },
+        {
+          "variable": "pocket_depth",
+          "label": "Pocket depth",
+          "type": "number",
+          "default": 30,
+          "min": 1,
+          "max": 200,
+          "step": 1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "How deep the pockets are drilled from the top face."
+        },
+        {
+          "variable": "pocket_spacing",
+          "label": "Pocket spacing",
+          "type": "number",
+          "default": 17,
+          "min": 5,
+          "max": 100,
+          "step": 1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Centre to centre distance of the pockets."
+        },
+        {
+          "variable": "stacking_lip",
+          "label": "Stacking lip",
+          "type": "boolean",
+          "default": true,
+          "group": "Height",
+          "help": "Adds the lip that lets another bin stack on top."
+        },
+        {
+          "variable": "magnets",
+          "label": "Magnets",
+          "type": "boolean",
+          "default": true,
+          "group": "Hardware",
+          "help": "Cut 6.5 mm magnet pockets in the feet."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Three pens",
+          "description": "Three 9 mm pockets, one per grid unit.",
+          "params": {
+            "grid_x": 3,
+            "pocket_diameter": 9,
+            "pocket_spacing": 17,
+            "pocket_depth": 190
+          }
+        },
+        {
+          "name": "Drill bit rack",
+          "description": "Six 8 mm pockets for straight bits.",
+          "params": {
+            "grid_x": 6,
+            "pocket_diameter": 8,
+            "pocket_spacing": 17,
+            "pocket_depth": 60
+          }
+        },
+        {
+          "name": "Hex bit holder",
+          "description": "Four pockets for 6.35 mm hex bits.",
+          "params": {
+            "grid_x": 4,
+            "pocket_diameter": 6.35,
+            "pocket_spacing": 17,
+            "pocket_depth": 25
+          }
+        },
+        {
+          "name": "Two AA cells",
+          "description": "Two 14.6 mm pockets, one per grid unit.",
+          "params": {
+            "grid_x": 2,
+            "pocket_diameter": 14.6,
+            "pocket_spacing": 17,
+            "pocket_depth": 51
+          }
+        },
+        {
+          "name": "Socket row",
+          "description": "Three wide pockets for 25 mm sockets.",
+          "params": {
+            "grid_x": 3,
+            "pocket_diameter": 25,
+            "pocket_spacing": 30,
+            "pocket_depth": 40
+          }
+        },
+        {
+          "name": "Screwdriver rack",
+          "description": "Four 23 mm pockets for large screwdrivers.",
+          "params": {
+            "grid_x": 4,
+            "pocket_diameter": 23,
+            "pocket_spacing": 22,
+            "pocket_depth": 140
+          }
+        }
+      ]
+    },
+    "gridfinity_basket": {
+      "label": "Gridfinity Basket",
+      "category": "Gridfinity",
+      "icon": "folder",
+      "source": "objects/wrappers/gf_basket.scad",
+      "description": "Stackable basket with a perforated wall pattern, carry handle and an optional Gridfinity base so it stays put on a plate.",
+      "tags": [
+        "gridfinity",
+        "basket",
+        "bin",
+        "storage",
+        "organizer",
+        "mesh"
+      ],
+      "parameters": [
+        {
+          "variable": "grid_x",
+          "label": "Grid X",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Size along X in 42 mm grid units."
+        },
+        {
+          "variable": "grid_y",
+          "label": "Grid Y",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Size along Y in 42 mm grid units."
+        },
+        {
+          "variable": "grid_z",
+          "label": "Grid Z",
+          "type": "integer",
+          "default": 4,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Height",
+          "unit": "units",
+          "help": "Height in 7 mm grid units."
+        },
+        {
+          "variable": "basket_wall_pattern",
+          "label": "Wall pattern",
+          "type": "integer",
+          "default": 1,
+          "min": 0,
+          "max": 2,
+          "step": 1,
+          "group": "Style",
+          "options": [
+            {
+              "value": 0,
+              "label": "Solid"
+            },
+            {
+              "value": 1,
+              "label": "Hex grid"
+            },
+            {
+              "value": 2,
+              "label": "Square grid"
+            }
+          ],
+          "help": "Perforation used in the basket walls."
+        },
+        {
+          "variable": "basket_pattern_size",
+          "label": "Pattern size",
+          "type": "number",
+          "default": 8,
+          "min": 4,
+          "max": 15,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Style",
+          "help": "Size of one hex or square cell in the wall pattern."
+        },
+        {
+          "variable": "basket_wall_thickness",
+          "label": "Wall thickness",
+          "type": "number",
+          "default": 1.2,
+          "min": 0.4,
+          "max": 2,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Wall thickness; the library cannot print below 0.4."
+        },
+        {
+          "variable": "basket_padding",
+          "label": "Base padding",
+          "type": "number",
+          "default": 1,
+          "min": 0,
+          "max": 10,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Gap between the Gridfinity base and the basket walls."
+        },
+        {
+          "variable": "basket_handle",
+          "label": "Handle",
+          "type": "boolean",
+          "default": true,
+          "group": "Style",
+          "help": "Adds a carry handle to both short ends."
+        },
+        {
+          "variable": "basket_handle_width",
+          "label": "Handle width",
+          "type": "number",
+          "default": 35,
+          "min": 20,
+          "max": 100,
+          "step": 1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Opening width of the handle."
+        },
+        {
+          "variable": "basket_handle_height",
+          "label": "Handle height",
+          "type": "number",
+          "default": 11,
+          "min": 11,
+          "max": 30,
+          "step": 1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Opening height of the handle."
+        },
+        {
+          "variable": "basket_solid_floor",
+          "label": "Solid floor",
+          "type": "boolean",
+          "default": true,
+          "group": "Style",
+          "help": "Closed floor instead of an open grid."
+        },
+        {
+          "variable": "basket_gridfinity_base",
+          "label": "Gridfinity base",
+          "type": "boolean",
+          "default": true,
+          "group": "Hardware",
+          "help": "Keep the feet so the basket locks into a baseplate."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Hex mesh basket",
+          "description": "Three by one basket with the default 8 mm hex wall.",
+          "params": {
+            "grid_x": 3,
+            "grid_y": 1,
+            "grid_z": 4,
+            "basket_wall_pattern": 1,
+            "basket_pattern_size": 8
+          }
+        },
+        {
+          "name": "Small parts tray",
+          "description": "Two by two solid walled tray, two units tall.",
+          "params": {
+            "grid_x": 2,
+            "grid_y": 2,
+            "grid_z": 2,
+            "basket_wall_pattern": 0,
+            "basket_handle": false
+          }
+        },
+        {
+          "name": "Large wire basket",
+          "description": "Six by four basket with a coarse square grid wall.",
+          "params": {
+            "grid_x": 6,
+            "grid_y": 4,
+            "grid_z": 6,
+            "basket_wall_pattern": 2,
+            "basket_pattern_size": 15
+          }
+        },
+        {
+          "name": "Tall handle basket",
+          "description": "Two by two basket, ten units tall, without a handle.",
+          "params": {
+            "grid_x": 2,
+            "grid_y": 2,
+            "grid_z": 10,
+            "basket_handle": false
+          }
+        },
+        {
+          "name": "Free standing basket",
+          "description": "Basket without the Gridfinity feet so it stands on its own flat floor.",
+          "params": {
+            "basket_gridfinity_base": false,
+            "basket_solid_floor": true
+          }
+        }
+      ]
+    },
+    "gridfinity_chess_board": {
+      "label": "Gridfinity Chess Board",
+      "category": "Gridfinity",
+      "icon": "grid",
+      "source": "objects/wrappers/gf_chess_board.scad",
+      "description": "Eight by eight board of alternating Gridfinity tiles plus one complete light and one dark set of pieces.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "board",
+        "game",
+        "tiles"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_chess_tile": {
+      "label": "Gridfinity Chess Tile",
+      "category": "Gridfinity",
+      "icon": "plate",
+      "source": "objects/wrappers/gf_chess_tile.scad",
+      "description": "One 42 mm Gridfinity tile with a half unit thick playing surface.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "tile",
+        "game",
+        "square"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_chess_pawn": {
+      "label": "Gridfinity Chess Pawn",
+      "category": "Gridfinity",
+      "icon": "iso",
+      "source": "objects/wrappers/gf_chess_pawn.scad",
+      "description": "Chess pawn with a spherical head on a one unit Gridfinity base.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "pawn",
+        "piece",
+        "game"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_chess_knight": {
+      "label": "Gridfinity Chess Knight",
+      "category": "Gridfinity",
+      "icon": "iso",
+      "source": "objects/wrappers/gf_chess_knight.scad",
+      "description": "Chess knight with a faceted horse head on a one unit Gridfinity base.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "knight",
+        "piece",
+        "game"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_chess_bishop": {
+      "label": "Gridfinity Chess Bishop",
+      "category": "Gridfinity",
+      "icon": "iso",
+      "source": "objects/wrappers/gf_chess_bishop.scad",
+      "description": "Chess bishop with a mitre shaped top on a one unit Gridfinity base.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "bishop",
+        "piece",
+        "game"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_chess_rook": {
+      "label": "Gridfinity Chess Rook",
+      "category": "Gridfinity",
+      "icon": "iso",
+      "source": "objects/wrappers/gf_chess_rook.scad",
+      "description": "Chess rook with a castellated top on a one unit Gridfinity base.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "rook",
+        "piece",
+        "game"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_chess_queen": {
+      "label": "Gridfinity Chess Queen",
+      "category": "Gridfinity",
+      "icon": "iso",
+      "source": "objects/wrappers/gf_chess_queen.scad",
+      "description": "Chess queen with a coronet and finial on a one unit Gridfinity base.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "queen",
+        "piece",
+        "game"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_chess_king": {
+      "label": "Gridfinity Chess King",
+      "category": "Gridfinity",
+      "icon": "iso",
+      "source": "objects/wrappers/gf_chess_king.scad",
+      "description": "Chess king with a cross finial on a one unit Gridfinity base.",
+      "tags": [
+        "gridfinity",
+        "chess",
+        "king",
+        "piece",
+        "game"
+      ],
+      "parameters": [
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets in every base; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 4,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes in every base; zero prints none."
+        }
+      ],
+      "presets": []
+    },
+    "gridfinity_baseplate_frame": {
+      "label": "Gridfinity Baseplate (frame)",
+      "category": "Gridfinity",
+      "icon": "baseplate",
+      "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_baseplate.scad",
+      "description": "Hollow 5 mm baseplate grid from vector76's library, optionally thickened to 6.4 mm for weight or built as a stacking lid.",
+      "tags": [
+        "gridfinity",
+        "baseplate",
+        "plate",
+        "grid",
+        "frame",
+        "lid"
+      ],
+      "parameters": [
+        {
+          "variable": "xsize",
+          "label": "Bases X",
+          "type": "integer",
+          "default": 5,
+          "min": 1,
+          "max": 20,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Number of 42 mm cells along X."
+        },
+        {
+          "variable": "ysize",
+          "label": "Bases Y",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 20,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Number of 42 mm cells along Y."
+        },
+        {
+          "variable": "weighted",
+          "label": "Weighted plate",
+          "type": "boolean",
+          "default": false,
+          "group": "Style",
+          "help": "6.4 mm plate with countersunk M3 holes and cable ties; ignored when the lid is on."
+        },
+        {
+          "variable": "lid",
+          "label": "Stacking lid",
+          "type": "boolean",
+          "default": false,
+          "group": "Style",
+          "help": "Turn the plate into a 7 mm lid with magnet pockets; takes priority over the weighted plate."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Small plate 3x2",
+          "description": "Three by two plain frame.",
+          "params": {
+            "xsize": 3,
+            "ysize": 2
+          }
+        },
+        {
+          "name": "Medium plate 5x3",
+          "description": "Five by three plain frame.",
+          "params": {
+            "xsize": 5,
+            "ysize": 3
+          }
+        },
+        {
+          "name": "Large plate 8x6",
+          "description": "Eight by six plain frame for a whole shelf.",
+          "params": {
+            "xsize": 8,
+            "ysize": 6
+          }
+        },
+        {
+          "name": "Weighted plate 4x3",
+          "description": "Thickened plate that screws down to the table.",
+          "params": {
+            "xsize": 4,
+            "ysize": 3,
+            "weighted": true,
+            "lid": false
+          }
+        },
+        {
+          "name": "Stacking lid 4x4",
+          "description": "Seven millimetre lid that magnets onto a plate below.",
+          "params": {
+            "xsize": 4,
+            "ysize": 4,
+            "lid": true
+          }
+        }
+      ]
+    },
+    "gridfinity_glue_stick": {
+      "label": "Gridfinity Glue Stick Holder",
+      "category": "Gridfinity",
+      "icon": "tube",
+      "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_glue_stick.scad",
+      "description": "Cup that grips a glue stick by its barrel, sized automatically from the stick diameter.",
+      "tags": [
+        "gridfinity",
+        "glue",
+        "stick",
+        "cup",
+        "holder",
+        "desk"
+      ],
+      "parameters": [
+        {
+          "variable": "cup_height",
+          "label": "Height",
+          "type": "integer",
+          "default": 5,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "Height",
+          "unit": "units",
+          "help": "Height in 7 mm grid units."
+        },
+        {
+          "variable": "stick_diameter",
+          "label": "Stick diameter",
+          "type": "number",
+          "default": 30,
+          "min": 5,
+          "max": 100,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Barrel diameter of the glue stick; sets the bore and the number of grid units."
+        },
+        {
+          "variable": "easement_z",
+          "label": "Lead in chamfer",
+          "type": "number",
+          "default": 0.7,
+          "min": 0,
+          "max": 5,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Height of the flared lead in at the top of the bore."
+        },
+        {
+          "variable": "minimum_wall",
+          "label": "Minimum wall",
+          "type": "number",
+          "default": 4,
+          "min": 0,
+          "max": 15,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Material kept between the bore and the outside; a larger value grows the holder."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Standard 30 mm stick",
+          "description": "One unit holder for a 30 mm barrel, five units tall.",
+          "params": {
+            "stick_diameter": 30,
+            "cup_height": 5
+          }
+        },
+        {
+          "name": "Small 20 mm stick",
+          "description": "Slim holder for a 20 mm barrel.",
+          "params": {
+            "stick_diameter": 20,
+            "cup_height": 4
+          }
+        },
+        {
+          "name": "Oversized 60 mm stick",
+          "description": "Two by two holder with a thick wall for a 60 mm barrel.",
+          "params": {
+            "stick_diameter": 60,
+            "minimum_wall": 6,
+            "cup_height": 6
+          }
+        },
+        {
+          "name": "Low holder",
+          "description": "Three units tall so the stick sits nearly flat on the plate.",
+          "params": {
+            "stick_diameter": 30,
+            "cup_height": 3
+          }
+        }
+      ]
+    },
+    "gridfinity_silverware": {
+      "label": "Gridfinity Silverware Tray",
+      "category": "Gridfinity",
+      "icon": "box",
+      "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_silverware.scad",
+      "description": "Tray whose slots are packed from up to fourteen width, narrow and length triples, so it also fits pens, cells and small tools.",
+      "tags": [
+        "gridfinity",
+        "silverware",
+        "cutlery",
+        "tray",
+        "organizer",
+        "desk",
+        "battery"
+      ],
+      "parameters": [
+        {
+          "variable": "number_of_utensils",
+          "label": "Slots",
+          "type": "integer",
+          "default": 7,
+          "min": 2,
+          "max": 8,
+          "step": 1,
+          "group": "General",
+          "help": "How many utensil definitions to pack; fewer than two breaks the layout maths."
+        },
+        {
+          "variable": "utensil_1_wide",
+          "label": "Slot 1 top width",
+          "type": "number",
+          "default": 28,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 1 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_1_narrow",
+          "label": "Slot 1 bottom width",
+          "type": "number",
+          "default": 15,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 1 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_1_length",
+          "label": "Slot 1 length",
+          "type": "number",
+          "default": 202,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 1."
+        },
+        {
+          "variable": "utensil_2_wide",
+          "label": "Slot 2 top width",
+          "type": "number",
+          "default": 24,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 2 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_2_narrow",
+          "label": "Slot 2 bottom width",
+          "type": "number",
+          "default": 14,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 2 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_2_length",
+          "label": "Slot 2 length",
+          "type": "number",
+          "default": 181,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 2."
+        },
+        {
+          "variable": "utensil_3_wide",
+          "label": "Slot 3 top width",
+          "type": "number",
+          "default": 37,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 3 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_3_narrow",
+          "label": "Slot 3 bottom width",
+          "type": "number",
+          "default": 14,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 3 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_3_length",
+          "label": "Slot 3 length",
+          "type": "number",
+          "default": 181,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 3."
+        },
+        {
+          "variable": "utensil_4_wide",
+          "label": "Slot 4 top width",
+          "type": "number",
+          "default": 33,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 4 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_4_narrow",
+          "label": "Slot 4 bottom width",
+          "type": "number",
+          "default": 12,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 4 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_4_length",
+          "label": "Slot 4 length",
+          "type": "number",
+          "default": 155,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 4."
+        },
+        {
+          "variable": "utensil_5_wide",
+          "label": "Slot 5 top width",
+          "type": "number",
+          "default": 32,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 5 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_5_narrow",
+          "label": "Slot 5 bottom width",
+          "type": "number",
+          "default": 15,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 5 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_5_length",
+          "label": "Slot 5 length",
+          "type": "number",
+          "default": 191,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 5."
+        },
+        {
+          "variable": "utensil_6_wide",
+          "label": "Slot 6 top width",
+          "type": "number",
+          "default": 32,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 6 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_6_narrow",
+          "label": "Slot 6 bottom width",
+          "type": "number",
+          "default": 15,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 6 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_6_length",
+          "label": "Slot 6 length",
+          "type": "number",
+          "default": 150,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 6."
+        },
+        {
+          "variable": "utensil_7_wide",
+          "label": "Slot 7 top width",
+          "type": "number",
+          "default": 24,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 7 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_7_narrow",
+          "label": "Slot 7 bottom width",
+          "type": "number",
+          "default": 16,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 7 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_7_length",
+          "label": "Slot 7 length",
+          "type": "number",
+          "default": 180,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 7."
+        },
+        {
+          "variable": "utensil_8_wide",
+          "label": "Slot 8 top width",
+          "type": "number",
+          "default": 28,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 8 at the top of the pocket."
+        },
+        {
+          "variable": "utensil_8_narrow",
+          "label": "Slot 8 bottom width",
+          "type": "number",
+          "default": 15,
+          "min": 1,
+          "max": 60,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Width of slot 8 at the bottom of the pocket."
+        },
+        {
+          "variable": "utensil_8_length",
+          "label": "Slot 8 length",
+          "type": "number",
+          "default": 202,
+          "min": 10,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Cutouts",
+          "help": "Length of slot 8."
+        },
+        {
+          "variable": "height_in_mm",
+          "label": "Wall height",
+          "type": "number",
+          "default": 35,
+          "min": 7,
+          "max": 70,
+          "step": 1,
+          "unit": "mm",
+          "group": "Height",
+          "help": "Height of the tray walls above the baseplate profile."
+        },
+        {
+          "variable": "separator_wall",
+          "label": "Separator wall",
+          "type": "number",
+          "default": 2,
+          "min": 0,
+          "max": 10,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Wall thickness between two neighbouring slots."
+        },
+        {
+          "variable": "margin",
+          "label": "Slot margin",
+          "type": "number",
+          "default": 1,
+          "min": 0,
+          "max": 10,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Clearance around each item on the sides and at the ends."
+        },
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet hole diameter",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 8,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Diameter of the magnet pockets; zero prints none."
+        },
+        {
+          "variable": "screw_depth",
+          "label": "Screw hole depth",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 6,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Hardware",
+          "help": "Depth of the M3 screw holes; zero prints none."
+        },
+        {
+          "variable": "floor_thickness",
+          "label": "Floor thickness",
+          "type": "number",
+          "default": 1,
+          "min": 0.1,
+          "max": 5,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Material left above the base cutouts."
+        }
+      ],
+      "presets": [
+        {
+          "name": "2x1 AA cells",
+          "description": "Two slots sized for AA cells.",
+          "params": {
+            "number_of_utensils": 2,
+            "utensil_1_wide": 14.5,
+            "utensil_1_narrow": 14.5,
+            "utensil_1_length": 50.5,
+            "utensil_2_wide": 14.5,
+            "utensil_2_narrow": 14.5,
+            "utensil_2_length": 50.5
+          }
+        },
+        {
+          "name": "4x1 AAA cells",
+          "description": "Four slots sized for AAA cells.",
+          "params": {
+            "number_of_utensils": 4,
+            "utensil_1_wide": 10.5,
+            "utensil_1_narrow": 10.5,
+            "utensil_1_length": 44.5,
+            "utensil_2_wide": 10.5,
+            "utensil_2_narrow": 10.5,
+            "utensil_2_length": 44.5,
+            "utensil_3_wide": 10.5,
+            "utensil_3_narrow": 10.5,
+            "utensil_3_length": 44.5,
+            "utensil_4_wide": 10.5,
+            "utensil_4_narrow": 10.5,
+            "utensil_4_length": 44.5
+          }
+        },
+        {
+          "name": "Four 18650 cells",
+          "description": "Four slots sized for 18650 li-ion cells.",
+          "params": {
+            "number_of_utensils": 4,
+            "utensil_1_wide": 18.6,
+            "utensil_1_narrow": 18.6,
+            "utensil_1_length": 65,
+            "utensil_2_wide": 18.6,
+            "utensil_2_narrow": 18.6,
+            "utensil_2_length": 65,
+            "utensil_3_wide": 18.6,
+            "utensil_3_narrow": 18.6,
+            "utensil_3_length": 65,
+            "utensil_4_wide": 18.6,
+            "utensil_4_narrow": 18.6,
+            "utensil_4_length": 65
+          }
+        },
+        {
+          "name": "9V battery",
+          "description": "Two slots, one for a 9 V battery and one spare.",
+          "params": {
+            "number_of_utensils": 2,
+            "utensil_1_wide": 26.5,
+            "utensil_1_narrow": 17.5,
+            "utensil_1_length": 48.5,
+            "utensil_2_wide": 26.5,
+            "utensil_2_narrow": 17.5,
+            "utensil_2_length": 48.5
+          }
+        },
+        {
+          "name": "Three pencils",
+          "description": "Three slots sized for 8 mm hexagonal pencils.",
+          "params": {
+            "number_of_utensils": 3,
+            "utensil_1_wide": 8,
+            "utensil_1_narrow": 8,
+            "utensil_1_length": 190,
+            "utensil_2_wide": 8,
+            "utensil_2_narrow": 8,
+            "utensil_2_length": 190,
+            "utensil_3_wide": 8,
+            "utensil_3_narrow": 8,
+            "utensil_3_length": 190
+          }
+        },
+        {
+          "name": "Four pens",
+          "description": "Four slots sized for 10 mm pens.",
+          "params": {
+            "number_of_utensils": 4,
+            "utensil_1_wide": 10,
+            "utensil_1_narrow": 10,
+            "utensil_1_length": 145,
+            "utensil_2_wide": 10,
+            "utensil_2_narrow": 10,
+            "utensil_2_length": 145,
+            "utensil_3_wide": 10,
+            "utensil_3_narrow": 10,
+            "utensil_3_length": 145,
+            "utensil_4_wide": 10,
+            "utensil_4_narrow": 10,
+            "utensil_4_length": 145
+          }
+        }
+      ]
+    },
+    "gridfinity_socket_holder": {
+      "label": "Gridfinity Socket Holder",
+      "category": "Gridfinity",
+      "icon": "front",
+      "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_socket_holder.scad",
+      "description": "Row of angled metric or imperial socket bores cut into a Gridfinity block, with the set name engraved on the front.",
+      "tags": [
+        "gridfinity",
+        "socket",
+        "holder",
+        "tools",
+        "wrench",
+        "workshop"
+      ],
+      "parameters": [
+        {
+          "variable": "part",
+          "label": "Socket set",
+          "type": "integer",
+          "default": 5,
+          "min": 1,
+          "max": 6,
+          "step": 1,
+          "group": "Style",
+          "options": [
+            {
+              "value": 1,
+              "label": "Metric wrench set (4 x 3 units)"
+            },
+            {
+              "value": 2,
+              "label": "Imperial wrench set (4 x 3 units)"
+            },
+            {
+              "value": 3,
+              "label": "Imperial sockets below 1/2\" (4 x 5 units)"
+            },
+            {
+              "value": 4,
+              "label": "Imperial sockets 1/2\" and up (3 x 3 units)"
+            },
+            {
+              "value": 5,
+              "label": "Metric sockets 7 mm and up (4 x 6 units)"
+            },
+            {
+              "value": 6,
+              "label": "Metric sockets below 7 mm (2 x 3 units)"
+            }
+          ],
+          "help": "Each set has its own bore diameters, socket count and engraved label."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Metric sockets 7 mm and up",
+          "description": "The default 4 x 6 unit metric socket block.",
+          "params": {
+            "part": 5
+          }
+        },
+        {
+          "name": "Metric wrench set",
+          "description": "Ten metric sockets in a 4 x 3 unit block.",
+          "params": {
+            "part": 1
+          }
+        },
+        {
+          "name": "Imperial wrench set",
+          "description": "Ten imperial sockets in a 4 x 3 unit block.",
+          "params": {
+            "part": 2
+          }
+        },
+        {
+          "name": "Small imperial sockets",
+          "description": "Eleven imperial sockets below 1/2\" in a 4 x 5 unit block.",
+          "params": {
+            "part": 3
+          }
+        },
+        {
+          "name": "Large imperial sockets",
+          "description": "Five imperial sockets of 1/2\" and up in a 3 x 3 unit block.",
+          "params": {
+            "part": 4
+          }
+        },
+        {
+          "name": "Small metric sockets",
+          "description": "Six metric sockets below 7 mm in a 2 x 3 unit block.",
+          "params": {
+            "part": 6
+          }
+        }
+      ]
+    },
+    "gridfinity_flsun_q5": {
+      "label": "Gridfinity FLSUN Q5 Adapter",
+      "category": "Gridfinity",
+      "icon": "bracket",
+      "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_flsun_q5.scad",
+      "description": "Four unit baseplate adapter with two M4 mounting ears that screw onto the frame of an FLSUN Q5 printer.",
+      "tags": [
+        "gridfinity",
+        "flsun",
+        "q5",
+        "printer",
+        "adapter",
+        "mount",
+        "baseplate"
+      ],
+      "parameters": [
+        {
+          "variable": "ear_hole_x",
+          "label": "Screw hole spacing",
+          "type": "number",
+          "default": 182.5,
+          "min": 168,
+          "max": 300,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Distance between the two existing M4 screw holes; 182.5 mm is the stock Q5."
+        },
+        {
+          "variable": "ear_hole_y",
+          "label": "Screw hole offset",
+          "type": "number",
+          "default": 7,
+          "min": 0,
+          "max": 40,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Dimensions",
+          "help": "Distance of the screw holes from the front edge of the frame."
+        },
+        {
+          "variable": "cube_z",
+          "label": "Ear height",
+          "type": "number",
+          "default": 4.4,
+          "min": 2,
+          "max": 20,
+          "step": 0.2,
+          "unit": "mm",
+          "group": "Height",
+          "help": "Thickness of the two mounting ears; the plate itself stays 5 mm."
+        }
+      ],
+      "presets": [
+        {
+          "name": "Stock FLSUN Q5",
+          "description": "Factory 182.5 mm hole spacing and 4.4 mm ears.",
+          "params": {
+            "ear_hole_x": 182.5,
+            "ear_hole_y": 7,
+            "cube_z": 4.4
+          }
+        },
+        {
+          "name": "Widely spaced holes",
+          "description": "220 mm spacing for frames with wider mounts.",
+          "params": {
+            "ear_hole_x": 220,
+            "ear_hole_y": 7
+          }
+        },
+        {
+          "name": "Thick ears",
+          "description": "8 mm ears for a stiffer mount.",
+          "params": {
+            "ear_hole_x": 182.5,
+            "cube_z": 8
+          }
+        },
+        {
+          "name": "Low profile ears",
+          "description": "2.6 mm ears that stay under the plate height.",
+          "params": {
+            "ear_hole_x": 182.5,
+            "cube_z": 2.6
+          }
+        }
+      ]
+    },
+    "metric_bolt": {
+      "label": "Metric Hex Bolt",
+      "category": "Fasteners",
+      "icon": "bracket",
+      "source": "objects/wrappers/metric_bolt.scad",
+      "description": "Row of printable metric hex-head bolts with a hex key drive, sized from the standard pitch table.",
+      "parameters": [
+        {
+          "variable": "bolt_diameter",
+          "label": "Thread diameter",
+          "type": "number",
+          "default": 4,
+          "min": 2,
+          "max": 12,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Nominal metric size, for example 3, 4, 5, 6 or 8 for M3 to M8."
+        },
+        {
+          "variable": "bolt_length",
+          "label": "Shank length",
+          "type": "number",
+          "default": 16,
+          "min": 4,
+          "max": 80,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Length of the threaded shank below the head."
+        },
+        {
+          "variable": "bolt_quantity",
+          "label": "How many",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "group": "General",
+          "help": "Number of bolts printed in the row."
+        },
+        {
+          "variable": "bolt_pitch",
+          "label": "Spacing",
+          "type": "number",
+          "default": 12,
+          "min": 4,
+          "max": 40,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Centre-to-centre distance of the bolts; keep it wider than the head."
+        },
+        {
+          "variable": "bolt_tolerance",
+          "label": "Tolerance",
+          "type": "number",
+          "default": 0.4,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "group": "Style",
+          "help": "Shrinkage allowance; raise it when the printed thread feels tight."
+        }
+      ],
+      "tags": [
+        "bolt",
+        "screw",
+        "thread",
+        "hardware",
+        "metric"
+      ],
+      "presets": [
+        {
+          "name": "M3 x 12",
+          "description": "Small machine screws for electronics.",
+          "params": {
+            "bolt_diameter": 3,
+            "bolt_length": 12,
+            "bolt_pitch": 10
+          }
+        },
+        {
+          "name": "M4 x 16",
+          "description": "General purpose workshop bolt.",
+          "params": {
+            "bolt_diameter": 4,
+            "bolt_length": 16,
+            "bolt_pitch": 10
+          }
+        },
+        {
+          "name": "M5 x 20",
+          "description": "Medium bolt for flat-pack style joints.",
+          "params": {
+            "bolt_diameter": 5,
+            "bolt_length": 20,
+            "bolt_pitch": 12
+          }
+        },
+        {
+          "name": "M6 x 25",
+          "description": "Structural bolt for frames and brackets.",
+          "params": {
+            "bolt_diameter": 6,
+            "bolt_length": 25,
+            "bolt_pitch": 14
+          }
+        },
+        {
+          "name": "M8 x 30",
+          "description": "Heavy duty bolt with a large hex head.",
+          "params": {
+            "bolt_diameter": 8,
+            "bolt_length": 30,
+            "bolt_pitch": 18
+          }
+        }
+      ]
+    },
+    "metric_nut": {
+      "label": "Metric Hex Nut",
+      "category": "Fasteners",
+      "icon": "cube",
+      "source": "objects/wrappers/metric_nut.scad",
+      "description": "Row of printable metric hex nuts, each with a matching washer laid out beside it.",
+      "parameters": [
+        {
+          "variable": "nut_diameter",
+          "label": "Thread diameter",
+          "type": "number",
+          "default": 4,
+          "min": 2,
+          "max": 12,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Nominal metric size, for example 3, 4, 5, 6 or 8 for M3 to M8."
+        },
+        {
+          "variable": "nut_thickness",
+          "label": "Thickness",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 20,
+          "step": 0.1,
+          "group": "Dimensions",
+          "help": "0 uses the standard nut thickness for that diameter."
+        },
+        {
+          "variable": "nut_quantity",
+          "label": "How many",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "group": "General",
+          "help": "Number of nut and washer pairs printed in the row."
+        },
+        {
+          "variable": "nut_pitch",
+          "label": "Spacing",
+          "type": "number",
+          "default": 12,
+          "min": 4,
+          "max": 40,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Centre-to-centre distance of the pairs; keep it wider than the washer."
+        },
+        {
+          "variable": "nut_tolerance",
+          "label": "Tolerance",
+          "type": "number",
+          "default": 0.4,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "group": "Style",
+          "help": "Shrinkage allowance for the internal thread and the hex corners."
+        }
+      ],
+      "tags": [
+        "nut",
+        "bolt",
+        "screw",
+        "washer",
+        "hardware",
+        "metric"
+      ],
+      "presets": [
+        {
+          "name": "M3",
+          "description": "Nuts and washers for small electronics screws.",
+          "params": {
+            "nut_diameter": 3,
+            "nut_pitch": 8
+          }
+        },
+        {
+          "name": "M4",
+          "description": "Common workshop nut size.",
+          "params": {
+            "nut_diameter": 4,
+            "nut_pitch": 10
+          }
+        },
+        {
+          "name": "M5",
+          "description": "Medium nut with a standard thickness.",
+          "params": {
+            "nut_diameter": 5,
+            "nut_pitch": 12
+          }
+        },
+        {
+          "name": "M6",
+          "description": "Structural nut for frames.",
+          "params": {
+            "nut_diameter": 6,
+            "nut_pitch": 14
+          }
+        },
+        {
+          "name": "M8",
+          "description": "Heavy duty nut, wide spacing for the large washer.",
+          "params": {
+            "nut_diameter": 8,
+            "nut_pitch": 20
+          }
+        }
+      ]
+    },
+    "metric_countersunk_bolt": {
+      "label": "Metric Countersunk Bolt",
+      "category": "Fasteners",
+      "icon": "top",
+      "source": "objects/wrappers/metric_countersunk_bolt.scad",
+      "description": "Row of flat-head metric bolts that sit flush in a countersunk hole, driven by a hex key.",
+      "parameters": [
+        {
+          "variable": "bolt_diameter",
+          "label": "Thread diameter",
+          "type": "number",
+          "default": 4,
+          "min": 2,
+          "max": 12,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Nominal metric size, for example 3, 4, 5, 6 or 8 for M3 to M8."
+        },
+        {
+          "variable": "bolt_length",
+          "label": "Overall length",
+          "type": "number",
+          "default": 16,
+          "min": 4,
+          "max": 80,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Total length including the countersunk head."
+        },
+        {
+          "variable": "bolt_quantity",
+          "label": "How many",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "group": "General",
+          "help": "Number of bolts printed in the row."
+        },
+        {
+          "variable": "bolt_pitch",
+          "label": "Spacing",
+          "type": "number",
+          "default": 12,
+          "min": 4,
+          "max": 40,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Centre-to-centre distance of the bolts; keep it wider than the head."
+        },
+        {
+          "variable": "bolt_tolerance",
+          "label": "Tolerance",
+          "type": "number",
+          "default": 0.4,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "group": "Style",
+          "help": "Shrinkage allowance for the thread and the hex drive."
+        }
+      ],
+      "tags": [
+        "bolt",
+        "screw",
+        "countersunk",
+        "hardware",
+        "metric"
+      ],
+      "presets": [
+        {
+          "name": "M3 x 8",
+          "description": "Flush small screw for thin panels.",
+          "params": {
+            "bolt_diameter": 3,
+            "bolt_length": 8,
+            "bolt_pitch": 8
+          }
+        },
+        {
+          "name": "M4 x 10",
+          "description": "Flush screw for general panels.",
+          "params": {
+            "bolt_diameter": 4,
+            "bolt_length": 10,
+            "bolt_pitch": 10
+          }
+        },
+        {
+          "name": "M5 x 12",
+          "description": "Flat head for slightly thicker stock.",
+          "params": {
+            "bolt_diameter": 5,
+            "bolt_length": 12,
+            "bolt_pitch": 12
+          }
+        },
+        {
+          "name": "M6 x 16",
+          "description": "Flush structural screw.",
+          "params": {
+            "bolt_diameter": 6,
+            "bolt_length": 16,
+            "bolt_pitch": 14
+          }
+        },
+        {
+          "name": "M8 x 20",
+          "description": "Large flush head for thick parts.",
+          "params": {
+            "bolt_diameter": 8,
+            "bolt_length": 20,
+            "bolt_pitch": 20
+          }
+        }
+      ]
+    },
+    "metric_wood_screw": {
+      "label": "Metric Wood Screw",
+      "category": "Fasteners",
+      "icon": "bracket",
+      "source": "objects/wrappers/metric_wood_screw.scad",
+      "description": "Row of printable countersunk wood screws with a Phillips tip and a coarse thread.",
+      "parameters": [
+        {
+          "variable": "screw_diameter",
+          "label": "Screw diameter",
+          "type": "number",
+          "default": 4,
+          "min": 3,
+          "max": 12,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Shank diameter, for example 3.5, 4, 5 or 6 for common wood screws."
+        },
+        {
+          "variable": "screw_length",
+          "label": "Overall length",
+          "type": "number",
+          "default": 30,
+          "min": 8,
+          "max": 120,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Total length including the countersunk head."
+        },
+        {
+          "variable": "screw_quantity",
+          "label": "How many",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "group": "General",
+          "help": "Number of screws printed in the row."
+        },
+        {
+          "variable": "screw_pitch",
+          "label": "Spacing",
+          "type": "number",
+          "default": 12,
+          "min": 4,
+          "max": 40,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Centre-to-centre distance of the screws; keep it wider than the head."
+        },
+        {
+          "variable": "screw_tolerance",
+          "label": "Tolerance",
+          "type": "number",
+          "default": 0.4,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "group": "Style",
+          "help": "Shrinkage allowance for the thread and the Phillips tip."
+        }
+      ],
+      "tags": [
+        "screw",
+        "wood",
+        "phillips",
+        "hardware",
+        "metric"
+      ],
+      "presets": [
+        {
+          "name": "3.5 x 30",
+          "description": "Small screw for light timber and boxes.",
+          "params": {
+            "screw_diameter": 3.5,
+            "screw_length": 30,
+            "screw_pitch": 10
+          }
+        },
+        {
+          "name": "4 x 40",
+          "description": "Common size for shelves and frames.",
+          "params": {
+            "screw_diameter": 4,
+            "screw_length": 40,
+            "screw_pitch": 12
+          }
+        },
+        {
+          "name": "5 x 50",
+          "description": "Thicker screw for hardwood joints.",
+          "params": {
+            "screw_diameter": 5,
+            "screw_length": 50,
+            "screw_pitch": 14
+          }
+        },
+        {
+          "name": "6 x 70",
+          "description": "Long structural screw for thick timber.",
+          "params": {
+            "screw_diameter": 6,
+            "screw_length": 70,
+            "screw_pitch": 16
+          }
+        }
+      ]
+    },
+    "threaded_rod": {
+      "label": "Threaded Rod",
+      "category": "Fasteners",
+      "icon": "cylinder",
+      "source": "objects/wrappers/threaded_rod.scad",
+      "description": "Single fully threaded rod with an optional flat unthreaded land at the bottom so it can stand up while printing.",
+      "parameters": [
+        {
+          "variable": "rod_diameter",
+          "label": "Thread diameter",
+          "type": "number",
+          "default": 6,
+          "min": 2,
+          "max": 24,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Nominal metric thread diameter."
+        },
+        {
+          "variable": "rod_length",
+          "label": "Rod length",
+          "type": "number",
+          "default": 40,
+          "min": 5,
+          "max": 300,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Overall length of the threaded rod."
+        },
+        {
+          "variable": "rod_flat_length",
+          "label": "Flat land",
+          "type": "number",
+          "default": 6,
+          "min": 0,
+          "max": 40,
+          "step": 0.5,
+          "group": "Style",
+          "help": "Height of the unthreaded land at the base; 0 threads the whole length."
+        },
+        {
+          "variable": "rod_tolerance",
+          "label": "Tolerance",
+          "type": "number",
+          "default": 0.4,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "group": "Style",
+          "help": "Shrinkage allowance for the printed thread."
+        }
+      ],
+      "tags": [
+        "rod",
+        "thread",
+        "bolt",
+        "hardware",
+        "metric"
+      ],
+      "presets": [
+        {
+          "name": "M6 x 40",
+          "description": "Short rod that stands on its flat land.",
+          "params": {
+            "rod_diameter": 6,
+            "rod_length": 40,
+            "rod_flat_length": 6
+          }
+        },
+        {
+          "name": "M5 x 25",
+          "description": "Small threaded stud for light fixtures.",
+          "params": {
+            "rod_diameter": 5,
+            "rod_length": 25,
+            "rod_flat_length": 5
+          }
+        },
+        {
+          "name": "M8 x 100",
+          "description": "Long rod for stacking and clamping.",
+          "params": {
+            "rod_diameter": 8,
+            "rod_length": 100,
+            "rod_flat_length": 8
+          }
+        },
+        {
+          "name": "M10 x 200",
+          "description": "Long heavy threaded bar.",
+          "params": {
+            "rod_diameter": 10,
+            "rod_length": 200,
+            "rod_flat_length": 10
+          }
+        },
+        {
+          "name": "M8 fully threaded",
+          "description": "No flat land, so the thread runs the whole length.",
+          "params": {
+            "rod_diameter": 8,
+            "rod_length": 120,
+            "rod_flat_length": 0
+          }
+        }
+      ]
+    },
+    "hole_coupon": {
+      "label": "Hole Coupon",
+      "category": "Fasteners",
+      "icon": "grid",
+      "source": "objects/wrappers/hole_coupon.scad",
+      "description": "Flat test coupon with one clearance, countersunk or tapped hole so you can check your printer before committing to a part.",
+      "parameters": [
+        {
+          "variable": "hole_style",
+          "label": "Hole type",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2,
+          "step": 1,
+          "options": [
+            {
+              "value": 0,
+              "label": "Clearance"
+            },
+            {
+              "value": 1,
+              "label": "Countersunk"
+            },
+            {
+              "value": 2,
+              "label": "Tapped"
+            }
+          ],
+          "group": "Cutouts",
+          "help": "Clearance for a bolt to pass, countersunk for a flat head, or tapped for a printed thread."
+        },
+        {
+          "variable": "hole_diameter",
+          "label": "Hole diameter",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 20,
+          "step": 0.5,
+          "group": "Cutouts",
+          "help": "Nominal diameter of the hole, matching the screw or bolt."
+        },
+        {
+          "variable": "hole_depth",
+          "label": "Thread depth",
+          "type": "number",
+          "default": 8,
+          "min": 1,
+          "max": 100,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "Depth of the tapped hole; other hole types go through the coupon."
+        },
+        {
+          "variable": "sink_diameter",
+          "label": "Sink diameter",
+          "type": "number",
+          "default": 6,
+          "min": 1,
+          "max": 40,
+          "step": 0.5,
+          "group": "Cutouts",
+          "help": "Head diameter of the countersunk version; keep it larger than the hole."
+        },
+        {
+          "variable": "coupon_length",
+          "label": "Coupon length",
+          "type": "number",
+          "default": 40,
+          "min": 20,
+          "max": 200,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Length of the coupon along the hole axis."
+        },
+        {
+          "variable": "coupon_width",
+          "label": "Coupon width",
+          "type": "number",
+          "default": 30,
+          "min": 20,
+          "max": 200,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Width of the coupon across the hole."
+        },
+        {
+          "variable": "coupon_thickness",
+          "label": "Coupon thickness",
+          "type": "number",
+          "default": 8,
+          "min": 2,
+          "max": 40,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Thickness of the coupon the hole is drilled through."
+        },
+        {
+          "variable": "hole_offset",
+          "label": "Hole offset",
+          "type": "number",
+          "default": 0,
+          "min": -80,
+          "max": 80,
+          "step": 1,
+          "group": "General",
+          "help": "Distance of the hole from the left edge of the coupon."
+        },
+        {
+          "variable": "hole_tolerance",
+          "label": "Tolerance",
+          "type": "number",
+          "default": 0.3,
+          "min": 0,
+          "max": 1,
+          "step": 0.05,
+          "group": "Style",
+          "help": "Shrinkage allowance added to the hole."
+        }
+      ],
+      "tags": [
+        "bolt",
+        "screw",
+        "nut",
+        "clearance",
+        "countersunk",
+        "tapped",
+        "test"
+      ],
+      "presets": [
+        {
+          "name": "M3 clearance",
+          "description": "Check that an M3 bolt passes through the hole.",
+          "params": {
+            "hole_style": 0,
+            "hole_diameter": 3,
+            "hole_offset": 15
+          }
+        },
+        {
+          "name": "M4 clearance",
+          "description": "Check that an M4 bolt passes through the hole.",
+          "params": {
+            "hole_style": 0,
+            "hole_diameter": 4,
+            "hole_offset": 15
+          }
+        },
+        {
+          "name": "M3 countersunk",
+          "description": "Check that an M3 flat head sits flush.",
+          "params": {
+            "hole_style": 1,
+            "hole_diameter": 3,
+            "sink_diameter": 6.5,
+            "hole_offset": 15
+          }
+        },
+        {
+          "name": "M4 tapped",
+          "description": "Print a short M4 thread to screw into.",
+          "params": {
+            "hole_style": 2,
+            "hole_diameter": 4,
+            "hole_depth": 10,
+            "hole_offset": 15
+          }
+        },
+        {
+          "name": "M5 clearance, offset hole",
+          "description": "A bigger clearance hole placed away from the edge.",
+          "params": {
+            "hole_style": 0,
+            "hole_diameter": 5,
+            "hole_offset": 25,
+            "coupon_length": 60
+          }
+        }
+      ]
+    },
+    "battery_holder": {
+      "label": "Battery Holder",
+      "category": "Organization",
+      "icon": "bin",
+      "source": "objects/battery_holder.scad",
+      "description": "Tray that holds a row of AA, AAA, 18650 cells or 9 V block batteries in snap-in pockets.",
+      "parameters": [
+        {
+          "variable": "cell_type",
+          "label": "Cell type",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 3,
+          "step": 1,
+          "options": [
+            {
+              "value": 0,
+              "label": "AA"
+            },
+            {
+              "value": 1,
+              "label": "AAA"
+            },
+            {
+              "value": 2,
+              "label": "18650"
+            },
+            {
+              "value": 3,
+              "label": "9 V block"
+            }
+          ],
+          "group": "General",
+          "help": "Battery size the pockets are cut for."
+        },
+        {
+          "variable": "cell_count",
+          "label": "How many cells",
+          "type": "integer",
+          "default": 4,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "General",
+          "help": "Number of pockets in the row."
+        },
+        {
+          "variable": "cell_clearance",
+          "label": "Cell clearance",
+          "type": "number",
+          "default": 0.7,
+          "min": 0,
+          "max": 3,
+          "step": 0.1,
+          "group": "Dimensions",
+          "help": "Extra room around each cell; raise it if your printer runs tight."
+        },
+        {
+          "variable": "pocket_depth",
+          "label": "Pocket depth",
+          "type": "number",
+          "default": 32,
+          "min": 5,
+          "max": 120,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "How far the cell sinks into the tray."
+        },
+        {
+          "variable": "floor_thickness",
+          "label": "Floor thickness",
+          "type": "number",
+          "default": 2,
+          "min": 1,
+          "max": 10,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Solid floor under the pockets."
+        },
+        {
+          "variable": "wall_height",
+          "label": "Rim height",
+          "type": "number",
+          "default": 8,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "Rim around the tray that stops the cells falling out."
+        },
+        {
+          "variable": "wall_thickness",
+          "label": "Wall thickness",
+          "type": "number",
+          "default": 2,
+          "min": 0.5,
+          "max": 10,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the ribs between neighbouring pockets."
+        }
+      ],
+      "tags": [
+        "battery",
+        "aa",
+        "aaa",
+        "18650",
+        "holder",
+        "tray"
+      ],
+      "presets": [
+        {
+          "name": "AA x 4",
+          "description": "Four AA cells in a rimmed tray.",
+          "params": {
+            "cell_type": 0,
+            "cell_count": 4
+          }
+        },
+        {
+          "name": "AA x 8",
+          "description": "Long eight cell AA tray.",
+          "params": {
+            "cell_type": 0,
+            "cell_count": 8,
+            "wall_height": 6
+          }
+        },
+        {
+          "name": "AAA x 6",
+          "description": "Six AAA cells for a remote control bank.",
+          "params": {
+            "cell_type": 1,
+            "cell_count": 6,
+            "pocket_depth": 30
+          }
+        },
+        {
+          "name": "18650 x 2",
+          "description": "Two lithium cells in deep pockets.",
+          "params": {
+            "cell_type": 2,
+            "cell_count": 2,
+            "pocket_depth": 40,
+            "wall_height": 10
+          }
+        },
+        {
+          "name": "9 V block x 2",
+          "description": "Two rectangular 9 V batteries lying flat.",
+          "params": {
+            "cell_type": 3,
+            "cell_count": 2,
+            "pocket_depth": 20,
+            "wall_height": 12
+          }
+        },
+        {
+          "name": "Single AA",
+          "description": "One cell with a tall rim so it cannot be tipped out.",
+          "params": {
+            "cell_type": 0,
+            "cell_count": 1,
+            "wall_height": 14,
+            "cell_clearance": 1
+          }
+        }
+      ]
+    },
+    "pcb_mount": {
+      "label": "PCB Mount",
+      "category": "Organization",
+      "icon": "plate",
+      "source": "objects/pcb_mount.scad",
+      "description": "Base plate that carries a printed circuit board on four screw-in stand-offs, optionally with a retaining rim.",
+      "parameters": [
+        {
+          "variable": "board_length",
+          "label": "Board length",
+          "type": "number",
+          "default": 85,
+          "min": 20,
+          "max": 300,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Length of the board the mount is cut for."
+        },
+        {
+          "variable": "board_width",
+          "label": "Board width",
+          "type": "number",
+          "default": 56,
+          "min": 20,
+          "max": 300,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Width of the board the mount is cut for."
+        },
+        {
+          "variable": "hole_spacing_x",
+          "label": "Hole spacing X",
+          "type": "number",
+          "default": 58,
+          "min": 0,
+          "max": 280,
+          "step": 1,
+          "group": "Hardware",
+          "help": "Distance between the stand-off centres along the board length."
+        },
+        {
+          "variable": "hole_spacing_y",
+          "label": "Hole spacing Y",
+          "type": "number",
+          "default": 49,
+          "min": 0,
+          "max": 280,
+          "step": 1,
+          "group": "Hardware",
+          "help": "Distance between the stand-off centres across the board width."
+        },
+        {
+          "variable": "mount_hole_diameter",
+          "label": "Mount hole diameter",
+          "type": "number",
+          "default": 3.2,
+          "min": 2,
+          "max": 12,
+          "step": 0.2,
+          "group": "Hardware",
+          "help": "Hole in each stand-off for an M3 screw."
+        },
+        {
+          "variable": "standoff_diameter",
+          "label": "Stand-off diameter",
+          "type": "number",
+          "default": 6,
+          "min": 2,
+          "max": 30,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Outside diameter of the four posts under the board."
+        },
+        {
+          "variable": "standoff_height",
+          "label": "Stand-off height",
+          "type": "number",
+          "default": 8,
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "group": "Height",
+          "help": "Gap between the base plate and the underside of the board."
+        },
+        {
+          "variable": "base_thickness",
+          "label": "Base thickness",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 15,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the plate under the board."
+        },
+        {
+          "variable": "wall_height",
+          "label": "Rim height",
+          "type": "number",
+          "default": 4,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "Rim that traps the board; 0 leaves bare stand-offs."
+        }
+      ],
+      "tags": [
+        "pcb",
+        "board",
+        "mount",
+        "stand-off",
+        "electronics"
+      ],
+      "presets": [
+        {
+          "name": "Raspberry Pi size",
+          "description": "Tall stand-offs for airflow under a single board computer.",
+          "params": {
+            "board_length": 85,
+            "board_width": 56,
+            "hole_spacing_x": 58,
+            "hole_spacing_y": 49,
+            "standoff_height": 10
+          }
+        },
+        {
+          "name": "Small board",
+          "description": "Compact mount for a small microcontroller board.",
+          "params": {
+            "board_length": 50,
+            "board_width": 40,
+            "hole_spacing_x": 40,
+            "hole_spacing_y": 30,
+            "standoff_height": 6
+          }
+        },
+        {
+          "name": "Large board",
+          "description": "Wide mount for a big board with room around the edges.",
+          "params": {
+            "board_length": 120,
+            "board_width": 80,
+            "hole_spacing_x": 100,
+            "hole_spacing_y": 65,
+            "standoff_height": 12,
+            "base_thickness": 4
+          }
+        },
+        {
+          "name": "Bare stand-offs",
+          "description": "No rim, so the board just sits on four posts.",
+          "params": {
+            "wall_height": 0,
+            "standoff_height": 10,
+            "standoff_diameter": 7
+          }
+        },
+        {
+          "name": "Shallow tray",
+          "description": "Low rim and short posts for a bench-top board.",
+          "params": {
+            "wall_height": 6,
+            "standoff_height": 4,
+            "base_thickness": 2.5
+          }
+        }
+      ]
+    },
+    "cable_clip": {
+      "label": "Cable Clip",
+      "category": "Organization",
+      "icon": "tube",
+      "source": "objects/cable_clip.scad",
+      "description": "Screw-down clip run that holds a row of round cables against a wall, panel or desk.",
+      "parameters": [
+        {
+          "variable": "cable_diameter",
+          "label": "Cable diameter",
+          "type": "number",
+          "default": 6,
+          "min": 1.5,
+          "max": 20,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Outside diameter of the cable that has to fit in the clip."
+        },
+        {
+          "variable": "clip_count",
+          "label": "How many clips",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 8,
+          "step": 1,
+          "group": "General",
+          "help": "Number of clips printed in the row."
+        },
+        {
+          "variable": "clip_pitch",
+          "label": "Clip spacing",
+          "type": "number",
+          "default": 14,
+          "min": 6,
+          "max": 40,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Centre-to-centre distance of the clips along the run."
+        },
+        {
+          "variable": "base_thickness",
+          "label": "Base thickness",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 10,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the plate the clips stand on."
+        },
+        {
+          "variable": "base_margin",
+          "label": "Edge margin",
+          "type": "number",
+          "default": 8,
+          "min": 2,
+          "max": 20,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Free material around the clips, where the screw holes sit."
+        },
+        {
+          "variable": "web_thickness",
+          "label": "Web thickness",
+          "type": "number",
+          "default": 1.5,
+          "min": 0.8,
+          "max": 5,
+          "step": 0.1,
+          "group": "Style",
+          "help": "Material left between the cable and the outside of the clip."
+        },
+        {
+          "variable": "clip_height",
+          "label": "Clip height",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 30,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the clip above the base; 0 fits the cable automatically."
+        },
+        {
+          "variable": "open_top",
+          "label": "Open top",
+          "type": "boolean",
+          "default": true,
+          "group": "Style",
+          "help": "On leaves an open cradle the cable drops into; off closes a full ring around it."
+        },
+        {
+          "variable": "mount_hole_diameter",
+          "label": "Screw hole diameter",
+          "type": "number",
+          "default": 4,
+          "min": 2,
+          "max": 12,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Through holes in the base, one pair beside each clip."
+        }
+      ],
+      "tags": [
+        "cable",
+        "wire",
+        "clip",
+        "wall",
+        "organizer"
+      ],
+      "presets": [
+        {
+          "name": "Signal wires",
+          "description": "Four small clips for 2.5 mm wires.",
+          "params": {
+            "cable_diameter": 2.5,
+            "clip_count": 4,
+            "clip_pitch": 6,
+            "base_margin": 6,
+            "web_thickness": 1,
+            "mount_hole_diameter": 3
+          }
+        },
+        {
+          "name": "USB cable",
+          "description": "Two clips sized for a USB lead.",
+          "params": {
+            "cable_diameter": 4.5,
+            "clip_count": 2,
+            "clip_pitch": 10,
+            "mount_hole_diameter": 4
+          }
+        },
+        {
+          "name": "6 mm hose",
+          "description": "Two sturdy clips for small hose or cable.",
+          "params": {
+            "cable_diameter": 6,
+            "clip_count": 2,
+            "clip_pitch": 14,
+            "mount_hole_diameter": 5
+          }
+        },
+        {
+          "name": "Mains lead, closed rings",
+          "description": "Three closed rings that a thick lead slides into from the end.",
+          "params": {
+            "cable_diameter": 10,
+            "clip_count": 3,
+            "clip_pitch": 20,
+            "open_top": false,
+            "base_thickness": 4,
+            "base_margin": 10,
+            "mount_hole_diameter": 6
+          }
+        },
+        {
+          "name": "Single hose clamp",
+          "description": "One wide clip with thick walls for a 8 mm hose.",
+          "params": {
+            "cable_diameter": 8,
+            "clip_count": 1,
+            "clip_pitch": 16,
+            "web_thickness": 2
+          }
+        }
+      ]
+    },
+    "device_stand": {
+      "label": "Phone or Tablet Stand",
+      "category": "Organization",
+      "icon": "front",
+      "source": "objects/device_stand.scad",
+      "description": "Wedge stand with a leaning back panel and a front lip that holds a phone or small tablet upright.",
+      "parameters": [
+        {
+          "variable": "stand_width",
+          "label": "Stand width",
+          "type": "number",
+          "default": 90,
+          "min": 40,
+          "max": 320,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Width across the device; a few millimetres wider than it is ideal."
+        },
+        {
+          "variable": "stand_depth",
+          "label": "Stand depth",
+          "type": "number",
+          "default": 70,
+          "min": 20,
+          "max": 200,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Depth of the base; keep enough behind the device to stop it tipping."
+        },
+        {
+          "variable": "stand_height",
+          "label": "Stand height",
+          "type": "number",
+          "default": 65,
+          "min": 20,
+          "max": 300,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the top of the leaning back panel."
+        },
+        {
+          "variable": "lean_angle",
+          "label": "Lean angle",
+          "type": "number",
+          "default": 20,
+          "min": 5,
+          "max": 60,
+          "step": 1,
+          "group": "Style",
+          "help": "How far the back panel tips back from vertical, in degrees."
+        },
+        {
+          "variable": "wall_thickness",
+          "label": "Panel thickness",
+          "type": "number",
+          "default": 4,
+          "min": 1.5,
+          "max": 12,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the back panel and the front lip."
+        },
+        {
+          "variable": "base_thickness",
+          "label": "Base thickness",
+          "type": "number",
+          "default": 4,
+          "min": 1.5,
+          "max": 12,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the base the device rests on."
+        },
+        {
+          "variable": "lip_height",
+          "label": "Lip height",
+          "type": "number",
+          "default": 12,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the front lip that keeps the device from sliding out."
+        },
+        {
+          "variable": "device_thickness",
+          "label": "Device thickness",
+          "type": "number",
+          "default": 11,
+          "min": 1,
+          "max": 30,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the device, including its case."
+        },
+        {
+          "variable": "slot_clearance",
+          "label": "Slot clearance",
+          "type": "number",
+          "default": 1.5,
+          "min": 0,
+          "max": 6,
+          "step": 0.5,
+          "group": "Style",
+          "help": "Extra gap in the slot so the device drops in without a fight."
+        }
+      ],
+      "tags": [
+        "phone",
+        "tablet",
+        "stand",
+        "desk",
+        "holder"
+      ],
+      "presets": [
+        {
+          "name": "Small phone",
+          "description": "Compact stand for a bare phone.",
+          "params": {
+            "stand_width": 75,
+            "stand_depth": 50,
+            "stand_height": 55,
+            "device_thickness": 9,
+            "lean_angle": 15,
+            "wall_thickness": 3.5,
+            "base_thickness": 3.5
+          }
+        },
+        {
+          "name": "Phone in portrait",
+          "description": "Default stand for a phone in a normal case.",
+          "params": {
+            "stand_width": 85,
+            "stand_depth": 60,
+            "stand_height": 70,
+            "device_thickness": 11,
+            "lean_angle": 20
+          }
+        },
+        {
+          "name": "Tablet in a case",
+          "description": "Wider, lower stand with a tall lip for a cased tablet.",
+          "params": {
+            "stand_width": 140,
+            "stand_depth": 90,
+            "stand_height": 95,
+            "device_thickness": 13,
+            "lean_angle": 25,
+            "wall_thickness": 5,
+            "lip_height": 16
+          }
+        },
+        {
+          "name": "Desk monitor",
+          "description": "Wide heavy stand for a small monitor or tablet.",
+          "params": {
+            "stand_width": 160,
+            "stand_depth": 110,
+            "stand_height": 70,
+            "device_thickness": 20,
+            "lean_angle": 12,
+            "wall_thickness": 6,
+            "lip_height": 18
+          }
+        }
+      ]
+    },
+    "wall_hook": {
+      "label": "Wall Hook",
+      "category": "Organization",
+      "icon": "iso",
+      "source": "objects/wall_hook.scad",
+      "description": "J-shaped wall hook with a gusset, printed flat with the mounting face on the bed.",
+      "parameters": [
+        {
+          "variable": "hook_reach",
+          "label": "Hook reach",
+          "type": "number",
+          "default": 30,
+          "min": 12,
+          "max": 120,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "How far the hook projects from the wall."
+        },
+        {
+          "variable": "hook_diameter",
+          "label": "Hook diameter",
+          "type": "number",
+          "default": 8,
+          "min": 4,
+          "max": 30,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the round arm the item hangs on."
+        },
+        {
+          "variable": "back_height",
+          "label": "Back height",
+          "type": "number",
+          "default": 22,
+          "min": 0,
+          "max": 80,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the back plate above the hook arm."
+        },
+        {
+          "variable": "upturn",
+          "label": "Upturn",
+          "type": "number",
+          "default": 10,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "How far the tip of the hook turns upwards."
+        },
+        {
+          "variable": "base_thickness",
+          "label": "Plate thickness",
+          "type": "number",
+          "default": 4,
+          "min": 2,
+          "max": 10,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the mounting plate."
+        },
+        {
+          "variable": "mount_style",
+          "label": "Mounting",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 2,
+          "step": 1,
+          "options": [
+            {
+              "value": 0,
+              "label": "Screw holes"
+            },
+            {
+              "value": 1,
+              "label": "Glue pad"
+            },
+            {
+              "value": 2,
+              "label": "Pad and holes"
+            }
+          ],
+          "group": "Hardware",
+          "help": "Fix it with screws, with a glue pad, or with both."
+        },
+        {
+          "variable": "mount_hole_diameter",
+          "label": "Screw hole diameter",
+          "type": "number",
+          "default": 5,
+          "min": 2,
+          "max": 12,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Diameter of the holes that take a screw into the wall."
+        },
+        {
+          "variable": "mount_spacing",
+          "label": "Screw spacing",
+          "type": "number",
+          "default": 24,
+          "min": 0,
+          "max": 80,
+          "step": 1,
+          "group": "Hardware",
+          "help": "Distance between the two screws; 0 leaves a single central hole."
+        },
+        {
+          "variable": "mount_offset",
+          "label": "Screw offset",
+          "type": "number",
+          "default": 12,
+          "min": 4,
+          "max": 60,
+          "step": 1,
+          "group": "Hardware",
+          "help": "Distance from the hook arm down to the screw holes."
+        },
+        {
+          "variable": "pad_diameter",
+          "label": "Glue pad diameter",
+          "type": "number",
+          "default": 20,
+          "min": 8,
+          "max": 60,
+          "step": 1,
+          "group": "Hardware",
+          "help": "Size of the pad on the back; it is trimmed to fit the plate."
+        },
+        {
+          "variable": "gusset_length",
+          "label": "Gusset length",
+          "type": "number",
+          "default": 12,
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "group": "Style",
+          "help": "Length of the rib under the arm; 0 prints a plain hook."
+        }
+      ],
+      "tags": [
+        "wall",
+        "hook",
+        "mount",
+        "coat",
+        "key"
+      ],
+      "presets": [
+        {
+          "name": "Coat hook",
+          "description": "One screw, light duty hook for a coat or bag.",
+          "params": {
+            "hook_reach": 22,
+            "hook_diameter": 7,
+            "back_height": 20,
+            "upturn": 8,
+            "base_thickness": 3.5,
+            "mount_hole_diameter": 4,
+            "mount_spacing": 0,
+            "mount_offset": 10,
+            "gusset_length": 8
+          }
+        },
+        {
+          "name": "Two-screw key hook",
+          "description": "Two screws spread the load on a busy key wall.",
+          "params": {
+            "hook_reach": 18,
+            "hook_diameter": 6,
+            "back_height": 16,
+            "upturn": 7,
+            "base_thickness": 4,
+            "mount_hole_diameter": 3,
+            "mount_spacing": 22,
+            "mount_offset": 10,
+            "gusset_length": 7
+          }
+        },
+        {
+          "name": "Heavy duty",
+          "description": "Thick arm and a long gusset for heavy items.",
+          "params": {
+            "hook_reach": 35,
+            "hook_diameter": 12,
+            "back_height": 30,
+            "upturn": 14,
+            "base_thickness": 6,
+            "mount_hole_diameter": 5.5,
+            "mount_spacing": 30,
+            "mount_offset": 14,
+            "gusset_length": 20
+          }
+        },
+        {
+          "name": "Glue pad, no screws",
+          "description": "Bonded straight to the wall with a pad on the back.",
+          "params": {
+            "mount_style": 1,
+            "hook_reach": 26,
+            "hook_diameter": 9,
+            "back_height": 24,
+            "upturn": 12,
+            "base_thickness": 4,
+            "pad_diameter": 25,
+            "gusset_length": 12
+          }
+        },
+        {
+          "name": "Pad and screws",
+          "description": "Glue pad plus screw holes, so either fixing works.",
+          "params": {
+            "mount_style": 2,
+            "hook_reach": 20,
+            "hook_diameter": 8,
+            "back_height": 18,
+            "upturn": 9,
+            "base_thickness": 4,
+            "mount_hole_diameter": 3.5,
+            "mount_spacing": 0,
+            "mount_offset": 9,
+            "pad_diameter": 18,
+            "gusset_length": 10
+          }
+        }
+      ]
+    },
+    "bit_holder": {
+      "label": "Bit Holder",
+      "category": "Organization",
+      "icon": "library",
+      "source": "objects/bit_holder.scad",
+      "description": "Block that stands a row of drill bits or hex driver bits upright in chamfered holes.",
+      "parameters": [
+        {
+          "variable": "hole_style",
+          "label": "Hole type",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "step": 1,
+          "options": [
+            {
+              "value": 0,
+              "label": "Round"
+            },
+            {
+              "value": 1,
+              "label": "Hex flat"
+            }
+          ],
+          "group": "Cutouts",
+          "help": "Round for drill bits, hex across the flats for driver bits."
+        },
+        {
+          "variable": "bit_diameter",
+          "label": "Bit size",
+          "type": "number",
+          "default": 6.35,
+          "min": 2,
+          "max": 25,
+          "step": 0.05,
+          "group": "Dimensions",
+          "help": "Across the flats for hex bits, or the shank diameter for drill bits."
+        },
+        {
+          "variable": "column_count",
+          "label": "Columns",
+          "type": "integer",
+          "default": 4,
+          "min": 1,
+          "max": 12,
+          "step": 1,
+          "group": "General",
+          "help": "Number of holes across the block."
+        },
+        {
+          "variable": "row_count",
+          "label": "Rows",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 6,
+          "step": 1,
+          "group": "General",
+          "help": "Number of rows of holes."
+        },
+        {
+          "variable": "hole_spacing",
+          "label": "Hole spacing",
+          "type": "number",
+          "default": 12,
+          "min": 6,
+          "max": 60,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Centre-to-centre distance of the holes in both directions."
+        },
+        {
+          "variable": "hole_depth",
+          "label": "Hole depth",
+          "type": "number",
+          "default": 25,
+          "min": 4,
+          "max": 80,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "How deep a bit can sink into the block."
+        },
+        {
+          "variable": "base_thickness",
+          "label": "Base thickness",
+          "type": "number",
+          "default": 4,
+          "min": 1,
+          "max": 15,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Solid floor under the holes."
+        },
+        {
+          "variable": "edge_margin",
+          "label": "Edge margin",
+          "type": "number",
+          "default": 6,
+          "min": 2,
+          "max": 25,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Material left around the outer holes."
+        },
+        {
+          "variable": "hole_tolerance",
+          "label": "Hole tolerance",
+          "type": "number",
+          "default": 0.2,
+          "min": 0,
+          "max": 0.5,
+          "step": 0.05,
+          "group": "Style",
+          "help": "Extra room around the bit; raise it if it drops in too loosely."
+        },
+        {
+          "variable": "chamfer",
+          "label": "Lead-in chamfer",
+          "type": "number",
+          "default": 0.6,
+          "min": 0,
+          "max": 3,
+          "step": 0.1,
+          "group": "Style",
+          "help": "Cone at the top of each hole that guides the bit in; 0 for a plain hole."
+        },
+        {
+          "variable": "corner_radius",
+          "label": "Corner radius",
+          "type": "number",
+          "default": 3,
+          "min": 0,
+          "max": 15,
+          "step": 0.5,
+          "group": "Style",
+          "help": "Rounding of the outer corners; 0 for sharp corners."
+        }
+      ],
+      "tags": [
+        "drill",
+        "bit",
+        "holder",
+        "hex",
+        "organizer",
+        "tool"
+      ],
+      "presets": [
+        {
+          "name": "1/4 inch hex bits",
+          "description": "Six of the common quarter inch driver bits.",
+          "params": {
+            "hole_style": 1,
+            "bit_diameter": 6.35,
+            "column_count": 6,
+            "hole_spacing": 11,
+            "hole_depth": 20,
+            "corner_radius": 4
+          }
+        },
+        {
+          "name": "3.2 mm drill bits",
+          "description": "Two rows of small drill bits with a deep hole.",
+          "params": {
+            "hole_style": 0,
+            "bit_diameter": 3.2,
+            "column_count": 8,
+            "row_count": 2,
+            "hole_spacing": 10,
+            "hole_depth": 25
+          }
+        },
+        {
+          "name": "6 mm hex drivers",
+          "description": "Four chunky hex driver bits.",
+          "params": {
+            "hole_style": 1,
+            "bit_diameter": 6,
+            "column_count": 4,
+            "hole_spacing": 12,
+            "hole_depth": 25
+          }
+        },
+        {
+          "name": "Single bit stand",
+          "description": "One deep hole with a wide margin for easy grabbing.",
+          "params": {
+            "column_count": 1,
+            "row_count": 1,
+            "hole_depth": 30,
+            "edge_margin": 10,
+            "corner_radius": 6
+          }
+        }
+      ]
+    },
+    "drawer_divider": {
+      "label": "Drawer Divider",
+      "category": "Organization",
+      "icon": "folder",
+      "source": "objects/drawer_divider.scad",
+      "description": "Divider panel for a drawer or box, with a glue flange, a slot for crossing dividers and a finger grip.",
+      "parameters": [
+        {
+          "variable": "length",
+          "label": "Length",
+          "type": "number",
+          "default": 200,
+          "min": 50,
+          "max": 600,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Length of the divider, usually the inside width of the drawer."
+        },
+        {
+          "variable": "height",
+          "label": "Height",
+          "type": "number",
+          "default": 45,
+          "min": 10,
+          "max": 150,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the panel above the flange."
+        },
+        {
+          "variable": "thickness",
+          "label": "Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 1.5,
+          "max": 10,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the panel."
+        },
+        {
+          "variable": "flange_width",
+          "label": "Flange width",
+          "type": "number",
+          "default": 12,
+          "min": 4,
+          "max": 30,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Width of the foot that glues down to the drawer floor."
+        },
+        {
+          "variable": "flange_thickness",
+          "label": "Flange thickness",
+          "type": "number",
+          "default": 3,
+          "min": 1.5,
+          "max": 10,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the glue flange."
+        },
+        {
+          "variable": "slot_width",
+          "label": "Slot width",
+          "type": "number",
+          "default": 3.4,
+          "min": 0,
+          "max": 10,
+          "step": 0.1,
+          "group": "Cutouts",
+          "help": "Width of the slot a second divider fits into; 0 leaves a solid panel."
+        },
+        {
+          "variable": "slot_depth",
+          "label": "Slot depth",
+          "type": "number",
+          "default": 20,
+          "min": 0,
+          "max": 80,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "How far the slot reaches up from the bottom edge."
+        },
+        {
+          "variable": "top_radius",
+          "label": "Top chamfer",
+          "type": "number",
+          "default": 3,
+          "min": 0,
+          "max": 8,
+          "step": 0.5,
+          "group": "Style",
+          "help": "Chamfer on the two top corners of the panel."
+        },
+        {
+          "variable": "grip_width",
+          "label": "Grip width",
+          "type": "number",
+          "default": 14,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "Width of the finger slot in the top edge; 0 leaves a straight top."
+        },
+        {
+          "variable": "grip_depth",
+          "label": "Grip depth",
+          "type": "number",
+          "default": 8,
+          "min": 0,
+          "max": 30,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "Depth of the finger slot below the top edge."
+        }
+      ],
+      "tags": [
+        "drawer",
+        "organizer",
+        "divider",
+        "box",
+        "storage"
+      ],
+      "presets": [
+        {
+          "name": "Shallow box",
+          "description": "Low divider for a shallow box or tray.",
+          "params": {
+            "length": 150,
+            "height": 30,
+            "thickness": 3,
+            "flange_width": 10,
+            "slot_depth": 14,
+            "top_radius": 2
+          }
+        },
+        {
+          "name": "Cutlery drawer",
+          "description": "Long thick divider for a kitchen cutlery drawer.",
+          "params": {
+            "length": 280,
+            "height": 55,
+            "thickness": 4,
+            "flange_width": 14,
+            "flange_thickness": 4,
+            "slot_width": 4.4,
+            "slot_depth": 26
+          }
+        },
+        {
+          "name": "Tool drawer",
+          "description": "Long divider with a wide grip for heavy tools.",
+          "params": {
+            "length": 400,
+            "height": 70,
+            "thickness": 5,
+            "flange_width": 16,
+            "flange_thickness": 5,
+            "slot_width": 5.4,
+            "slot_depth": 30,
+            "grip_width": 20
+          }
+        },
+        {
+          "name": "Solid panel",
+          "description": "No slot and no grip, just a plain panel with a flange.",
+          "params": {
+            "slot_width": 0,
+            "grip_width": 0,
+            "length": 220,
+            "height": 60,
+            "thickness": 4
+          }
+        }
+      ]
+    },
+    "wall_plate": {
+      "label": "Wall Plate",
+      "category": "Organization",
+      "icon": "plate",
+      "source": "objects/wall_plate.scad",
+      "description": "Flat wall plate with a grid of countersunk screw holes, rounded corners and no moving parts.",
+      "parameters": [
+        {
+          "variable": "plate_width",
+          "label": "Plate width",
+          "type": "number",
+          "default": 60,
+          "min": 20,
+          "max": 300,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Width of the plate across X."
+        },
+        {
+          "variable": "plate_height",
+          "label": "Plate height",
+          "type": "number",
+          "default": 60,
+          "min": 20,
+          "max": 300,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Height of the plate across Y."
+        },
+        {
+          "variable": "plate_thickness",
+          "label": "Plate thickness",
+          "type": "number",
+          "default": 4,
+          "min": 1.5,
+          "max": 15,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the plate."
+        },
+        {
+          "variable": "columns",
+          "label": "Columns",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 8,
+          "step": 1,
+          "group": "General",
+          "help": "Number of holes across the width."
+        },
+        {
+          "variable": "rows",
+          "label": "Rows",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 8,
+          "step": 1,
+          "group": "General",
+          "help": "Number of holes across the height."
+        },
+        {
+          "variable": "hole_spacing_x",
+          "label": "Hole spacing X",
+          "type": "number",
+          "default": 40,
+          "min": 0,
+          "max": 280,
+          "step": 1,
+          "group": "Hardware",
+          "help": "Distance between the outermost columns; trimmed to keep them on the plate."
+        },
+        {
+          "variable": "hole_spacing_y",
+          "label": "Hole spacing Y",
+          "type": "number",
+          "default": 40,
+          "min": 0,
+          "max": 280,
+          "step": 1,
+          "group": "Hardware",
+          "help": "Distance between the outermost rows; trimmed to keep them on the plate."
+        },
+        {
+          "variable": "hole_diameter",
+          "label": "Hole diameter",
+          "type": "number",
+          "default": 4,
+          "min": 1,
+          "max": 12,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Through hole for an M3 or M4 screw."
+        },
+        {
+          "variable": "countersink",
+          "label": "Countersink holes",
+          "type": "boolean",
+          "default": true,
+          "group": "Cutouts",
+          "help": "Recess the top of each hole so a flat head screw sits flush."
+        },
+        {
+          "variable": "corner_radius",
+          "label": "Corner radius",
+          "type": "number",
+          "default": 6,
+          "min": 0,
+          "max": 40,
+          "step": 0.5,
+          "group": "Style",
+          "help": "Rounding of the four corners; 0 for sharp corners."
+        },
+        {
+          "variable": "sink_diameter",
+          "label": "Sink diameter",
+          "type": "number",
+          "default": 8,
+          "min": 2,
+          "max": 24,
+          "step": 0.5,
+          "group": "Cutouts",
+          "help": "Head diameter of the countersink; keep it larger than the hole."
+        }
+      ],
+      "tags": [
+        "wall",
+        "plate",
+        "mount",
+        "screw",
+        "bracket"
+      ],
+      "presets": [
+        {
+          "name": "Long strip",
+          "description": "Narrow strip with three countersunk holes.",
+          "params": {
+            "plate_width": 100,
+            "plate_height": 30,
+            "columns": 3,
+            "rows": 1,
+            "hole_spacing_x": 80,
+            "hole_spacing_y": 0
+          }
+        },
+        {
+          "name": "Large plate",
+          "description": "Big plate with a three by three grid of holes.",
+          "params": {
+            "plate_width": 120,
+            "plate_height": 90,
+            "columns": 3,
+            "rows": 3,
+            "hole_spacing_x": 90,
+            "hole_spacing_y": 70,
+            "plate_thickness": 5,
+            "sink_diameter": 9
+          }
+        },
+        {
+          "name": "No countersinks",
+          "description": "Thin plate with plain through holes and tighter corners.",
+          "params": {
+            "plate_thickness": 3,
+            "countersink": false,
+            "corner_radius": 4,
+            "sink_diameter": 6
+          }
+        },
+        {
+          "name": "Strip light plate",
+          "description": "Four small holes for a light or sensor strip.",
+          "params": {
+            "plate_width": 80,
+            "plate_height": 40,
+            "columns": 4,
+            "rows": 1,
+            "hole_spacing_x": 66,
+            "hole_spacing_y": 0,
+            "hole_diameter": 3.5,
+            "sink_diameter": 7
+          }
+        }
+      ]
+    },
+    "splitflap_flap": {
+      "label": "Split-Flap Card",
+      "category": "Panels",
+      "icon": "plate",
+      "source": "objects/wrappers/splitflap_flap.scad",
+      "description": "One blank split-flap card (54 x 43 x 0.76 mm): score it on the fold line, wrap it around the spool and add the character halves by hand. Built without upstream's font files, so the cards stay blank by design.",
+      "parameters": [
+        {
+          "variable": "flap_quantity",
+          "label": "Flaps per print",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 24,
+          "step": 1,
+          "group": "General",
+          "help": "How many flaps to lay out on the bed at once."
+        },
+        {
+          "variable": "flap_spacing",
+          "label": "Flap spacing",
+          "type": "number",
+          "default": 5,
+          "min": 2,
+          "max": 20,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "General",
+          "help": "Clearance between neighbouring flaps, measured along the print bed."
+        }
+      ],
+      "tags": [
+        "splitflap",
+        "flap",
+        "panel"
+      ],
+      "presets": []
+    },
+    "splitflap_spool": {
+      "label": "Split-Flap Spool",
+      "category": "Panels",
+      "icon": "cylinder",
+      "source": "objects/wrappers/splitflap_spool.scad",
+      "description": "Disc that carries a stack of split-flap cards around the stepper shaft.",
+      "parameters": [
+        {
+          "variable": "spool_flaps",
+          "label": "Flaps On Spool",
+          "type": "integer",
+          "default": 40,
+          "min": 5,
+          "max": 40,
+          "step": 1,
+          "group": "General",
+          "help": "Number of flap holes around the spool."
+        },
+        {
+          "variable": "spool_hole_radius",
+          "label": "Hole Radius",
+          "type": "number",
+          "default": 1.5,
+          "min": 1,
+          "max": 3,
+          "step": 0.1,
+          "group": "Dimensions",
+          "help": "Radius of every flap hole in mm."
+        },
+        {
+          "variable": "spool_hole_spacing",
+          "label": "Hole Spacing",
+          "type": "number",
+          "default": 5,
+          "min": 2,
+          "max": 8,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Gap between neighbouring flap holes in mm."
+        },
+        {
+          "variable": "spool_outset",
+          "label": "Rim Outset",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 6,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Material around the outermost holes in mm."
+        },
+        {
+          "variable": "spool_height",
+          "label": "Spool Height",
+          "type": "number",
+          "default": 3.2,
+          "min": 1,
+          "max": 6,
+          "step": 0.1,
+          "group": "Height",
+          "help": "Thickness of the spool disc in mm."
+        }
+      ],
+      "tags": [
+        "splitflap",
+        "flap",
+        "panel"
+      ],
+      "presets": [
+        {
+          "name": "10 flap spool",
+          "description": "Short character list.",
+          "params": {
+            "spool_flaps": 10
+          }
+        },
+        {
+          "name": "24 flap spool",
+          "description": "Letters and digits.",
+          "params": {
+            "spool_flaps": 24
+          }
+        },
+        {
+          "name": "40 flap spool",
+          "description": "Full character set, the upstream default.",
+          "params": {
+            "spool_flaps": 40
+          }
+        },
+        {
+          "name": "Thin spool",
+          "description": "Low profile spool for a tight enclosure.",
+          "params": {
+            "spool_height": 1.6
+          }
+        }
+      ]
+    },
+    "splitflap_scoring_jig": {
+      "label": "Split-Flap Scoring Jig",
+      "category": "Panels",
+      "icon": "plate",
+      "source": "vendor/splitflap-87b17c53/3d/tools/scoring_jig.scad",
+      "description": "Bed for scoring the fold line of a printed split-flap card, with a blade relief and ruler edge.",
+      "parameters": [
+        {
+          "variable": "print_tolerance",
+          "label": "Print Tolerance",
+          "type": "number",
+          "default": 0.1,
+          "min": 0,
+          "max": 0.4,
+          "step": 0.05,
+          "group": "Dimensions",
+          "help": "Extra clearance for the card in mm."
+        },
+        {
+          "variable": "jig_thickness",
+          "label": "Jig Thickness",
+          "type": "number",
+          "default": 2,
+          "min": 1.5,
+          "max": 4,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Thickness of the jig base in mm."
+        },
+        {
+          "variable": "jig_border",
+          "label": "Border",
+          "type": "number",
+          "default": 8,
+          "min": 4,
+          "max": 20,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "How far the jig reaches past the card on each side, in mm."
+        },
+        {
+          "variable": "cutting_slot_width",
+          "label": "Blade Relief",
+          "type": "number",
+          "default": 2,
+          "min": 1,
+          "max": 5,
+          "step": 0.5,
+          "group": "Cutouts",
+          "help": "Width of the slot the blade starts and stops in, in mm."
+        },
+        {
+          "variable": "ruler_width",
+          "label": "Ruler Width",
+          "type": "number",
+          "default": 24.6,
+          "min": 10,
+          "max": 40,
+          "step": 0.1,
+          "group": "Dimensions",
+          "help": "Width of the measuring recess behind the card, in mm."
+        }
+      ],
+      "tags": [
+        "splitflap",
+        "flap",
+        "panel"
+      ],
+      "presets": [
+        {
+          "name": "Standard",
+          "description": "Upstream defaults.",
+          "params": {
+            "jig_thickness": 2,
+            "jig_border": 8
+          }
+        },
+        {
+          "name": "Thick jig",
+          "description": "Rigid base for a firm scoring pass.",
+          "params": {
+            "jig_thickness": 3.5
+          }
+        },
+        {
+          "name": "Wide border",
+          "description": "More material around the card.",
+          "params": {
+            "jig_border": 14
+          }
+        }
+      ]
+    },
+    "splitflap_punch_jig": {
+      "label": "Split-Flap Punch Jig",
+      "category": "Panels",
+      "icon": "plate",
+      "source": "vendor/splitflap-87b17c53/3d/tools/punch_jig.scad",
+      "description": "Guides a punch through the pin notch of a printed split-flap card.",
+      "parameters": [
+        {
+          "variable": "print_tolerance",
+          "label": "Print Tolerance",
+          "type": "number",
+          "default": 0.1,
+          "min": 0,
+          "max": 0.4,
+          "step": 0.05,
+          "group": "Dimensions",
+          "help": "Extra clearance for the card in mm."
+        },
+        {
+          "variable": "jig_thickness",
+          "label": "Jig Thickness",
+          "type": "number",
+          "default": 2,
+          "min": 1,
+          "max": 4,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Thickness of the jig base in mm."
+        },
+        {
+          "variable": "clamp_inset",
+          "label": "Clamp Inset",
+          "type": "number",
+          "default": 0.4,
+          "min": 0,
+          "max": 3,
+          "step": 0.2,
+          "group": "Dimensions",
+          "help": "How far the clamping walls lean in over the punch, in mm."
+        },
+        {
+          "variable": "punch_width",
+          "label": "Punch Width",
+          "type": "number",
+          "default": 26,
+          "min": 20,
+          "max": 30,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Width across the card where the notch is punched, in mm."
+        },
+        {
+          "variable": "punch_lower_height",
+          "label": "Clamp Height",
+          "type": "number",
+          "default": 7.7,
+          "min": 4,
+          "max": 12,
+          "step": 0.1,
+          "group": "Height",
+          "help": "Height of the clamping wall above the guide gap, in mm."
+        },
+        {
+          "variable": "punch_gap_height",
+          "label": "Guide Gap",
+          "type": "number",
+          "default": 2.5,
+          "min": 1.5,
+          "max": 6,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Height of the slot the card slides through, in mm."
+        },
+        {
+          "variable": "slot_inset_depth",
+          "label": "Slot Inset",
+          "type": "number",
+          "default": 9.3,
+          "min": 6,
+          "max": 12,
+          "step": 0.1,
+          "group": "Dimensions",
+          "help": "Distance from the jig edge to the card slot, in mm."
+        },
+        {
+          "variable": "slot_depth",
+          "label": "Punch Travel",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 6,
+          "step": 0.5,
+          "group": "Cutouts",
+          "help": "Clearance for the punch below the guide gap, in mm."
+        },
+        {
+          "variable": "slot_width",
+          "label": "Punch Width Clearance",
+          "type": "number",
+          "default": 15,
+          "min": 10,
+          "max": 20,
+          "step": 0.5,
+          "group": "Cutouts",
+          "help": "Width the punch needs inside the guide, in mm."
+        }
+      ],
+      "tags": [
+        "splitflap",
+        "flap",
+        "panel"
+      ],
+      "presets": [
+        {
+          "name": "Standard",
+          "description": "Upstream defaults for 54 x 43 mm cards.",
+          "params": {
+            "jig_thickness": 2,
+            "punch_gap_height": 2.5
+          }
+        },
+        {
+          "name": "Fine punch",
+          "description": "Narrower punch clearance.",
+          "params": {
+            "slot_width": 12,
+            "slot_depth": 2
+          }
+        },
+        {
+          "name": "Heavy duty",
+          "description": "Thick base and tall clamping wall.",
+          "params": {
+            "jig_thickness": 3.5,
+            "punch_lower_height": 11,
+            "clamp_inset": 1
+          }
+        }
+      ]
+    },
+    "rack_tray": {
+      "label": "Rack Tray",
+      "category": "Cases",
+      "icon": "plate",
+      "source": "objects/wrappers/rack_tray.scad",
+      "description": "Screw-on rack tray that hangs between the rails, with lips front and back and an optional floor cut-out.",
+      "parameters": [
+        {
+          "variable": "tray_u",
+          "label": "Rack Units",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 4,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the tray in rack units."
+        },
+        {
+          "variable": "tray_width",
+          "label": "Tray Width",
+          "type": "number",
+          "default": 140,
+          "min": 60,
+          "max": 165,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Width of the tray floor in mm; it has to fit between the rails."
+        },
+        {
+          "variable": "tray_depth",
+          "label": "Tray Depth",
+          "type": "number",
+          "default": 140,
+          "min": 40,
+          "max": 250,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Depth of the tray floor in mm."
+        },
+        {
+          "variable": "tray_thickness",
+          "label": "Floor Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 2,
+          "max": 6,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Thickness of the tray floor in mm."
+        },
+        {
+          "variable": "front_lip_height",
+          "label": "Front Lip",
+          "type": "number",
+          "default": 6,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the front lip in mm."
+        },
+        {
+          "variable": "back_lip_height",
+          "label": "Back Lip",
+          "type": "number",
+          "default": 6,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the back lip in mm."
+        },
+        {
+          "variable": "tray_padding",
+          "label": "Edge Padding",
+          "type": "number",
+          "default": 15,
+          "min": 5,
+          "max": 40,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Distance from the tray edge to the screw stand-off, in mm."
+        },
+        {
+          "variable": "tray_hole_diameter",
+          "label": "Floor Cut-out",
+          "type": "number",
+          "default": 0,
+          "min": 0,
+          "max": 60,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "Diameter of a hole through the tray floor, 0 keeps the floor closed."
+        }
+      ],
+      "tags": [
+        "rack",
+        "tray",
+        "panel"
+      ],
+      "presets": [
+        {
+          "name": "Small",
+          "description": "1U tray for a compact device.",
+          "params": {
+            "tray_u": 1,
+            "tray_width": 100,
+            "tray_depth": 80
+          }
+        },
+        {
+          "name": "Standard",
+          "description": "1U tray, 140 x 140 mm.",
+          "params": {
+            "tray_u": 1,
+            "tray_width": 140,
+            "tray_depth": 140
+          }
+        },
+        {
+          "name": "Deep",
+          "description": "2U tray with tall lips for a standing device.",
+          "params": {
+            "tray_u": 2,
+            "tray_width": 140,
+            "tray_depth": 180,
+            "front_lip_height": 20,
+            "back_lip_height": 20
+          }
+        },
+        {
+          "name": "Cable pass-through",
+          "description": "Standard tray with a 30 mm hole in the floor.",
+          "params": {
+            "tray_hole_diameter": 30
+          }
+        }
+      ]
+    },
+    "rack_ventilated_plate": {
+      "label": "Rack Ventilated Plate",
+      "category": "Cases",
+      "icon": "grid",
+      "source": "objects/wrappers/rack_ventilated_plate.scad",
+      "description": "Blank rack panel cut into diagonal ventilation stripes.",
+      "parameters": [
+        {
+          "variable": "plate_u",
+          "label": "Rack Units",
+          "type": "integer",
+          "default": 1,
+          "min": 1,
+          "max": 4,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the panel in rack units."
+        },
+        {
+          "variable": "plate_thickness",
+          "label": "Plate Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 1.5,
+          "max": 6,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Thickness of the plate in mm."
+        },
+        {
+          "variable": "slot_width",
+          "label": "Slot Width",
+          "type": "number",
+          "default": 2,
+          "min": 1,
+          "max": 8,
+          "step": 0.5,
+          "group": "Cutouts",
+          "help": "Width of every ventilation slot in mm."
+        },
+        {
+          "variable": "slot_spacing",
+          "label": "Slot Spacing",
+          "type": "number",
+          "default": 4,
+          "min": 2,
+          "max": 30,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "Distance between slot centres along the stripe in mm."
+        },
+        {
+          "variable": "border_x",
+          "label": "Side Border",
+          "type": "number",
+          "default": 10,
+          "min": 4,
+          "max": 90,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Solid margin left and right of the slots, in mm."
+        },
+        {
+          "variable": "border_y",
+          "label": "Top Bottom Border",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 8,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Solid margin above and below the slots, in mm."
+        },
+        {
+          "variable": "corner_radius",
+          "label": "Corner Fillet",
+          "type": "number",
+          "default": 2,
+          "min": 0,
+          "max": 6,
+          "step": 0.5,
+          "group": "Style",
+          "help": "Fillet radius of the plate corners in mm."
+        }
+      ],
+      "tags": [
+        "rack",
+        "panel"
+      ],
+      "presets": [
+        {
+          "name": "1U fine",
+          "description": "Dense stripes on a 1U panel.",
+          "params": {
+            "plate_u": 1,
+            "slot_spacing": 4,
+            "slot_width": 2
+          }
+        },
+        {
+          "name": "2U standard",
+          "description": "Wider stripe pitch on a 2U panel.",
+          "params": {
+            "plate_u": 2,
+            "slot_spacing": 10,
+            "slot_width": 2
+          }
+        },
+        {
+          "name": "3U open",
+          "description": "Wide slots and a wide side border on a 3U panel.",
+          "params": {
+            "plate_u": 3,
+            "slot_spacing": 30,
+            "border_x": 20,
+            "slot_width": 8
+          }
+        }
+      ]
+    },
+    "rack_patch_panel": {
+      "label": "Rack Patch Panel",
+      "category": "Cases",
+      "icon": "front",
+      "source": "objects/wrappers/rack_patch_panel.scad",
+      "description": "2U patch panel with a row of keystone or blank plate slots for network ports.",
+      "parameters": [
+        {
+          "variable": "slot_count",
+          "label": "Ports",
+          "type": "integer",
+          "default": 8,
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "group": "General",
+          "help": "Number of slots in the panel."
+        },
+        {
+          "variable": "slot_style",
+          "label": "Slot Style",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 5,
+          "step": 1,
+          "group": "Style",
+          "help": "Slot type used for every position.",
+          "options": [
+            {
+              "value": 1,
+              "label": "Keystone A"
+            },
+            {
+              "value": 2,
+              "label": "Keystone B"
+            },
+            {
+              "value": 3,
+              "label": "Blank plate 3 mm"
+            },
+            {
+              "value": 4,
+              "label": "Blank plate 5.9 mm"
+            },
+            {
+              "value": 5,
+              "label": "Blank plate 9.9 mm"
+            }
+          ]
+        },
+        {
+          "variable": "center_slot",
+          "label": "Different Slot At",
+          "type": "integer",
+          "default": 4,
+          "min": 0,
+          "max": 10,
+          "step": 1,
+          "group": "Style",
+          "help": "1-based position that gets another style, 0 keeps every slot the same."
+        },
+        {
+          "variable": "center_slot_style",
+          "label": "Different Slot Style",
+          "type": "integer",
+          "default": 5,
+          "min": 1,
+          "max": 5,
+          "step": 1,
+          "group": "Style",
+          "help": "Slot type used at the different position.",
+          "options": [
+            {
+              "value": 1,
+              "label": "Keystone A"
+            },
+            {
+              "value": 2,
+              "label": "Keystone B"
+            },
+            {
+              "value": 3,
+              "label": "Blank plate 3 mm"
+            },
+            {
+              "value": 4,
+              "label": "Blank plate 5.9 mm"
+            },
+            {
+              "value": 5,
+              "label": "Blank plate 9.9 mm"
+            }
+          ]
+        },
+        {
+          "variable": "plate_thickness",
+          "label": "Plate Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 1.5,
+          "max": 6,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Thickness of the panel in mm."
+        },
+        {
+          "variable": "keystone_spacing",
+          "label": "Port Spacing",
+          "type": "number",
+          "default": 19,
+          "min": 15,
+          "max": 22,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Distance between slot centres in mm."
+        },
+        {
+          "variable": "panel_centered",
+          "label": "Centre Slots",
+          "type": "boolean",
+          "default": false,
+          "min": false,
+          "max": true,
+          "step": 1,
+          "group": "Style",
+          "help": "Centre the slot block on the panel instead of starting at the left rail."
+        }
+      ],
+      "tags": [
+        "rack",
+        "panel",
+        "patch"
+      ],
+      "presets": [
+        {
+          "name": "4 keystone",
+          "description": "Four keystone B slots.",
+          "params": {
+            "slot_count": 4,
+            "center_slot": 0
+          }
+        },
+        {
+          "name": "8 keystone",
+          "description": "Eight keystone B slots, the common 8-port panel.",
+          "params": {
+            "slot_count": 8,
+            "center_slot": 0
+          }
+        },
+        {
+          "name": "8 ports + blank",
+          "description": "Eight keystone B slots with a 9.9 mm blank plate in the middle.",
+          "params": {
+            "slot_count": 8,
+            "center_slot": 4,
+            "center_slot_style": 5
+          }
+        },
+        {
+          "name": "10 keystone",
+          "description": "Ten keystone A slots across a full width panel.",
+          "params": {
+            "slot_count": 10,
+            "slot_style": 1,
+            "center_slot": 0
+          }
+        }
+      ]
+    },
+    "rack_enclosed_box": {
+      "label": "Rack Enclosed Box",
+      "category": "Cases",
+      "icon": "box",
+      "source": "objects/wrappers/rack_enclosed_box.scad",
+      "description": "Open box that clips between the rack rails, closed off by a front plate.",
+      "parameters": [
+        {
+          "variable": "box_width",
+          "label": "Box Width",
+          "type": "number",
+          "default": 160,
+          "min": 60,
+          "max": 170,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Width of the box in mm; it may not exceed the rack opening."
+        },
+        {
+          "variable": "box_height",
+          "label": "Box Height",
+          "type": "number",
+          "default": 27,
+          "min": 20,
+          "max": 60,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the box in mm."
+        },
+        {
+          "variable": "box_depth",
+          "label": "Box Depth",
+          "type": "number",
+          "default": 120,
+          "min": 40,
+          "max": 180,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Depth of the box in mm."
+        },
+        {
+          "variable": "rail_thickness",
+          "label": "Rail Thickness",
+          "type": "number",
+          "default": 1.5,
+          "min": 1,
+          "max": 3,
+          "step": 0.25,
+          "group": "Hardware",
+          "help": "Thickness of the side rails in mm."
+        },
+        {
+          "variable": "rail_side_thickness",
+          "label": "Rail Side Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 2,
+          "max": 6,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Thickness of the rail side walls in mm."
+        },
+        {
+          "variable": "front_plate_thickness",
+          "label": "Front Plate",
+          "type": "number",
+          "default": 3,
+          "min": 1.5,
+          "max": 6,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Thickness of the front plate in mm."
+        },
+        {
+          "variable": "recess_side_rail",
+          "label": "Recessed Rails",
+          "type": "boolean",
+          "default": false,
+          "min": false,
+          "max": true,
+          "step": 1,
+          "group": "Style",
+          "help": "Sink the side rails into the front plate instead of stacking them on it."
+        },
+        {
+          "variable": "z_orientation",
+          "label": "Rails In Rack",
+          "type": "integer",
+          "default": 0,
+          "min": 0,
+          "max": 1,
+          "step": 1,
+          "group": "Style",
+          "help": "How the side rails sit vertically between two rack holes.",
+          "options": [
+            {
+              "value": 0,
+              "label": "Centred"
+            },
+            {
+              "value": 1,
+              "label": "At the bottom"
+            }
+          ]
+        }
+      ],
+      "tags": [
+        "rack",
+        "enclosure"
+      ],
+      "presets": [
+        {
+          "name": "1U slim",
+          "description": "Thin box in the lowest possible space.",
+          "params": {
+            "box_height": 20,
+            "box_depth": 100,
+            "box_width": 140
+          }
+        },
+        {
+          "name": "2U standard",
+          "description": "Upstream default 160 x 27 x 120 mm box.",
+          "params": {
+            "box_width": 160,
+            "box_height": 27,
+            "box_depth": 120
+          }
+        },
+        {
+          "name": "3U tall",
+          "description": "Tall box for a server or a switch.",
+          "params": {
+            "box_width": 170,
+            "box_height": 44,
+            "box_depth": 160
+          }
+        },
+        {
+          "name": "Recessed rails",
+          "description": "Side rails sunk into the front plate.",
+          "params": {
+            "recess_side_rail": true,
+            "box_width": 140,
+            "box_depth": 100
+          }
+        }
+      ]
+    },
+    "rack_angle_bracket": {
+      "label": "Rack Angle Bracket",
+      "category": "Cases",
+      "icon": "bracket",
+      "source": "objects/wrappers/rack_angle_bracket.scad",
+      "description": "Pair of L shaped side rails that carry a box in the rack without a front plate.",
+      "parameters": [
+        {
+          "variable": "bracket_u",
+          "label": "Rack Units",
+          "type": "integer",
+          "default": 3,
+          "min": 1,
+          "max": 10,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the bracket in rack units."
+        },
+        {
+          "variable": "bracket_thickness",
+          "label": "Bracket Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 2,
+          "max": 4,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the rails in mm."
+        },
+        {
+          "variable": "bracket_width",
+          "label": "Supported Width",
+          "type": "number",
+          "default": 160,
+          "min": 60,
+          "max": 170,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Width of the box the bracket carries, in mm."
+        },
+        {
+          "variable": "bracket_depth",
+          "label": "Supported Depth",
+          "type": "number",
+          "default": 120,
+          "min": 40,
+          "max": 180,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Depth of the box the bracket carries, in mm."
+        },
+        {
+          "variable": "bracket_vent",
+          "label": "Vent Slots",
+          "type": "boolean",
+          "default": false,
+          "min": false,
+          "max": true,
+          "step": 1,
+          "group": "Cutouts",
+          "help": "Cut ventilation slots in the side rails."
+        }
+      ],
+      "tags": [
+        "rack",
+        "bracket",
+        "enclosure"
+      ],
+      "presets": [
+        {
+          "name": "1U pair",
+          "description": "Short bracket pair for a slim box.",
+          "params": {
+            "bracket_u": 1,
+            "bracket_depth": 80,
+            "bracket_width": 140
+          }
+        },
+        {
+          "name": "2U pair",
+          "description": "Two rack units high.",
+          "params": {
+            "bracket_u": 2,
+            "bracket_depth": 120,
+            "bracket_width": 160
+          }
+        },
+        {
+          "name": "4U pair",
+          "description": "Four rack units high for a full width box.",
+          "params": {
+            "bracket_u": 4,
+            "bracket_width": 170,
+            "bracket_depth": 180
+          }
+        },
+        {
+          "name": "Vented pair",
+          "description": "Rails with ventilation slots.",
+          "params": {
+            "bracket_u": 3,
+            "bracket_vent": true
+          }
+        }
+      ]
+    },
+    "rack_fan_tray": {
+      "label": "Rack Fan Tray",
+      "category": "Cases",
+      "icon": "plate",
+      "source": "objects/wrappers/rack_fan_tray.scad",
+      "description": "Rack tray with a fan cut-out and four screw holes centred in the floor.",
+      "parameters": [
+        {
+          "variable": "fan_tray_u",
+          "label": "Rack Units",
+          "type": "integer",
+          "default": 2,
+          "min": 1,
+          "max": 4,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the tray in rack units."
+        },
+        {
+          "variable": "fan_tray_width",
+          "label": "Tray Width",
+          "type": "number",
+          "default": 140,
+          "min": 130,
+          "max": 165,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Width of the tray floor in mm; it has to fit between the rails."
+        },
+        {
+          "variable": "fan_tray_depth",
+          "label": "Tray Depth",
+          "type": "number",
+          "default": 140,
+          "min": 130,
+          "max": 200,
+          "step": 5,
+          "group": "Dimensions",
+          "help": "Depth of the tray floor in mm."
+        },
+        {
+          "variable": "fan_tray_thickness",
+          "label": "Floor Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 2,
+          "max": 6,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Thickness of the tray floor in mm."
+        },
+        {
+          "variable": "fan_tray_front_lip",
+          "label": "Front Lip",
+          "type": "number",
+          "default": 26,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the front lip that holds the fan in, in mm."
+        },
+        {
+          "variable": "fan_tray_back_lip",
+          "label": "Back Lip",
+          "type": "number",
+          "default": 6,
+          "min": 0,
+          "max": 40,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the back lip in mm."
+        },
+        {
+          "variable": "fan_tray_padding",
+          "label": "Edge Padding",
+          "type": "number",
+          "default": 15,
+          "min": 5,
+          "max": 25,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Distance from the tray edge to the screw stand-off, in mm."
+        },
+        {
+          "variable": "fan_cutout_diameter",
+          "label": "Fan Cut-out",
+          "type": "number",
+          "default": 120,
+          "min": 40,
+          "max": 120,
+          "step": 2,
+          "group": "Cutouts",
+          "help": "Diameter of the fan opening through the tray floor, in mm."
+        },
+        {
+          "variable": "fan_screw_spacing",
+          "label": "Fan Screw Spacing",
+          "type": "number",
+          "default": 105,
+          "min": 60,
+          "max": 105,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Distance between opposite fan screw holes, in mm."
+        },
+        {
+          "variable": "fan_screw_diameter",
+          "label": "Fan Screw Holes",
+          "type": "number",
+          "default": 5,
+          "min": 3,
+          "max": 6,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Diameter of the four fan screw holes, in mm."
+        }
+      ],
+      "tags": [
+        "rack",
+        "tray"
+      ],
+      "presets": [
+        {
+          "name": "80 mm fan",
+          "description": "80 mm fan in a 1U tray.",
+          "params": {
+            "fan_tray_u": 1,
+            "fan_cutout_diameter": 80,
+            "fan_screw_spacing": 71.5,
+            "fan_screw_diameter": 4.5,
+            "fan_tray_width": 130,
+            "fan_tray_depth": 130,
+            "fan_tray_front_lip": 14
+          }
+        },
+        {
+          "name": "92 mm fan",
+          "description": "92 mm fan in a 1U tray.",
+          "params": {
+            "fan_cutout_diameter": 92,
+            "fan_screw_spacing": 83,
+            "fan_tray_u": 1,
+            "fan_tray_front_lip": 14
+          }
+        },
+        {
+          "name": "120 mm fan",
+          "description": "Upstream 120 mm fan tray in 2U.",
+          "params": {
+            "fan_cutout_diameter": 120,
+            "fan_screw_spacing": 105,
+            "fan_tray_u": 2
+          }
+        },
+        {
+          "name": "Thin floor",
+          "description": "2 mm tray floor for fast printing.",
+          "params": {
+            "fan_tray_thickness": 2
+          }
+        }
+      ]
+    },
+    "rack_brush_strip_plate": {
+      "label": "Rack Brush Strip Plate",
+      "category": "Cases",
+      "icon": "plate",
+      "source": "vendor/rackstack-8e296e93/rack-mount/catalog/brush-strip-plate.scad",
+      "description": "Rack panel with a slot and two ledges for a brush weather strip that hides cable bundles.",
+      "parameters": [
+        {
+          "variable": "plateU",
+          "label": "Rack Units",
+          "type": "integer",
+          "default": 4,
+          "min": 1,
+          "max": 6,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the plate in rack units."
+        },
+        {
+          "variable": "plateThickness",
+          "label": "Plate Thickness",
+          "type": "number",
+          "default": 3,
+          "min": 1.5,
+          "max": 6,
+          "step": 0.5,
+          "group": "Height",
+          "help": "Thickness of the plate in mm."
+        },
+        {
+          "variable": "brushstripWidth",
+          "label": "Strip Width",
+          "type": "number",
+          "default": 8.89,
+          "min": 5,
+          "max": 15,
+          "step": 0.01,
+          "group": "Dimensions",
+          "help": "Width of the brush strip in mm."
+        },
+        {
+          "variable": "brushstripLength",
+          "label": "Strip Length",
+          "type": "number",
+          "default": 8.89,
+          "min": 5,
+          "max": 15,
+          "step": 0.01,
+          "group": "Dimensions",
+          "help": "Length of one brush strip section in mm."
+        },
+        {
+          "variable": "brushstripOffset",
+          "label": "Slot Offset",
+          "type": "number",
+          "default": 15,
+          "min": 10,
+          "max": 40,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "Distance from the plate edge to the brush strip slot, in mm."
+        },
+        {
+          "variable": "brushstripHoleOverlap",
+          "label": "Ledge Overlap",
+          "type": "number",
+          "default": 5,
+          "min": 0,
+          "max": 10,
+          "step": 1,
+          "group": "Dimensions",
+          "help": "How far the ledges reach past the slot, in mm."
+        }
+      ],
+      "tags": [
+        "rack",
+        "panel"
+      ],
+      "presets": [
+        {
+          "name": "2U panel",
+          "description": "Two rack units with one brush strip row.",
+          "params": {
+            "plateU": 2
+          }
+        },
+        {
+          "name": "4U panel",
+          "description": "Upstream default, four rack units.",
+          "params": {
+            "plateU": 4
+          }
+        },
+        {
+          "name": "6U panel",
+          "description": "Six rack units with a wider slot offset.",
+          "params": {
+            "plateU": 6,
+            "brushstripOffset": 20,
+            "brushstripHoleOverlap": 6
+          }
+        }
+      ]
+    },
+    "rack_sbc_case": {
+      "label": "Rack SBC Case",
+      "category": "Cases",
+      "icon": "box",
+      "source": "vendor/rackstack-8e296e93/rack-mount/catalog/rpi-sbc-simple-box/case.scad",
+      "description": "Simple open case for a 56 x 85 mm single board computer, with screw risers and airflow cut-outs.",
+      "parameters": [
+        {
+          "variable": "caseWallThickness",
+          "label": "Wall Thickness",
+          "type": "number",
+          "default": 2,
+          "min": 1,
+          "max": 4,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the case walls in mm."
+        },
+        {
+          "variable": "caseBottomThickness",
+          "label": "Bottom Thickness",
+          "type": "number",
+          "default": 2,
+          "min": 1,
+          "max": 4,
+          "step": 0.5,
+          "group": "Dimensions",
+          "help": "Thickness of the case floor in mm."
+        },
+        {
+          "variable": "pcbRise",
+          "label": "Board Rise",
+          "type": "number",
+          "default": 3,
+          "min": 0,
+          "max": 6,
+          "step": 1,
+          "group": "Height",
+          "help": "Height of the screw risers under the board, in mm."
+        },
+        {
+          "variable": "mountPointDiameter",
+          "label": "Screw Boss",
+          "type": "number",
+          "default": 5,
+          "min": 3,
+          "max": 8,
+          "step": 0.5,
+          "group": "Hardware",
+          "help": "Outer diameter of the screw bosses in mm."
+        }
+      ],
+      "tags": [
+        "rack",
+        "enclosure"
+      ],
+      "presets": [
+        {
+          "name": "Standard",
+          "description": "Upstream defaults for a 56 x 85 mm board.",
+          "params": {
+            "caseWallThickness": 2,
+            "caseBottomThickness": 2,
+            "pcbRise": 3
+          }
+        },
+        {
+          "name": "Thick walls",
+          "description": "Rigid walls and floor.",
+          "params": {
+            "caseWallThickness": 3.5,
+            "caseBottomThickness": 3.5
+          }
+        },
+        {
+          "name": "Low profile",
+          "description": "Flat risers with bigger screw bosses.",
+          "params": {
+            "pcbRise": 1,
+            "mountPointDiameter": 7
+          }
         }
       ]
     }

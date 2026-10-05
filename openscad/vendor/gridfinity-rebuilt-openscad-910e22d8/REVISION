@@ -1,1 +1,31 @@
 910e22d8607fd7f5f51ad5e5cbc5287a76810bfd
+
+Upstream: https://github.com/kennetek/gridfinity-rebuilt-openscad
+License: MIT
+Copyright: Copyright Kenneth Hodson; portions Copyright Zachary Freedman and Voidstar Lab LLC
+
+All OpenSCAD sources (src/core, src/helpers and the bundled
+src/external/threads-scad) plus the two top-level library files, the upstream
+LICENSE and its README.md, copied verbatim from the pinned commit.
+
+Files:
+  LICENSE
+  README.md
+  gridfinity-rebuilt-baseplate.scad
+  gridfinity-rebuilt-bins.scad
+  src/core/base.scad
+  src/core/bin.scad
+  src/core/cutouts.scad
+  src/core/gridfinity-baseplate.scad
+  src/core/gridfinity-rebuilt-holes.scad
+  src/core/gridfinity-rebuilt-utility.scad
+  src/core/standard.scad
+  src/core/tab.scad
+  src/core/wall.scad
+  src/external/threads-scad/threads.scad
+  src/helpers/angles.scad
+  src/helpers/generic-helpers.scad
+  src/helpers/grid_element.scad
+  src/helpers/grid.scad
+  src/helpers/list.scad
+  src/helpers/shapes.scad

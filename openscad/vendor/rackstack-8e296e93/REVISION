@@ -1,0 +1,112 @@
+8e296e935aad89a6d1a5023da79becc634c10c2d
+
+Upstream: https://github.com/jazwa/rackstack
+License: MIT
+Copyright: Copyright (c) 2023 Zhao Wang (jazwa)
+
+The OpenSCAD sources under rack-mount/, helper/, config/ and rack/ that the vendored rack-mount
+catalog models include, plus the upstream LICENSE, copied verbatim from the pinned commit.
+misc/bomAnimations.scad is excluded: its include <../helper/magnet.scad> and
+<../helper/dowel.scad> are broken upstream. rbuild.py and the STL/media assets are excluded.
+
+Files:
+  LICENSE
+  config/common.scad
+  config/dowel.scad
+  config/magnet.scad
+  config/print.scad
+  config/rackFrame.scad
+  helper/apply.scad
+  helper/common.scad
+  helper/dovetail.scad
+  helper/filet.scad
+  helper/keystone1.scad
+  helper/keystone2.scad
+  helper/math.scad
+  helper/matrix.scad
+  helper/screws.scad
+  helper/sine.scad
+  rack-mount/angle-bracket/animate.scad
+  rack-mount/angle-bracket/entry.scad
+  rack-mount/catalog/120mm-Rear-Case-Fan.scad
+  rack-mount/catalog/120mm-fan-tray_mod.scad
+  rack-mount/catalog/LG_Slim_DVD_Tray.scad
+  rack-mount/catalog/Minisforum_NAB9-tray_mod.scad
+  rack-mount/catalog/Minisforum_UM890PRO-tray_mod.scad
+  rack-mount/catalog/Unifi-8-PoE-Switch_Tray+Adapter.scad
+  rack-mount/catalog/beelink-EQi12-box_mod.scad
+  rack-mount/catalog/beelink-EQi12-tray_mod.scad
+  rack-mount/catalog/beelink-mini-s-tray.scad
+  rack-mount/catalog/brush-strip-plate.scad
+  rack-mount/catalog/mele-quieter-tray.scad
+  rack-mount/catalog/parts/sfxPSU.scad
+  rack-mount/catalog/rpi-sbc-simple-box/case.scad
+  rack-mount/catalog/rpi-sbc-simple-box/frontPlate.scad
+  rack-mount/catalog/rpi-sbc-simple-box/top.scad
+  rack-mount/catalog/ventilated_plate.scad
+  rack-mount/common.scad
+  rack-mount/dimensionHelper.scad
+  rack-mount/enclosed-box/animate.scad
+  rack-mount/enclosed-box/entry.scad
+  rack-mount/enclosed-box/frontBoxHolder.scad
+  rack-mount/enclosed-box/helper.scad
+  rack-mount/enclosed-box/sideRail.scad
+  rack-mount/patch-panel/animate.scad
+  rack-mount/patch-panel/entry.scad
+  rack-mount/patch-panel/patchPanel.scad
+  rack-mount/plateBase.scad
+  rack-mount/rackEars.scad
+  rack-mount/tray/animate.scad
+  rack-mount/tray/entry.scad
+  rack-mount/tray/tray.scad
+  rack/assembly/addMagnetsToMagnetModules.scad
+  rack/assembly/addMagnetsToSideWall.scad
+  rack/assembly/attachSideConnectorModulesToYBars.scad
+  rack/assembly/attachXBarWithYBar.scad
+  rack/assembly/attachXYPlates.scad
+  rack/assembly/attachXYTrays.scad
+  rack/assembly/common.scad
+  rack/assembly/connectXYTrayWithMainRails.scad
+  rack/assembly/finalBuilds.scad
+  rack/assembly/insertDowelsIntoSideWall.scad
+  rack/assembly/insertFeet.scad
+  rack/assembly/propUpBottomXYTraywithSideWalls.scad
+  rack/assembly/screwFeet.scad
+  rack/assembly/screwXBarAndYBar.scad
+  rack/assembly/slideHexNutToFeet.scad
+  rack/assembly/slideHexNutsIntoYBar.scad
+  rack/assembly/slideHexNutsIntoYBarXYPlate.scad
+  rack/connector/basePlateYBarConnectors.scad
+  rack/connector/connectors.scad
+  rack/connector/mainRailYBarConnectors.scad
+  rack/connector/sideModuleYBarConnectors.scad
+  rack/connector/stackYBarConnectors.scad
+  rack/connector/transformations.scad
+  rack/connector/xBarYBarConnectors.scad
+  rack/mainRail.scad
+  rack/print/eval_P.scad
+  rack/print/hingeModule.scad
+  rack/print/magnetModuleLeft_P.scad
+  rack/print/magnetModuleRight_P.scad
+  rack/print/mainRail_P.scad
+  rack/print/rackFeet_P.scad
+  rack/print/rackJoiner_P.scad
+  rack/print/sideWallLeft_P.scad
+  rack/print/sideWallRight_P.scad
+  rack/print/stackConnectorBottom_P.scad
+  rack/print/xBar_P.scad
+  rack/print/xyPlate_P.scad
+  rack/print/yBarLeft_P.scad
+  rack/print/yBarRight_P.scad
+  rack/sharedVariables.scad
+  rack/side/hingeModule.scad
+  rack/side/magnetModule.scad
+  rack/side/sideWallBase.scad
+  rack/side/sideWallLeft.scad
+  rack/side/sideWallMagnetMount.scad
+  rack/side/sideWallRight.scad
+  rack/side/sideWallVariables.scad
+  rack/stackEnds.scad
+  rack/xBar.scad
+  rack/xyPlate.scad
+  rack/yBar.scad

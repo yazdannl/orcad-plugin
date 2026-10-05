@@ -1,0 +1,11 @@
+6ef6d644fff81283c810c2b90197901ce6657f84
+
+Upstream: https://github.com/wromijn/openscad-gridfinity-block
+License: Apache-2.0
+Copyright: wromijn and the Gridfinity Block contributors
+
+Single library module plus the upstream LICENSE, copied verbatim from the pinned commit.
+
+Files:
+  LICENSE
+  gridfinity_block.scad

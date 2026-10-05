@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .catalog import LIBRARY_DIR, QUALITY_PROFILES, SOURCE_REVISION, source_path
+from .catalog import LIBRARY_REVISION, LIBRARY_SEARCH_PATH, QUALITY_PROFILES, source_path
 from .errors import BackendError, ErrorCode
 from .mesh import triangle_count
 from .validation import validate_parameters
@@ -38,7 +38,8 @@ Cancel = Callable[[], bool] | None
 
 def child_env() -> dict[str, str]:
     env = {key: value for key, value in os.environ.items() if key not in _HOST_ENV}
-    env["OPENSCADPATH"] = str(LIBRARY_DIR)
+    # OpenSCAD separates library roots with os.pathsep (';' on Windows).
+    env["OPENSCADPATH"] = os.pathsep.join(str(path) for path in LIBRARY_SEARCH_PATH)
     return env
 
 
@@ -192,7 +193,7 @@ class OpenSCADRunner:
     def _render(self, source: Path, defines: dict[str, Any], quality: str, identity: dict[str, Any],
                 timeout: float, cancel: Cancel) -> RenderResult:
         started = time.monotonic()
-        payload = {**identity, "quality": quality, "engine": self.engine.version, "library": SOURCE_REVISION}
+        payload = {**identity, "quality": quality, "engine": self.engine.version, "library": LIBRARY_REVISION}
         key = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         stl, log_path = self.cache_dir / f"{key}.stl", self.cache_dir / f"{key}.log"

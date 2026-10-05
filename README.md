@@ -6,13 +6,19 @@ OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer
 lets you pick a parametric model, tune it with live 3D preview, and put it on
 the build plate with one click.
 
-- **Library:** Gridfinity Bin and Gridfinity Baseplate, rendered from the pinned
-  upstream [Gridfinity Rebuilt](https://github.com/kennetek/gridfinity-rebuilt-openscad)
-  source, plus a Box, Cylinder, Tube and Mounting plate. Every parameter gets a
-  slider, number field, switch or option picker, with inline validation.
+- **Library:** 49 parametric models in six categories - Gridfinity (19),
+  Organization, Cases, Fasteners, Panels and Basics. Gridfinity comes from
+  pinned upstream [Gridfinity Rebuilt](https://github.com/kennetek/gridfinity-rebuilt-openscad)
+  source, the rack models from [rackstack](https://github.com/jazwa/rackstack),
+  the split-flap parts from [splitflap](https://github.com/scottbez1/splitflap)
+  and the metric fasteners from [threads-scad](https://github.com/rcolyer/threads-scad),
+  next to a Box, Cylinder, Tube and Mounting plate. Every parameter gets a
+  slider, number field, switch or option picker, with inline validation, and
+  many objects ship **presets** - one click for a sensible starting point.
 - **Code:** an OpenSCAD editor with examples, line numbers, error-line
   highlighting and Ctrl+Enter to render. `include <src/...>` loads the bundled
-  Gridfinity library, so you can build your own bins.
+  Gridfinity library, and every other vendored library is on `OPENSCADPATH`
+  too, so you can build your own bins, racks and split-flap parts.
 - **Preview:** Three.js viewport with orbit/pan/zoom, iso/front/right/top views,
   wireframe, edge and build-plate toggles. It falls back to a software renderer
   when the webview has no WebGL.
@@ -24,6 +30,35 @@ the build plate with one click.
   (two columns) down to narrow windows (a single stacked column).
 - **AI assistant:** an optional integrated Pi agent in Code mode. It edits the
   current `model.scad`, renders locally with OpenSCAD, and iterates on errors.
+
+## Model catalog
+
+Forty-nine models ship in `openscad/catalog.json`, which is the single source
+of truth for the UI, the validation and the renderer:
+
+| Category | Models | What they cover |
+| --- | --- | --- |
+| Gridfinity | 19 | Bins, baseplates, blocks, pockets, baskets, a chess set, glue stick, silverware, socket holder |
+| Organization | 8 | Battery holder, PCB mount, cable clip, device stand, wall hook, bit holder, drawer divider, wall plate |
+| Cases | 8 | Rack trays, patch panel, ventilated plate, enclosed box, angle bracket, fan tray, brush strip, SBC case |
+| Fasteners | 6 | Metric hex bolts, nuts, countersunk bolts and wood screws, a threaded rod, a hole coupon |
+| Panels | 4 | Split-flap card, spool, scoring jig, punch jig |
+| Basics | 4 | Box, cylinder, tube, bracket |
+
+- **Parameters** carry their exact OpenSCAD variable, type, default, range,
+  step, unit, group and help text. The renderer passes them as `-D name=value`,
+  so what the slider shows is what OpenSCAD gets.
+- **Presets** are named parameter sets per object ("Desk panel (2x8)",
+  "Stack of eight"). Picking one applies it on top of the current values and
+  the header shows which preset is active; a manual edit just clears that
+  marker. A preset can never land on an illegal combination of options.
+- **Tags** are the extra search terms the catalog search matches, so "m3",
+  "gridfinity" or "rack" finds a model without knowing its name.
+
+Models come from pinned upstream sources; the exact commit, license and file
+list for each of the seven vendored libraries are in `NOTICE`,
+`THIRD_PARTY_NOTICES` and `openscad/README.md`. No model source is fetched at
+render time.
 
 ## How it works
 
@@ -191,11 +226,14 @@ Layout:
 - `ai/`: pinned Node/Pi bootstrap, JSONL RPC bridge, OpenSCAD render extension,
   and the one-file AI workspace.
 - `openscad/`: the standard-library backend. It holds `catalog.json` (the
-  single source of truth for objects and parameters, shared with the
-  frontend), `validation.py`, `runner.py` (sandboxed argv, Manifold, timeouts,
-  cancellation, STL cache), `mesh.py` (indexed preview meshes, 3MF writer),
-  `bootstrap.py` (verified per-user install), `objects/*.scad` and the
-  unmodified `vendor/` Gridfinity tree.
+  single source of truth for objects, parameters, tags, presets and the
+  `libraries` registry, shared with the frontend), `validation.py`, `runner.py`
+  (sandboxed argv, multi-root `OPENSCADPATH`, Manifold, timeouts, cancellation,
+  STL cache), `mesh.py` (indexed preview meshes, 3MF writer), `bootstrap.py`
+  (verified per-user install), `objects/*.scad` with the original shapes and
+  `objects/wrappers/*.scad` with the wrappers that expose a vendored library as
+  a catalog object, and the unmodified `vendor/` trees. See
+  `openscad/README.md`.
 - `frontend/`: React + Three.js page, built by Vite into one self-contained
   `dist/index.html`. It uses plain CSS on purpose, because OrcaSlicer injects
   unlayered element styles that would override `@layer`-based frameworks.
@@ -205,13 +243,18 @@ Layout:
 - `.github/workflows/ci.yml`: tests plus the bundle freshness check; pushing a
   `v*` tag publishes the release with `orcad.py` attached. See `RELEASE.md`.
 
-To add a catalog object, drop a `.scad` file in `openscad/objects/`, describe
-its parameters in `catalog.json` (add cross-field rules to `validation.py` if
-needed) and run the bundler.
+To add a catalog object, drop a `.scad` file in `openscad/objects/`, or wrap a
+vendored library in `openscad/objects/wrappers/`, then describe its parameters,
+tags and presets in `catalog.json` (add cross-field rules to `validation.py`
+if needed) and run the bundler. Every variable in `catalog.json` has to appear
+in the `.scad` file and every `include`/`use` in it has to resolve on
+`OPENSCADPATH`; `tests/test_backend.py` enforces both.
 
 ## License
 
-Original project code is AGPL-3.0-only (see `LICENSE`, `NOTICE`). The vendored
-Gridfinity Rebuilt source is MIT and unmodified. React, Three.js and the build
+Original project code is AGPL-3.0-only (see `LICENSE`, `NOTICE`). The seven
+vendored OpenSCAD libraries under `openscad/vendor/` keep their own licenses
+(MIT, Apache-2.0 and CC0) and are unmodified; each one is attributed in
+`NOTICE` and `THIRD_PARTY_NOTICES`. React, Three.js and the build
 tools are listed in `THIRD_PARTY_NOTICES`. Downloaded OpenSCAD, Node.js, and Pi binaries/packages
 remain under their respective upstream licenses.

@@ -1,0 +1,11 @@
+4ae9aeb3b136f9858200f77a304b909a000ce3b4
+
+Upstream: https://github.com/rcolyer/threads-scad
+License: CC0-1.0
+Copyright: rcolyer and contributors (CC0 1.0 Universal dedicates the work to the public)
+
+Single library module plus the upstream CC0 LICENSE.txt, copied verbatim from the pinned commit.
+
+Files:
+  LICENSE.txt
+  threads.scad

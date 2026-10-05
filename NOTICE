@@ -6,19 +6,65 @@ The original Python plugin, OpenSCAD object sources, documentation, and
 frontend source in this repository are released under the GNU Affero
 General Public License, version 3 only (AGPL-3.0-only). See LICENSE.
 
-Upstream Gridfinity attribution
---------------------------------
-The Gridfinity Bin and Gridfinity Baseplate object-mode geometry is rendered
-from kennetek/gridfinity-rebuilt-openscad. The source files are vendored
-unchanged at commit 910e22d8607fd7f5f51ad5e5cbc5287a76810bfd under
-`openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/`. That directory retains
-the upstream MIT `LICENSE`, README attribution, and source-file references;
-the same backend and source tree are embedded in the single-file `orcad.py`
-release. The vendored source remains under its MIT terms and is not relicensed
-by this repository. The catalog, runner, bridge adapter, and other integration code
-remain under this repository's AGPL-3.0-only terms. Any additional upstream
-attribution requirements MUST be verified against the authoritative vendored
-license and README.
+Vendored OpenSCAD libraries
+---------------------------
+Seven upstream OpenSCAD libraries are vendored unmodified under
+`openscad/vendor/<name>-<revision>/`. Every tree keeps its upstream `LICENSE`
+and a `REVISION` file naming the pinned commit, the license, the copyright
+holder and the vendored file list, and the same revisions are registered in the
+`libraries` map of `openscad/catalog.json`, so the shipped catalog and the
+vendored sources cannot drift apart unnoticed. The same backend and source
+trees are embedded in the single-file `orcad.py` release.
+
+The vendored sources remain under their own licenses and are not relicensed by
+this repository. The catalog, wrappers, runner, bridge adapter, and other
+integration code remain under this repository's AGPL-3.0-only terms. Any
+additional upstream attribution requirements MUST be verified against the
+authoritative vendored license and README. Full details are in
+THIRD_PARTY_NOTICES.
+
+- kennetek/gridfinity-rebuilt-openscad - MIT (Copyright (c) 2023 Kenneth
+  Hodson; Copyright (c) 2023 Zachary Freedman and Voidstar Lab LLC) -
+  https://github.com/kennetek/gridfinity-rebuilt-openscad - commit
+  910e22d8607fd7f5f51ad5e5cbc5287a76810bfd. The Gridfinity Bin, Gridfinity
+  Baseplate and the other Gridfinity object-mode geometry is rendered from this
+  tree, and code mode's `include <src/...>` resolves against it. The vendored
+  directory retains the upstream MIT `LICENSE`, README attribution, and
+  source-file references.
+- vector76/gridfinity_openscad - MIT (Copyright (c) 2022 Jamie) -
+  https://github.com/vector76/gridfinity_openscad - commit
+  0e7308cd8fc7fb4191aa69d81175a90d10de751c. Nine Gridfinity modules plus the
+  upstream LICENSE: the cups, the baseplate frame, the chess set and the
+  accessory bins.
+- wromijn/openscad-gridfinity-block - Apache-2.0 (Copyright wromijn and the
+  Gridfinity Block contributors) -
+  https://github.com/wromijn/openscad-gridfinity-block - commit
+  6ef6d644fff81283c810c2b90197901ce6657f84. The gridfinity_block.scad library
+  plus the upstream LICENSE: the blank block and block-in-pocket models.
+- LeKoYa/gridfinity-basket-openscad - MIT (Copyright (c) 2025 LeKoYa and The
+  Gridfinity Block Contributors) -
+  https://github.com/LeKoYa/gridfinity-basket-openscad - commit
+  549dc4015e4511daeb7b942de96d2531101701db. gridfinityBasket.scad plus the
+  upstream LICENSE.
+- rcolyer/threads-scad - CC0-1.0 (rcolyer and contributors; CC0 1.0 Universal
+  dedicates the work to the public) -
+  https://github.com/rcolyer/threads-scad - commit
+  4ae9aeb3b136f9858200f77a304b909a000ce3b4. threads.scad plus the upstream
+  CC0 LICENSE.txt: the metric fasteners.
+- scottbez1/splitflap - Apache-2.0 (Copyright 2015-2021 Scott Bezek and the
+  splitflap contributors) - https://github.com/scottbez1/splitflap - commit
+  87b17c531ca57b0bf10e86754e9d6b404b11a131. The 25 OpenSCAD modules under 3d/
+  plus the upstream LICENSE.txt: the flap card, spool, scoring jig and punch
+  jig are catalog objects. The TTF fonts upstream ships are not vendored, so the
+  flap card model is built from upstream's font-free dimension files plus a
+  wrapper that repeats flap_2d() with Apache-2.0 attribution; upstream's front
+  panel is vendored but not exposed, because its include chain needs those
+  fonts.
+- jazwa/rackstack - MIT (Copyright (c) 2023 Zhao Wang) -
+  https://github.com/jazwa/rackstack - commit
+  8e296e935aad89a6d1a5023da79becc634c10c2d. The 99 OpenSCAD sources under
+  rack-mount/, rack/, helper/ and config/ plus the upstream LICENSE: every rack
+  case, tray, plate and panel model.
 
 OpenSCAD bootstrap attribution
 -------------------------------

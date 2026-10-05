@@ -1,0 +1,39 @@
+87b17c531ca57b0bf10e86754e9d6b404b11a131
+
+Upstream: https://github.com/scottbez1/splitflap
+License: Apache-2.0
+Copyright: Copyright 2015-2021 Scott Bezek and the splitflap contributors
+
+Every OpenSCAD source under 3d/ (the 19 modules directly in 3d/ plus the 6
+jigs, mounts and containers in 3d/tools/) and the upstream LICENSE.txt, copied
+verbatim from the pinned commit. No TTF font assets are vendored: the bundled
+Roboto/Epilogue fonts are only used for the optional letter previews, which
+orcad does not render.
+
+Files:
+  3d/28byj-48.scad
+  3d/assert.scad
+  3d/color_util.scad
+  3d/combined_front_panel.scad
+  3d/flap.scad
+  3d/flap_3dp.scad
+  3d/flap_characters.scad
+  3d/flap_dimensions.scad
+  3d/flap_fonts.scad
+  3d/global_constants.scad
+  3d/label.scad
+  3d/m4_dimensions.scad
+  3d/pcb.scad
+  3d/projection_renderer.scad
+  3d/rough7380.scad
+  3d/sensor_pcb_dimensions.scad
+  3d/shapes.scad
+  3d/splitflap.scad
+  3d/spool.scad
+  3d/tools/classic_pcb_mount.scad
+  3d/tools/connector_case.scad
+  3d/tools/flap_container.scad
+  3d/tools/mounting_bracket.scad
+  3d/tools/punch_jig.scad
+  3d/tools/scoring_jig.scad
+  LICENSE.txt

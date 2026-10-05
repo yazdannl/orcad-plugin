@@ -1,0 +1,11 @@
+549dc4015e4511daeb7b942de96d2531101701db
+
+Upstream: https://github.com/LeKoYa/gridfinity-basket-openscad
+License: MIT
+Copyright: Copyright (c) 2025 LeKoYa and The Gridfinity Block Contributors
+
+Single model plus the upstream LICENSE, copied verbatim from the pinned commit.
+
+Files:
+  LICENSE
+  gridfinityBasket.scad
