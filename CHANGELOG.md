@@ -1,12 +1,15 @@
 # Changelog
 
-## Unreleased — Expanded model catalog
+## 0.9.11 — Expanded model catalog (2026-10-05)
 
 - **49 models in six categories.** Gridfinity grew from two objects to 19
   (bins, baseplates, blocks, pockets, baskets, a full chess set, glue stick,
   silverware, socket holder, FLSUN Q5 cup) and three more categories joined it:
   Organization, Cases and Panels. Fasteners and Basics came along with the
   pinned libraries they need.
+- **The model list scrolls.** 49 objects no longer fit the tab, so the catalog
+  list is its own capped, keyboard-focusable scroll region (`role="group"`,
+  labelled "Models") with a styled thin scrollbar instead of growing the page.
 - **Seven pinned upstream libraries.** Gridfinity Rebuilt, gridfinity_openscad,
   openscad-gridfinity-block, gridfinity-basket-openscad, threads-scad, splitflap
   and rackstack are vendored unmodified under `openscad/vendor/`, each with its
@@ -38,7 +41,7 @@
   upstream. Their font-free parts - the spool, the jigs and the flap itself -
   all stay.
 
-## 0.9.10 — Renamed to OrcaCAD
+## 0.9.10 — Renamed to OrcaCAD (2026-10-04)
 
 - The plugin is now **OrcaCAD**. "OrCAD" is a registered trademark of Cadence
   Design Systems, so the display name no longer uses it: the tab, the plugin name
