@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.13 — A compact model list (2026-10-09)
+
+- **The model library is a single-column list again, capped at two and a half
+  rows.** The two-column grid filled every bit of the sidebar it was allowed to
+  (up to 52vh, a dozen cards at once); the list now scrolls inside a 206 px
+  viewport - two models fully, the third cut in half - so the parameter panel
+  keeps its place. The half row is the cue that more models are below, and rows
+  are a fixed 76 px so a long model name cannot change how many fit.
+- Search, category chips, the result count, the keyboard-focusable scroll region
+  and the styled thin scrollbar are unchanged.
+
 ## 0.9.12 — The cache moves into OrcaSlicer's data directory (2026-10-09)
 
 - **The plugin permission dialog is gone, and with it the load failure on

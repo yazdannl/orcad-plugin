@@ -313,7 +313,7 @@ export default function App() {
                   <p className="result-count muted" role="status">{counts.shown} of {counts.total} models</p>
                 </div>
                 <div className="object-scroll" role="group" aria-label="Models" tabIndex={0}>
-                  <div className="object-grid">
+                  <div className="object-list">
                     {visibleObjects.map((key) => (
                       <button key={key} type="button" className={`object-card${key === objectKey ? ' is-active' : ''}`}
                         aria-pressed={key === objectKey} onClick={() => setObjectKey(key)} title={OBJECTS[key].description}>
