@@ -113,8 +113,8 @@ html:root h2, html:root h3 { color: var(--text); }
 .export-group { display: flex; align-items: center; gap: 6px; }
 
 .workspace {
-  flex: 1; min-height: 0; display: grid; gap: 12px; padding: 12px;
-  grid-template-columns: minmax(300px, 370px) minmax(0, 1fr) minmax(250px, 310px);
+  position: relative; flex: 1; min-height: 0; display: grid; gap: 12px; padding: 12px;
+  grid-template-columns: var(--side-w, 370px) minmax(0, 1fr) minmax(250px, 310px);
   grid-template-areas: 'side stage out';
 }
 .workspace-code { grid-template-columns: minmax(360px, 1.15fr) minmax(0, 1.5fr) minmax(250px, 300px); }
@@ -124,6 +124,21 @@ html:root h2, html:root h3 { color: var(--text); }
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
 }
 .sidebar { grid-area: side; }
+
+/* drag handle: a 12px strip filling the column gap, so it never overlaps the
+   scrolling sidebar or the stage */
+.sidebar-resizer {
+  position: absolute; z-index: 3; top: 0; bottom: 0; width: 12px;
+  left: calc(var(--side-w, 370px) + 12px); cursor: col-resize; touch-action: none;
+}
+.sidebar-resizer::before {
+  content: ''; position: absolute; top: 10px; bottom: 10px; left: 50%; width: 3px; border-radius: 3px;
+  transform: translateX(-50%); background: transparent; transition: background .15s;
+}
+html:root .sidebar-resizer:hover::before,
+html:root .sidebar-resizer:focus-visible::before { background: var(--accent); }
+html:root .sidebar-resizer:focus-visible { outline: 2px solid var(--focus); outline-offset: -4px; border-radius: 8px; }
+
 .stage { grid-area: stage; }
 .output { grid-area: out; display: flex; flex-direction: column; }
 
@@ -226,7 +241,7 @@ html:root .chip.is-active { border-color: transparent; background: var(--soft); 
 
 .object-scroll {
   /* exactly two and a half rows ever fit: the half row is the "more below" cue */
-  --model-row: 76px;
+  --model-row: 62px;
   --model-gap: 8px;
   max-height: calc(2.5 * var(--model-row) + 2 * var(--model-gap));
   overflow-y: auto; overscroll-behavior: contain;
@@ -238,10 +253,13 @@ html:root .chip.is-active { border-color: transparent; background: var(--soft); 
 .object-scroll::-webkit-scrollbar-thumb:hover { background: var(--muted); background-clip: padding-box; }
 html:root .object-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; border-radius: 10px; }
 
-.object-list { display: flex; flex-direction: column; gap: var(--model-gap); }
+/* as many columns as the sidebar width allows: widening it turns the list into a
+   grid instead of stretching one row per model */
+.object-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--model-gap); }
 html:root .object-card {
-  position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 10px;
-  align-items: center; height: var(--model-row); padding: 10px; border-radius: 12px; border: 1px solid var(--line); background: var(--raised);
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto;
+  column-gap: 10px; align-items: center; height: var(--model-row); padding: 8px; border-radius: 12px;
+  border: 1px solid var(--line); background: var(--raised);
   transition: border-color .15s, box-shadow .15s, transform .1s;
 }
 html:root .object-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
@@ -251,12 +269,16 @@ html:root .object-card.is-active {
   background: linear-gradient(var(--raised-2), var(--raised-2)) padding-box, var(--grad) border-box;
   box-shadow: 0 8px 22px rgba(6, 182, 212, .18);
 }
-.object-icon {
-  grid-row: span 2; display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px;
-  background: var(--soft); color: var(--soft-text);
+.object-thumb {
+  grid-row: span 2; display: grid; place-items: center; width: 56px; height: 44px; border-radius: 8px;
+  background: var(--soft); overflow: hidden;
 }
-.object-card.is-active .object-icon { background: var(--grad); color: #fff; }
-.object-name { font-weight: 600; font-size: .92rem; line-height: 1.2; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.object-thumb img { display: block; max-width: 100%; max-height: 100%; }
+.object-card.is-active .object-thumb { background: var(--raised-2); }
+.object-name {
+  font-weight: 600; font-size: .88rem; line-height: 1.25; min-width: 0;
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
 .object-cat { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
 .empty-search { padding: 8px 2px; }
 
@@ -589,7 +611,8 @@ html:root .card-title { color: var(--muted); }
 /* ------------------------------------------------------- responsiveness -- */
 @media (max-width: 1320px) {
   .workspace {
-    grid-template-columns: minmax(290px, 350px) minmax(0, 1fr);
+    /* the user-set width also drives this two-row layout */
+    grid-template-columns: var(--side-w, 350px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(190px, 30%);
     grid-template-areas: 'side stage' 'side out';
   }
@@ -610,6 +633,7 @@ html:root .card-title { color: var(--muted); }
 
 @media (max-width: 900px) {
   .app { height: auto; min-height: 100vh; overflow: visible; }
+  .sidebar-resizer { display: none; } /* the sidebar is full width here */
   .workspace {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: auto;

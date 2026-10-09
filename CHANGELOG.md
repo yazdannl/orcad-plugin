@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.9.14 — Resizable sidebar, responsive grid, model previews (2026-10-09)
+
+- **The sidebar is resizable.** A 12px handle fills the gap between the library
+  and the viewport: drag it (or focus it and press the arrow keys) and the width
+  is kept between 260 px and 60% of the window, remembered in the saved
+  settings. Both workspace layouts follow it, including the two-row layout
+  OrcaSlicer falls back to on narrower windows.
+- **The model list turns into a grid as it grows.** Rows stay 62 px tall, but the
+  list now fills as many 190 px columns as the width allows - one column at the
+  default width, three at 690 px - instead of stretching a single row. The
+  scroll region still shows exactly two and a half rows, so a wide sidebar shows
+  two or three times as many models at once.
+- **Every model has a rendered preview and a short name.** `dev/thumbs.py`
+  renders each catalog object with its default parameters from a fixed isometric
+  camera, keys out OpenSCAD's background to transparency and crops it to the
+  model; the 49 thumbnails add about 44 KB. The list shows the thumbnail, the new
+  `short` catalog name (`Bin`, `Chess queen`, `Ventilated plate`) and the category;
+  the full name and description stay in the tooltip and the parameter panel.
+
 ## 0.9.13 — A compact model list (2026-10-09)
 
 - **The model library is a single-column list again, capped at two and a half

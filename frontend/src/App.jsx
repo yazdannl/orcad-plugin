@@ -3,6 +3,8 @@ import { createBridge } from './bridge.js'
 import { aiReducer, initialAIState } from './ai.js'
 import { OBJECTS, QUALITY, activePreset, applyPreset, categories, groups, isDisabled, presets, restoreParams, resultCounts, searchObjects, setParam, defaults } from './catalog.js'
 import { loadSettings, saveSettings } from './storage.js'
+import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from './sidebar.js'
+import { THUMBNAILS } from './thumbs.js'
 import { decodeMesh, meshStats } from './mesh.js'
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js'
 import { copyText } from './clipboard.js'
@@ -55,6 +57,7 @@ function EnginePill({ engine, onDetails }) {
 export default function App() {
   const saved = useMemo(() => loadSettings(), [])
   const [mode, setMode] = useState(saved.mode === 'code' ? 'code' : 'library')
+  const [sidebarWidth, setSidebarWidth] = useState(() => clampSidebarWidth(saved.sidebarWidth, globalThis.innerWidth))
   const [objectKey, setObjectKey] = useState(OBJECTS[saved.objectKey] ? saved.objectKey : 'gridfinity_bin')
   const [paramsByObject, setParamsByObject] = useState(() => Object.fromEntries(
     Object.keys(OBJECTS).map((key) => [key, restoreParams(key, saved.params?.[key])])))
@@ -170,8 +173,41 @@ export default function App() {
 
   // ---- persistence --------------------------------------------------------
   useEffect(() => {
-    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid, aiOpen, aiConfig: aiConfigChoice })
-  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid, aiOpen, aiConfigChoice])
+    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid, aiOpen, aiConfig: aiConfigChoice, sidebarWidth })
+  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid, aiOpen, aiConfigChoice, sidebarWidth])
+
+  // ---- resizable sidebar ---------------------------------------------------
+  const dragSidebar = useCallback((event) => {
+    if (event.button !== undefined && event.button !== 0) return
+    event.preventDefault()
+    const handle = event.currentTarget
+    const startX = event.clientX
+    const startWidth = sidebarWidth
+    const move = (moveEvent) => setSidebarWidth(clampSidebarWidth(startWidth + moveEvent.clientX - startX, globalThis.innerWidth))
+    const stop = () => {
+      handle.removeEventListener('pointermove', move)
+      handle.removeEventListener('pointerup', stop)
+      handle.removeEventListener('pointercancel', stop)
+    }
+    try {
+      handle.setPointerCapture?.(event.pointerId) // keep tracking when the pointer leaves the narrow strip
+    } catch {
+      // a pointer that is already gone (synthetic events, lost capture) still drags
+    }
+    handle.addEventListener('pointermove', move)
+    handle.addEventListener('pointerup', stop)
+    handle.addEventListener('pointercancel', stop)
+  }, [sidebarWidth])
+
+  const nudgeSidebar = useCallback((event) => {
+    const step = event.shiftKey ? 64 : 16
+    const next = event.key === 'ArrowLeft' ? sidebarWidth - step
+      : event.key === 'ArrowRight' ? sidebarWidth + step
+        : event.key === 'Home' ? SIDEBAR_MIN : event.key === 'End' ? SIDEBAR_MAX : null
+    if (next === null) return
+    event.preventDefault()
+    setSidebarWidth(clampSidebarWidth(next, globalThis.innerWidth))
+  }, [sidebarWidth])
 
   // ---- rendering ------------------------------------------------------------
   const source = useCallback(() => (mode === 'library'
@@ -292,7 +328,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className={`workspace workspace-${mode}`}>
+      <main className={`workspace workspace-${mode}`} style={mode === 'library' ? { '--side-w': `${sidebarWidth}px` } : undefined}>
         <aside className={`panel sidebar sidebar-${mode}`} aria-label={mode === 'library' ? 'Model library' : 'Code editor'}>
           {mode === 'library' ? (
             <>
@@ -316,9 +352,11 @@ export default function App() {
                   <div className="object-list">
                     {visibleObjects.map((key) => (
                       <button key={key} type="button" className={`object-card${key === objectKey ? ' is-active' : ''}`}
-                        aria-pressed={key === objectKey} onClick={() => setObjectKey(key)} title={OBJECTS[key].description}>
-                        <span className="object-icon"><Icon name={OBJECTS[key].icon} size={22} /></span>
-                        <span className="object-name">{OBJECTS[key].label}</span>
+                        title={`${OBJECTS[key].label} - ${OBJECTS[key].description}`}>
+                        <span className="object-thumb">
+                          {THUMBNAILS[key] && <img src={THUMBNAILS[key]} alt="" loading="lazy" />}
+                        </span>
+                        <span className="object-name">{OBJECTS[key].short || OBJECTS[key].label}</span>
                         <span className="object-cat">{OBJECTS[key].category}</span>
                       </button>
                     ))}
@@ -409,6 +447,13 @@ export default function App() {
             </div>
           )}
         </aside>
+
+        {mode === 'library' && (
+          <div className="sidebar-resizer" role="separator" aria-orientation="vertical" tabIndex={0}
+            aria-label="Resize model list" title="Drag to resize"
+            aria-valuenow={sidebarWidth} aria-valuemin={SIDEBAR_MIN} aria-valuemax={SIDEBAR_MAX}
+            onPointerDown={dragSidebar} onKeyDown={nudgeSidebar} />
+        )}
 
         <section className="stage" aria-label="Preview">
           <Viewport ref={viewport} mesh={preview?.mesh || null} fitKey={fitKey} wireframe={view.wireframe}

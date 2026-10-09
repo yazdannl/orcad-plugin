@@ -55,6 +55,20 @@ def test_every_catalog_object_is_complete_and_its_defaults_validate():
         assert validate_parameters(name, {}) == defaults(name)
 
 
+def test_every_object_has_a_short_name_and_a_preview_thumbnail():
+    """The list item shows `short` and its thumbnail; both are generated data."""
+    thumbs = Path(__file__).resolve().parents[1] / "frontend" / "src" / "thumbs"
+    short_names = set()
+    for name, spec in CATALOG["objects"].items():
+        short = spec["short"]
+        assert short.strip() == short and 0 < len(short) <= 20, (name, short)
+        assert short.casefold() not in short_names, f"duplicate short name: {short}"
+        short_names.add(short.casefold())
+        thumbnail = thumbs / f"{name}.png"
+        assert thumbnail.is_file(), f"{name} has no thumbnail; run `xvfb-run -a python3 dev/thumbs.py`"
+        assert 100 < thumbnail.stat().st_size < 40_000, name
+
+
 def test_every_object_documents_itself_and_its_presets_validate():
     for name, spec in CATALOG["objects"].items():
         variables = {param["variable"] for param in spec["parameters"]}

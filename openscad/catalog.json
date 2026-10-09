@@ -73,6 +73,7 @@
   "objects": {
     "gridfinity_bin": {
       "label": "Gridfinity Bin",
+      "short": "Bin",
       "category": "Gridfinity",
       "icon": "bin",
       "source": "vendor/gridfinity-rebuilt-openscad-910e22d8/gridfinity-rebuilt-bins.scad",
@@ -401,6 +402,7 @@
     },
     "gridfinity_baseplate": {
       "label": "Gridfinity Baseplate",
+      "short": "Baseplate",
       "category": "Gridfinity",
       "icon": "baseplate",
       "source": "vendor/gridfinity-rebuilt-openscad-910e22d8/gridfinity-rebuilt-baseplate.scad",
@@ -620,6 +622,7 @@
     },
     "box": {
       "label": "Box",
+      "short": "Box",
       "category": "Basics",
       "icon": "box",
       "source": "objects/box.scad",
@@ -680,6 +683,7 @@
     },
     "cylinder": {
       "label": "Cylinder",
+      "short": "Cylinder",
       "category": "Basics",
       "icon": "cylinder",
       "source": "objects/cylinder.scad",
@@ -716,6 +720,7 @@
     },
     "tube": {
       "label": "Tube",
+      "short": "Tube",
       "category": "Basics",
       "icon": "tube",
       "source": "objects/tube.scad",
@@ -765,6 +770,7 @@
     },
     "bracket": {
       "label": "Mounting plate",
+      "short": "Mounting plate",
       "category": "Basics",
       "icon": "bracket",
       "source": "objects/bracket.scad",
@@ -846,6 +852,7 @@
     },
     "gridfinity_cup": {
       "label": "Gridfinity Cup",
+      "short": "Cup",
       "category": "Gridfinity",
       "icon": "bin",
       "source": "objects/wrappers/gf_cup.scad",
@@ -1082,6 +1089,7 @@
     },
     "gridfinity_block": {
       "label": "Gridfinity Block",
+      "short": "Block",
       "category": "Gridfinity",
       "icon": "cube",
       "source": "objects/wrappers/gf_block.scad",
@@ -1210,6 +1218,7 @@
     },
     "gridfinity_block_pocket": {
       "label": "Gridfinity Block with Pockets",
+      "short": "Block + pockets",
       "category": "Gridfinity",
       "icon": "cylinder",
       "source": "objects/wrappers/gf_block_pocket.scad",
@@ -1375,6 +1384,7 @@
     },
     "gridfinity_basket": {
       "label": "Gridfinity Basket",
+      "short": "Basket",
       "category": "Gridfinity",
       "icon": "folder",
       "source": "objects/wrappers/gf_basket.scad",
@@ -1588,6 +1598,7 @@
     },
     "gridfinity_chess_board": {
       "label": "Gridfinity Chess Board",
+      "short": "Chess board",
       "category": "Gridfinity",
       "icon": "grid",
       "source": "objects/wrappers/gf_chess_board.scad",
@@ -1629,6 +1640,7 @@
     },
     "gridfinity_chess_tile": {
       "label": "Gridfinity Chess Tile",
+      "short": "Chess tile",
       "category": "Gridfinity",
       "icon": "plate",
       "source": "objects/wrappers/gf_chess_tile.scad",
@@ -1670,6 +1682,7 @@
     },
     "gridfinity_chess_pawn": {
       "label": "Gridfinity Chess Pawn",
+      "short": "Chess pawn",
       "category": "Gridfinity",
       "icon": "iso",
       "source": "objects/wrappers/gf_chess_pawn.scad",
@@ -1711,6 +1724,7 @@
     },
     "gridfinity_chess_knight": {
       "label": "Gridfinity Chess Knight",
+      "short": "Chess knight",
       "category": "Gridfinity",
       "icon": "iso",
       "source": "objects/wrappers/gf_chess_knight.scad",
@@ -1752,6 +1766,7 @@
     },
     "gridfinity_chess_bishop": {
       "label": "Gridfinity Chess Bishop",
+      "short": "Chess bishop",
       "category": "Gridfinity",
       "icon": "iso",
       "source": "objects/wrappers/gf_chess_bishop.scad",
@@ -1793,6 +1808,7 @@
     },
     "gridfinity_chess_rook": {
       "label": "Gridfinity Chess Rook",
+      "short": "Chess rook",
       "category": "Gridfinity",
       "icon": "iso",
       "source": "objects/wrappers/gf_chess_rook.scad",
@@ -1834,6 +1850,7 @@
     },
     "gridfinity_chess_queen": {
       "label": "Gridfinity Chess Queen",
+      "short": "Chess queen",
       "category": "Gridfinity",
       "icon": "iso",
       "source": "objects/wrappers/gf_chess_queen.scad",
@@ -1875,6 +1892,7 @@
     },
     "gridfinity_chess_king": {
       "label": "Gridfinity Chess King",
+      "short": "Chess king",
       "category": "Gridfinity",
       "icon": "iso",
       "source": "objects/wrappers/gf_chess_king.scad",
@@ -1916,6 +1934,7 @@
     },
     "gridfinity_baseplate_frame": {
       "label": "Gridfinity Baseplate (frame)",
+      "short": "Baseplate frame",
       "category": "Gridfinity",
       "icon": "baseplate",
       "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_baseplate.scad",
@@ -2016,6 +2035,7 @@
     },
     "gridfinity_glue_stick": {
       "label": "Gridfinity Glue Stick Holder",
+      "short": "Glue stick",
       "category": "Gridfinity",
       "icon": "tube",
       "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_glue_stick.scad",
@@ -2116,6 +2136,7 @@
     },
     "gridfinity_silverware": {
       "label": "Gridfinity Silverware Tray",
+      "short": "Silverware tray",
       "category": "Gridfinity",
       "icon": "box",
       "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_silverware.scad",
@@ -2606,6 +2627,7 @@
     },
     "gridfinity_socket_holder": {
       "label": "Gridfinity Socket Holder",
+      "short": "Socket holder",
       "category": "Gridfinity",
       "icon": "front",
       "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_socket_holder.scad",
@@ -2704,6 +2726,7 @@
     },
     "gridfinity_flsun_q5": {
       "label": "Gridfinity FLSUN Q5 Adapter",
+      "short": "FLSUN Q5 adapter",
       "category": "Gridfinity",
       "icon": "bracket",
       "source": "vendor/gridfinity_openscad-0e7308cd/gridfinity_flsun_q5.scad",
@@ -2793,6 +2816,7 @@
     },
     "metric_bolt": {
       "label": "Metric Hex Bolt",
+      "short": "Hex bolt",
       "category": "Fasteners",
       "icon": "bracket",
       "source": "objects/wrappers/metric_bolt.scad",
@@ -2911,6 +2935,7 @@
     },
     "metric_nut": {
       "label": "Metric Hex Nut",
+      "short": "Hex nut",
       "category": "Fasteners",
       "icon": "cube",
       "source": "objects/wrappers/metric_nut.scad",
@@ -3025,6 +3050,7 @@
     },
     "metric_countersunk_bolt": {
       "label": "Metric Countersunk Bolt",
+      "short": "Countersunk bolt",
       "category": "Fasteners",
       "icon": "top",
       "source": "objects/wrappers/metric_countersunk_bolt.scad",
@@ -3143,6 +3169,7 @@
     },
     "metric_wood_screw": {
       "label": "Metric Wood Screw",
+      "short": "Wood screw",
       "category": "Fasteners",
       "icon": "bracket",
       "source": "objects/wrappers/metric_wood_screw.scad",
@@ -3252,6 +3279,7 @@
     },
     "threaded_rod": {
       "label": "Threaded Rod",
+      "short": "Threaded rod",
       "category": "Fasteners",
       "icon": "cylinder",
       "source": "objects/wrappers/threaded_rod.scad",
@@ -3359,6 +3387,7 @@
     },
     "hole_coupon": {
       "label": "Hole Coupon",
+      "short": "Hole coupon",
       "category": "Fasteners",
       "icon": "grid",
       "source": "objects/wrappers/hole_coupon.scad",
@@ -3540,6 +3569,7 @@
     },
     "battery_holder": {
       "label": "Battery Holder",
+      "short": "Battery holder",
       "category": "Organization",
       "icon": "bin",
       "source": "objects/battery_holder.scad",
@@ -3710,6 +3740,7 @@
     },
     "pcb_mount": {
       "label": "PCB Mount",
+      "short": "PCB mount",
       "category": "Organization",
       "icon": "plate",
       "source": "objects/pcb_mount.scad",
@@ -3879,6 +3910,7 @@
     },
     "cable_clip": {
       "label": "Cable Clip",
+      "short": "Cable clip",
       "category": "Organization",
       "icon": "tube",
       "source": "objects/cable_clip.scad",
@@ -4048,6 +4080,7 @@
     },
     "device_stand": {
       "label": "Phone or Tablet Stand",
+      "short": "Device stand",
       "category": "Organization",
       "icon": "front",
       "source": "objects/device_stand.scad",
@@ -4215,6 +4248,7 @@
     },
     "wall_hook": {
       "label": "Wall Hook",
+      "short": "Wall hook",
       "category": "Organization",
       "icon": "iso",
       "source": "objects/wall_hook.scad",
@@ -4444,6 +4478,7 @@
     },
     "bit_holder": {
       "label": "Bit Holder",
+      "short": "Bit holder",
       "category": "Organization",
       "icon": "library",
       "source": "objects/bit_holder.scad",
@@ -4640,6 +4675,7 @@
     },
     "drawer_divider": {
       "label": "Drawer Divider",
+      "short": "Drawer divider",
       "category": "Organization",
       "icon": "folder",
       "source": "objects/drawer_divider.scad",
@@ -4818,6 +4854,7 @@
     },
     "wall_plate": {
       "label": "Wall Plate",
+      "short": "Wall plate",
       "category": "Organization",
       "icon": "plate",
       "source": "objects/wall_plate.scad",
@@ -5004,6 +5041,7 @@
     },
     "splitflap_flap": {
       "label": "Split-Flap Card",
+      "short": "Flap card",
       "category": "Panels",
       "icon": "plate",
       "source": "objects/wrappers/splitflap_flap.scad",
@@ -5042,6 +5080,7 @@
     },
     "splitflap_spool": {
       "label": "Split-Flap Spool",
+      "short": "Flap spool",
       "category": "Panels",
       "icon": "cylinder",
       "source": "objects/wrappers/splitflap_spool.scad",
@@ -5141,6 +5180,7 @@
     },
     "splitflap_scoring_jig": {
       "label": "Split-Flap Scoring Jig",
+      "short": "Scoring jig",
       "category": "Panels",
       "icon": "plate",
       "source": "vendor/splitflap-87b17c53/3d/tools/scoring_jig.scad",
@@ -5234,6 +5274,7 @@
     },
     "splitflap_punch_jig": {
       "label": "Split-Flap Punch Jig",
+      "short": "Punch jig",
       "category": "Panels",
       "icon": "plate",
       "source": "vendor/splitflap-87b17c53/3d/tools/punch_jig.scad",
@@ -5374,6 +5415,7 @@
     },
     "rack_tray": {
       "label": "Rack Tray",
+      "short": "Rack tray",
       "category": "Cases",
       "icon": "plate",
       "source": "objects/wrappers/rack_tray.scad",
@@ -5514,6 +5556,7 @@
     },
     "rack_ventilated_plate": {
       "label": "Rack Ventilated Plate",
+      "short": "Ventilated plate",
       "category": "Cases",
       "icon": "grid",
       "source": "objects/wrappers/rack_ventilated_plate.scad",
@@ -5634,6 +5677,7 @@
     },
     "rack_patch_panel": {
       "label": "Rack Patch Panel",
+      "short": "Patch panel",
       "category": "Cases",
       "icon": "front",
       "source": "objects/wrappers/rack_patch_panel.scad",
@@ -5805,6 +5849,7 @@
     },
     "rack_enclosed_box": {
       "label": "Rack Enclosed Box",
+      "short": "Enclosed box",
       "category": "Cases",
       "icon": "box",
       "source": "objects/wrappers/rack_enclosed_box.scad",
@@ -5954,6 +5999,7 @@
     },
     "rack_angle_bracket": {
       "label": "Rack Angle Bracket",
+      "short": "Angle bracket",
       "category": "Cases",
       "icon": "bracket",
       "source": "objects/wrappers/rack_angle_bracket.scad",
@@ -6060,6 +6106,7 @@
     },
     "rack_fan_tray": {
       "label": "Rack Fan Tray",
+      "short": "Fan tray",
       "category": "Cases",
       "icon": "plate",
       "source": "objects/wrappers/rack_fan_tray.scad",
@@ -6224,6 +6271,7 @@
     },
     "rack_brush_strip_plate": {
       "label": "Rack Brush Strip Plate",
+      "short": "Brush strip plate",
       "category": "Cases",
       "icon": "plate",
       "source": "vendor/rackstack-8e296e93/rack-mount/catalog/brush-strip-plate.scad",
@@ -6328,6 +6376,7 @@
     },
     "rack_sbc_case": {
       "label": "Rack SBC Case",
+      "short": "SBC case",
       "category": "Cases",
       "icon": "box",
       "source": "vendor/rackstack-8e296e93/rack-mount/catalog/rpi-sbc-simple-box/case.scad",

@@ -1,6 +1,6 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.13)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.14)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -14,10 +14,12 @@ the build plate with one click.
   and the metric fasteners from [threads-scad](https://github.com/rcolyer/threads-scad),
   next to a Box, Cylinder, Tube and Mounting plate. Every parameter gets a
   slider, number field, switch or option picker, with inline validation, and
-  many objects ship **presets** - one click for a sensible starting point. The
-  list is one column of fixed 76 px rows inside a scroll area that shows two and
-  a half of them, so the sidebar keeps its height no matter how many models the
-  catalog grows to; the half row is the cue that there is more below.
+  many objects ship **presets** - one click for a sensible starting point. Each
+  row shows a rendered preview thumbnail and a short name, the list scrolls in a
+  region two and a half rows tall, and dragging the divider between the library
+  and the viewport widens the sidebar: the rows then flow into as many columns as
+  fit, so a wide sidebar shows two or three times as many models at once, and the
+  width is remembered. The half row is the cue that there is more below.
 - **Code:** an OpenSCAD editor with examples, line numbers, error-line
   highlighting and Ctrl+Enter to render. `include <src/...>` loads the bundled
   Gridfinity library, and every other vendored library is on `OPENSCADPATH`
@@ -221,6 +223,7 @@ code you trust.
 ```sh
 cd frontend && npm ci && cd ..
 python3 dev/serve.py                 # the real backend + page at http://127.0.0.1:8765/?theme=dark|light
+xvfb-run -a python3 dev/thumbs.py    # re-render the model preview thumbnails
 python3 packaging/bundle.py          # build the page and embed frontend, openscad/, and ai/
 python3 packaging/bundle.py --check  # CI: fail if frontend/dist or orcad.py is stale
 python3 -m pytest                    # backend, bootstrap, plugin and bundle tests
