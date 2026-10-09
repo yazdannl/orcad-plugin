@@ -106,11 +106,30 @@ def stale_members(committed: dict[str, str], fresh: dict[str, str]) -> list[str]
     return sorted(name for name in committed.keys() | fresh.keys() if committed.get(name) != fresh.get(name))
 
 
+def crlf_files() -> list[str]:
+    """Embedded files whose working-tree CRLF line endings .gitattributes hides.
+
+    `* text=auto eol=lf` makes git call a CRLF working tree clean and commit LF,
+    but the bundle embeds the bytes on disk: a blob built here then differs from
+    the one CI builds from a fresh checkout, which reports the release as stale.
+    """
+    try:
+        listed = subprocess.run(["git", "ls-files", "--eol", "--", BACKEND.name, AI_BACKEND.name],
+                                cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):  # a source tree without git
+        return []
+    return [line.rsplit("\t", 1)[-1] for line in listed.splitlines() if "w/crlf" in line or "w/mixed" in line]
+
+
 def check() -> int:
     with tempfile.TemporaryDirectory() as directory:
         build_frontend(Path(directory))
         fresh = (Path(directory) / "index.html").read_text(encoding="utf-8")
     problems = []
+    crlf = crlf_files()
+    for name in crlf:
+        print(f"error: {name} has CRLF in the working tree, which git hides but the embedded blob keeps; "
+              "rewrite it with LF line endings and rebuild", file=sys.stderr)
     if not DIST.is_file() or DIST.read_text(encoding="utf-8") != fresh:
         problems.append("frontend/dist/index.html is stale")
     current = TARGET.read_text(encoding="utf-8")
@@ -130,7 +149,7 @@ def check() -> int:
         problems.append("orcad.py embedded blobs are stale: " + "; ".join(detail))
     for problem in problems:
         print(f"error: {problem}; run `python3 packaging/bundle.py`", file=sys.stderr)
-    return 1 if problems else 0
+    return 1 if problems or crlf else 0
 
 
 def write() -> None:

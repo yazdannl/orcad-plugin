@@ -410,7 +410,8 @@ def test_cache_root_lives_in_the_orca_data_dir(tmp_path, monkeypatch):
 def test_cache_root_falls_back_outside_orcaslicer(tmp_path, monkeypatch):
     monkeypatch.setattr(orcad, "HERE", tmp_path / "checkout")
     _redirect_cache(monkeypatch, tmp_path)
-    assert orcad._cache_root() == tmp_path / "cache" / "orcad"
+    base = tmp_path / "home" / "Library" / "Caches" if sys.platform == "darwin" else tmp_path / "cache"
+    assert orcad._cache_root() == base / "orcad"
 
 
 def test_single_file_install_uses_the_embedded_page_and_backend(tmp_path, monkeypatch):
