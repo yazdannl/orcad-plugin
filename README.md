@@ -1,6 +1,6 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.11)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.12)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -70,14 +70,20 @@ pi** in the Code view.
 
 On first start the plugin looks for OpenSCAD 2023 or newer on `PATH`. If it
 finds none, it downloads an official OpenSCAD development snapshot (about 80 MB)
-into a per-user cache, verifies it against a pinned SHA-256 digest, and never
-asks for admin rights:
+into OrcaCAD's cache folder, verifies it against a pinned SHA-256 digest, and
+never asks for admin rights:
 
-| Platform | Artifact | Cache |
-| --- | --- | --- |
-| Linux x86_64 / ARM64 | AppImage, extracted, so FUSE is not required | `~/.cache/orcad/openscad` |
-| macOS (Intel + Apple Silicon) | universal `.dmg` | `~/Library/Caches/orcad/openscad` |
-| Windows x86_64 | portable `.zip` | `%LOCALAPPDATA%\orcad\openscad` |
+| Platform | Artifact |
+| --- | --- |
+| Linux x86_64 / ARM64 | AppImage, extracted, so FUSE is not required |
+| macOS (Intel + Apple Silicon) | universal `.dmg` |
+| Windows x86_64 | portable `.zip` |
+
+That cache folder and the rest of OrcaCAD's runtime data live in
+`<Orca data dir>/orcad`, which OrcaSlicer's plugin sandbox pre-approves, so it
+never asks you for filesystem permission. Loaded outside OrcaSlicer (development,
+`dev/serve.py`) the per-user cache is used instead: `%LOCALAPPDATA%\orcad`,
+`~/Library/Caches/orcad` or `~/.cache/orcad`.
 
 Upstream eventually deletes old snapshots. When the pinned file is gone, the
 plugin picks the newest snapshot for the platform and verifies it against the
@@ -93,20 +99,16 @@ compressed depending on platform; the Pi package tarball is about **7.3 MB**
 (23 MB unpacked), plus its npm dependencies. No admin rights are required.
 
 The runtime, `model.scad` workspace, OrcaCAD-managed Pi agent directory, and
-custom endpoint key files live under the per-user `orcad/ai` cache:
-
-| Platform | AI cache |
-| --- | --- |
-| Linux | `$XDG_CACHE_HOME/orcad/ai` or `~/.cache/orcad/ai` |
-| macOS | `~/Library/Caches/orcad/ai` |
-| Windows | `%LOCALAPPDATA%\orcad\ai` |
+custom endpoint key files live under `<Orca data dir>/orcad/ai` (or
+`%LOCALAPPDATA%\orcad/ai`, `~/Library/Caches/orcad/ai` or
+`$XDG_CACHE_HOME/orcad/ai` outside OrcaSlicer).
 
 In Code → Settings, choose **Use my pi setup** to reuse `~/.pi/agent`, or
 **OrcaCAD-managed** for a separate account/configuration under the cache above.
 Managed setup supports Pi's built-in browser/device sign-in and API-key login
 (e.g. GitHub Copilot, Anthropic Claude Pro/Max, and OpenAI ChatGPT), plus Sign
 out. Pi itself stores those credentials in
-`orcad/ai/private-agent/auth.json`; OrcaCAD never returns the saved values to the
+`<Orca data dir>/orcad/ai/private-agent/auth.json`; OrcaCAD never returns the saved values to the
 page or writes them to chat/history. One-time authorization links/device codes
 and the prompts needed to complete sign-in appear only in a transient dialog.
 
@@ -176,13 +178,21 @@ instead of a tab.
 Restart OrcaSlicer and enable **OrcaCAD** in the Plugins dialog. Runtime data
 lives next to the plugin: `exports/` (your files) and `.cache/` (rendered STL
 cache, capped at 512 MB). For a single-file install the OpenSCAD backend is
-unpacked into the per-user cache instead of beside the file
-(`%LOCALAPPDATA%\orcad\backend`, `~/Library/Caches/orcad/backend`,
-`~/.cache/orcad/backend`), because a plugin directory installed from Orca Cloud
-is already a long path. The AI cache location is listed above.
+unpacked into the cache folder below `orcad.py` instead of beside it
+(`<Orca data dir>/orcad/backend`), because a plugin directory installed from
+Orca Cloud is already a long path. The AI cache location is listed above.
 
 ## Troubleshooting
 
+- **OrcaSlicer asks OrcaCAD to create files** (the dialog reads *Plugin "OrcaCAD"
+  is requesting to create the following file(s)*): 0.9.11 and older kept their
+  cache outside OrcaSlicer's own data directory (`%LOCALAPPDATA%\orcad` and
+  siblings), so the plugin sandbox asked for permission - again on every start,
+  because OrcaSlicer does not remember directory-creation grants, and when the
+  question was asked from a worker thread the plugin's load failed no matter
+  which answer you picked. 0.9.12 moves the cache to `<Orca data dir>/orcad` and
+  the question is gone. Update the plugin (or install the current `orcad.py` from
+  the release page); no cleanup of the old folder is needed.
 - **"Setting up OpenSCAD" never finishes or fails:** the first run needs
   network access to `files.openscad.org`. Hover or click the red pill for the
   reason. As an alternative, install an OpenSCAD 2023+ development snapshot

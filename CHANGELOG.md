@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.9.12 — The cache moves into OrcaSlicer's data directory (2026-10-09)
+
+- **The plugin permission dialog is gone, and with it the load failure on
+  Windows.** OrcaCAD unpacked its OpenSCAD backend, tab icon, OpenSCAD build and
+  Node runtime into `%LOCALAPPDATA%\orcad`, `~/Library/Caches/orcad` or
+  `~/.cache/orcad` - outside the only root OrcaSlicer's plugin sandbox trusts.
+  OrcaSlicer therefore asked before every one of those writes, and it never
+  remembers "create" grants, so the question returned on every start. Worse,
+  OrcaSlicer denies an audited call that arrives from a worker thread before the
+  answer can arrive: the backend unpack failed, the module import failed, and the
+  OrcaCAD tab stayed closed no matter whether you clicked Yes or No.
+- **Everything now lives in `<Orca data dir>/orcad`**, derived from the plugin's
+  own location (OrcaSlicer always installs plugins under
+  `<data dir>/orca_plugins/`), which the sandbox pre-approves. The OpenSCAD
+  download and the AI runtime are given the same root explicitly instead of
+  recomputing it, so no part of the plugin writes outside it. The old per-user
+  caches stay usable as a fallback when the module is loaded outside OrcaSlicer,
+  and the old folders are simply left behind.
+- The macOS `.dmg` install mounts the disk image inside the cache folder instead
+  of the system temp directory, which the sandbox audits the same way.
+- Upgrading starts the caches over: the first render after the update downloads
+  OpenSCAD again, an existing **Install pi** setup is re-provisioned, and a Pi
+  sign-in made under the old folder has to be repeated. Nothing is deleted - the
+  old `orcad` folder is simply no longer used.
+
 ## 0.9.11 — Expanded model catalog (2026-10-05)
 
 - **49 models in six categories.** Gridfinity grew from two objects to 19

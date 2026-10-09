@@ -161,7 +161,7 @@ def test_windows_copydata_runs_on_render_worker(session, monkeypatch):
 
 def test_engine_setup_progress_is_reported(tmp_path, monkeypatch):
     states = iter([{"state": "starting", "progress": 0.5}] * 2 + [{"state": "ready", "path": "/x", "progress": None}])
-    monkeypatch.setattr(scad, "start_openscad_bootstrap", lambda: None)
+    monkeypatch.setattr(scad, "start_openscad_bootstrap", lambda **_kwargs: None)
     monkeypatch.setattr(scad, "openscad_bootstrap_status", lambda: next(states))
     monkeypatch.setattr(scad, "OpenSCADRunner", lambda exe, cache_dir: FakeRunner(tmp_path))
     posted = []
@@ -397,6 +397,20 @@ def _redirect_cache(monkeypatch, tmp_path):
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "cache"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+
+def test_cache_root_lives_in_the_orca_data_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(orcad, "HERE", tmp_path / "OrcaSlicer" / "orca_plugins" / "_subscribed" / "7" / "uuid")
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "elsewhere"))
+    assert orcad._cache_root() == tmp_path / "OrcaSlicer" / "orcad"
+    monkeypatch.setattr(orcad, "HERE", tmp_path / "OrcaSlicer" / "orca_plugins" / "orcad")
+    assert orcad._cache_root() == tmp_path / "OrcaSlicer" / "orcad"
+
+
+def test_cache_root_falls_back_outside_orcaslicer(tmp_path, monkeypatch):
+    monkeypatch.setattr(orcad, "HERE", tmp_path / "checkout")
+    _redirect_cache(monkeypatch, tmp_path)
+    assert orcad._cache_root() == tmp_path / "cache" / "orcad"
 
 
 def test_single_file_install_uses_the_embedded_page_and_backend(tmp_path, monkeypatch):

@@ -216,7 +216,7 @@ def _install_appimage(archive: Path, destination: Path) -> Path:
 
 
 def _install_dmg(archive: Path, destination: Path) -> Path:
-    with tempfile.TemporaryDirectory(prefix="orcad-openscad-mount-") as mount:
+    with tempfile.TemporaryDirectory(prefix="orcad-openscad-mount-", dir=destination) as mount:
         _run_quiet(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", mount, str(archive)])
         try:
             app = next(iter(sorted(Path(mount).glob("*.app"))), None)
