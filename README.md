@@ -1,6 +1,6 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.14)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.15)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -15,11 +15,12 @@ the build plate with one click.
   next to a Box, Cylinder, Tube and Mounting plate. Every parameter gets a
   slider, number field, switch or option picker, with inline validation, and
   many objects ship **presets** - one click for a sensible starting point. Each
-  row shows a rendered preview thumbnail and a short name, the list scrolls in a
-  region two and a half rows tall, and dragging the divider between the library
-  and the viewport widens the sidebar: the rows then flow into as many columns as
-  fit, so a wide sidebar shows two or three times as many models at once, and the
-  width is remembered. The half row is the cue that there is more below.
+  card shows the rendered preview as a square header image, then the short name,
+  the category and a short description; the list scrolls in a region a little
+  over two card rows tall, and dragging the divider between the library and the
+  viewport widens the sidebar: the cards then flow into as many columns as fit,
+  so a wide sidebar shows two or three times as many models at once, and the
+  width is remembered. The row cut in half is the cue that there is more below.
 - **Code:** an OpenSCAD editor with examples, line numbers, error-line
   highlighting and Ctrl+Enter to render. `include <src/...>` loads the bundled
   Gridfinity library, and every other vendored library is on `OPENSCADPATH`

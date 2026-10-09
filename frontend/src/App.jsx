@@ -356,8 +356,11 @@ export default function App() {
                         <span className="object-thumb">
                           {THUMBNAILS[key] && <img src={THUMBNAILS[key]} alt="" loading="lazy" />}
                         </span>
-                        <span className="object-name">{OBJECTS[key].short || OBJECTS[key].label}</span>
-                        <span className="object-cat">{OBJECTS[key].category}</span>
+                        <span className="object-body">
+                          <span className="object-name">{OBJECTS[key].short || OBJECTS[key].label}</span>
+                          <span className="object-cat">{OBJECTS[key].category}</span>
+                          {OBJECTS[key].description && <span className="object-desc">{OBJECTS[key].description}</span>}
+                        </span>
                       </button>
                     ))}
                     {!visibleObjects.length && (

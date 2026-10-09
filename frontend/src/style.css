@@ -240,10 +240,9 @@ html:root .chip.is-active { border-color: transparent; background: var(--soft); 
 .result-count { margin-top: 8px; font-size: .78rem; font-variant-numeric: tabular-nums; }
 
 .object-scroll {
-  /* exactly two and a half rows ever fit: the half row is the "more below" cue */
-  --model-row: 62px;
-  --model-gap: 8px;
-  max-height: calc(2.5 * var(--model-row) + 2 * var(--model-gap));
+  /* a little over two card rows fit: the row cut in half is the "more below" cue */
+  --model-gap: 10px;
+  max-height: clamp(280px, 46vh, 540px);
   overflow-y: auto; overscroll-behavior: contain;
   scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent;
 }
@@ -255,11 +254,10 @@ html:root .object-scroll:focus-visible { outline: 2px solid var(--focus); outlin
 
 /* as many columns as the sidebar width allows: widening it turns the list into a
    grid instead of stretching one row per model */
-.object-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: var(--model-gap); }
+.object-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: var(--model-gap); }
 html:root .object-card {
-  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: auto auto;
-  column-gap: 10px; align-items: center; height: var(--model-row); padding: 8px; border-radius: 12px;
-  border: 1px solid var(--line); background: var(--raised);
+  position: relative; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--raised);
   transition: border-color .15s, box-shadow .15s, transform .1s;
 }
 html:root .object-card:hover { border-color: var(--line-strong); transform: translateY(-1px); }
@@ -269,17 +267,25 @@ html:root .object-card.is-active {
   background: linear-gradient(var(--raised-2), var(--raised-2)) padding-box, var(--grad) border-box;
   box-shadow: 0 8px 22px rgba(6, 182, 212, .18);
 }
+/* the preview is the card header: a square that fills the full card width */
 .object-thumb {
-  grid-row: span 2; display: grid; place-items: center; width: 56px; height: 44px; border-radius: 8px;
-  background: var(--soft); overflow: hidden;
+  display: grid; place-items: center; width: 100%; aspect-ratio: 1;
+  background: var(--soft); border-bottom: 1px solid var(--line);
 }
-.object-thumb img { display: block; max-width: 100%; max-height: 100%; }
+.object-thumb img { display: block; width: 80%; height: 80%; object-fit: contain; }
 .object-card.is-active .object-thumb { background: var(--raised-2); }
+.object-body { flex: 1; display: grid; align-content: start; gap: 3px; padding: 9px 10px 10px; text-align: left; }
 .object-name {
   font-weight: 600; font-size: .88rem; line-height: 1.25; min-width: 0;
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.object-cat { font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.object-cat { font-size: .68rem; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+/* three lines of description, always reserved, so every card keeps the same
+   height no matter how short the text is */
+.object-desc {
+  margin-top: 3px; min-height: 4.05em; font-size: .76rem; line-height: 1.35; color: var(--muted);
+  overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3;
+}
 .empty-search { padding: 8px 2px; }
 
 .section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }

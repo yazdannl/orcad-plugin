@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.15 — Model cards with a large preview header (2026-10-09)
+
+- **Every model in the library is a card with its preview on top.** The
+  thumbnail is no longer a 56x44 chip next to the name: `.object-thumb` is now a
+  square that fills the full card width (`aspect-ratio: 1`, the image inset to
+  80% with `object-fit: contain`, so a wide baseplate and a tall post both fit),
+  separated from the text by a hairline border.
+- **Name, category and a short description sit underneath.** The card is a
+  `.object-body` block: the catalog `short` name, then the category in small
+  caps, then the object's `description` - the same text that was already in the
+  tooltip and the parameter panel - clamped to three lines. The clamp always
+  reserves three lines (`min-height: 4.05em`), so every card in a row keeps the
+  same height no matter how short the text is. Long descriptions keep their full
+  text in the tooltip.
+- **The sidebar still resizes exactly as before.** The drag handle, its
+  pointer-capture tracking, the arrow-key/Home/End steps, the 260px-60% clamp in
+  `frontend/src/sidebar.js`, the persisted `sidebarWidth` and the `--side-w`
+  variable every layout reads are untouched. Widening the sidebar still reflows
+  the list: `.object-list` now uses `minmax(150px, 1fr)` instead of 190px, so
+  the auto-filled grid holds one column at the minimum width, two at 400px,
+  three at 640px and four at the 720px maximum.
+- **The scroll region follows the taller cards.** Instead of a fixed 2.5 rows of
+  62px (171px), `.object-scroll` is capped at `clamp(280px, 46vh, 540px)`: a
+  little over two card rows, with the row cut off in half as the cue that more
+  models are below, and the same two responsive overrides as before.
+
 ## 0.9.14 — Resizable sidebar, responsive grid, model previews (2026-10-09)
 
 - **The sidebar is resizable.** A 12px handle fills the gap between the library
