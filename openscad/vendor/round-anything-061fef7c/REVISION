@@ -5,7 +5,9 @@ License: MIT
 Copyright: Copyright 2020 Kurt Hutten
 
 The three library files (polyround, MinkowskiRound, unionRoundMask) plus the upstream
-LICENSE, copied verbatim from the pinned commit. The examples are excluded.
+LICENSE, copied verbatim from the pinned commit (the two upstream files with
+CRLF line endings are stored with LF, as .gitattributes pins for every text
+file). The examples are excluded.
 
 Files:
   LICENSE
