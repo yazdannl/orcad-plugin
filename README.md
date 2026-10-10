@@ -1,19 +1,23 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.16)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.17)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
 the build plate with one click.
 
-- **Library:** 49 parametric models in six categories - Gridfinity (19),
-  Organization, Cases, Fasteners, Panels and Basics. Gridfinity comes from
+- **Library:** 150 parametric models across 17 categories - Gridfinity,
+  Organization, Cases, Fasteners, Panels, Basics, Building, Technic,
+  Mechanical, Rounded shapes, Smooth shapes, Computer hardware, Rocketry,
+  Rack hardware, Controls and Cycling. Gridfinity comes from
   pinned upstream [Gridfinity Rebuilt](https://github.com/kennetek/gridfinity-rebuilt-openscad)
   source, the rack models from [rackstack](https://github.com/jazwa/rackstack),
   the split-flap parts from [splitflap](https://github.com/scottbez1/splitflap)
   and the metric fasteners from [threads-scad](https://github.com/rcolyer/threads-scad),
-  next to a Box, Cylinder, Tube and Mounting plate. Every parameter gets a
-  slider, number field, switch or option picker, with inline validation, and
+  next to the original Box, Cylinder, Tube, Bracket, Mounting plate and
+  **Nameplate** generators. Every parameter gets a
+  slider, number field, switch, option picker or text box, with inline
+  validation, and
   many objects ship **presets** - one click for a sensible starting point. Each
   card shows the rendered preview as a square header image, then the short name,
   the category and a short description; the list scrolls in a region a little
@@ -39,13 +43,13 @@ the build plate with one click.
 
 ## Model catalog
 
-Forty-nine models ship in `openscad/catalog.json`, which is the single source
+One hundred and fifty models ship in `openscad/catalog.json`, which is the single source
 of truth for the UI, the validation and the renderer:
 
 | Category | Models | What they cover |
 | --- | --- | --- |
 | Gridfinity | 19 | Bins, baseplates, blocks, pockets, baskets, a chess set, glue stick, silverware, socket holder |
-| Organization | 8 | Battery holder, PCB mount, cable clip, device stand, wall hook, bit holder, drawer divider, wall plate |
+| Organization | 9 | Battery holder, PCB mount, cable clip, device stand, wall hook, bit holder, drawer divider, wall plate, nameplate |
 | Cases | 8 | Rack trays, patch panel, ventilated plate, enclosed box, angle bracket, fan tray, brush strip, SBC case |
 | Fasteners | 6 | Metric hex bolts, nuts, countersunk bolts and wood screws, a threaded rod, a hole coupon |
 | Panels | 4 | Split-flap card, spool, scoring jig, punch jig |
@@ -53,7 +57,9 @@ of truth for the UI, the validation and the renderer:
 
 - **Parameters** carry their exact OpenSCAD variable, type, default, range,
   step, unit, group and help text. The renderer passes them as `-D name=value`,
-  so what the slider shows is what OpenSCAD gets.
+  so what the slider shows is what OpenSCAD gets. Free text parameters (the
+  nameplate's text) get a textarea with a character counter; the string is
+  escaped into a quoted `-D` value.
 - **Presets** are named parameter sets per object ("Desk panel (2x8)",
   "Stack of eight"). Picking one applies it on top of the current values and
   the header shows which preset is active; a manual edit just clears that

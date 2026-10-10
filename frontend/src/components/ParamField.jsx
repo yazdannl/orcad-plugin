@@ -33,6 +33,21 @@ function NumberField({ param, value, disabled, onChange, id }) {
   )
 }
 
+function TextField({ param, value, disabled, onChange, id }) {
+  const problem = checkValue(param, value)
+  const count = typeof value === 'string' ? Array.from(value).length : 0
+  return (
+    <>
+      <textarea id={id} className="text-input" rows={param.rows || 2} maxLength={param.max_length}
+        placeholder={param.placeholder} value={value} disabled={disabled} aria-invalid={Boolean(problem)}
+        spellCheck="false"
+        onChange={(e) => onChange(e.target.value)} />
+      {problem && <p className="field-error" role="alert">{problem}</p>}
+      {param.max_length && <p className="field-count">{count}/{param.max_length}</p>}
+    </>
+  )
+}
+
 export function ParamField({ param, value, disabled, disabledHint, serverError, onChange }) {
   const id = useId()
   const hint = disabled ? disabledHint : param.help
@@ -70,6 +85,8 @@ export function ParamField({ param, value, disabled, disabledHint, serverError, 
             {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </div>
+      ) : param.type === 'text' ? (
+        <TextField id={id} param={param} value={value} disabled={disabled} onChange={onChange} />
       ) : (
         <NumberField id={id} param={param} value={value} disabled={disabled} onChange={onChange} />
       )}

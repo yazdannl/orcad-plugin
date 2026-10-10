@@ -5115,6 +5115,782 @@
         }
       ]
     },
+    "nameplate": {
+      "label": "Nameplate",
+      "short": "Nameplate",
+      "category": "Organization",
+      "icon": "sign",
+      "source": "objects/nameplate.scad",
+      "description": "Text sign with raised, engraved, cut-through or two-colour inlay lettering, six plate shapes and screw, magnet, keyhole and keyring mounting holes.",
+      "parameters": [
+        {
+          "variable": "text",
+          "label": "Text",
+          "type": "text",
+          "default": "OrcaCAD",
+          "max_length": 120,
+          "max_lines": 6,
+          "rows": 2,
+          "placeholder": "Name or label",
+          "group": "Text",
+          "help": "The sign text. Press Enter for a second line; up to six lines print one under the other."
+        },
+        {
+          "variable": "font_style",
+          "label": "Font",
+          "type": "integer",
+          "default": 2,
+          "options": [
+            {
+              "value": 0,
+              "label": "Default"
+            },
+            {
+              "value": 1,
+              "label": "Sans"
+            },
+            {
+              "value": 2,
+              "label": "Sans bold"
+            },
+            {
+              "value": 3,
+              "label": "Sans italic"
+            },
+            {
+              "value": 4,
+              "label": "Serif"
+            },
+            {
+              "value": 5,
+              "label": "Serif bold"
+            },
+            {
+              "value": 6,
+              "label": "Mono"
+            },
+            {
+              "value": 7,
+              "label": "Mono bold"
+            }
+          ],
+          "group": "Text",
+          "help": "Stroke fonts bundled with OpenSCAD; they are available on every platform."
+        },
+        {
+          "variable": "text_size",
+          "label": "Text size",
+          "type": "number",
+          "default": 12,
+          "min": 3,
+          "max": 80,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Text",
+          "help": "Letter height; Fit text shrinks it when the plate is too small."
+        },
+        {
+          "variable": "letter_spacing",
+          "label": "Letter spacing",
+          "type": "number",
+          "default": 1,
+          "min": 0.5,
+          "max": 2,
+          "step": 0.05,
+          "group": "Text",
+          "help": "Multiplier on the gap between letters; 1 is the font's own spacing."
+        },
+        {
+          "variable": "line_spacing",
+          "label": "Line spacing",
+          "type": "number",
+          "default": 1.25,
+          "min": 0.6,
+          "max": 3,
+          "step": 0.05,
+          "group": "Text",
+          "help": "Baseline distance between lines, as a multiple of the text size."
+        },
+        {
+          "variable": "text_align",
+          "label": "Alignment",
+          "type": "integer",
+          "default": 0,
+          "options": [
+            {
+              "value": 0,
+              "label": "Center"
+            },
+            {
+              "value": 1,
+              "label": "Left"
+            },
+            {
+              "value": 2,
+              "label": "Right"
+            }
+          ],
+          "group": "Text",
+          "help": "Horizontal alignment of the lines inside the text block."
+        },
+        {
+          "variable": "text_style",
+          "label": "Text style",
+          "type": "integer",
+          "default": 0,
+          "options": [
+            {
+              "value": 0,
+              "label": "Raised"
+            },
+            {
+              "value": 1,
+              "label": "Engraved"
+            },
+            {
+              "value": 2,
+              "label": "Cut through"
+            },
+            {
+              "value": 3,
+              "label": "Two-colour inlay"
+            }
+          ],
+          "group": "Text",
+          "help": "Raised letters sit on the plate, engraved ones cut into it, cut-through style stencils them and inlay raises them back to flush inside a pocket."
+        },
+        {
+          "variable": "text_depth",
+          "label": "Text depth",
+          "type": "number",
+          "default": 1.2,
+          "min": 0.2,
+          "max": 10,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Text",
+          "help": "How far raised letters stand out, or how deep engraving and the inlay pocket go; must stay below the plate thickness."
+        },
+        {
+          "variable": "fit_text",
+          "label": "Fit text to plate",
+          "type": "boolean",
+          "default": true,
+          "group": "Text",
+          "help": "Shrink the text when it would overflow the plate padding instead of letting it stick out."
+        },
+        {
+          "variable": "auto_size",
+          "label": "Auto-size plate",
+          "type": "boolean",
+          "default": false,
+          "group": "Plate",
+          "help": "Grow the plate to the text plus padding and ignore the plate size below."
+        },
+        {
+          "variable": "padding_x",
+          "label": "Side padding",
+          "type": "number",
+          "default": 4,
+          "min": 1,
+          "max": 40,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Gap between the text and the left and right plate edges."
+        },
+        {
+          "variable": "padding_y",
+          "label": "Top/bottom padding",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 40,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Gap between the text and the top and bottom plate edges."
+        },
+        {
+          "variable": "plate_shape",
+          "label": "Plate shape",
+          "type": "integer",
+          "default": 1,
+          "options": [
+            {
+              "value": 0,
+              "label": "Rectangle"
+            },
+            {
+              "value": 1,
+              "label": "Rounded"
+            },
+            {
+              "value": 2,
+              "label": "Pill"
+            },
+            {
+              "value": 3,
+              "label": "Oval"
+            },
+            {
+              "value": 4,
+              "label": "Hexagon"
+            },
+            {
+              "value": 5,
+              "label": "Chamfered"
+            }
+          ],
+          "group": "Plate",
+          "help": "Outline of the sign; corner radius and chamfer size follow the corner radius value."
+        },
+        {
+          "variable": "plate_width",
+          "label": "Plate width",
+          "type": "number",
+          "default": 90,
+          "min": 10,
+          "max": 400,
+          "step": 1,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Width of the plate; ignored while Auto-size plate is on."
+        },
+        {
+          "variable": "plate_height",
+          "label": "Plate height",
+          "type": "number",
+          "default": 30,
+          "min": 8,
+          "max": 200,
+          "step": 1,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Height of the plate; ignored while Auto-size plate is on."
+        },
+        {
+          "variable": "plate_thickness",
+          "label": "Plate thickness",
+          "type": "number",
+          "default": 4,
+          "min": 1,
+          "max": 20,
+          "step": 0.2,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Overall thickness of the sign."
+        },
+        {
+          "variable": "corner_radius",
+          "label": "Corner radius",
+          "type": "number",
+          "default": 4,
+          "min": 0,
+          "max": 50,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Rounding of the plate corners, or the corner cut for the chamfered shape."
+        },
+        {
+          "variable": "top_bevel",
+          "label": "Top bevel",
+          "type": "number",
+          "default": 1,
+          "min": 0,
+          "max": 5,
+          "step": 0.2,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Chamfer around the top face; must stay below the plate thickness."
+        },
+        {
+          "variable": "border",
+          "label": "Raised border",
+          "type": "boolean",
+          "default": false,
+          "group": "Plate",
+          "help": "Frame the text with a rim in a second colour or as a raised edge."
+        },
+        {
+          "variable": "border_width",
+          "label": "Border width",
+          "type": "number",
+          "default": 3,
+          "min": 1,
+          "max": 20,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Plate",
+          "depends_on": [
+            "border"
+          ],
+          "help": "Thickness of the raised frame."
+        },
+        {
+          "variable": "border_height",
+          "label": "Border height",
+          "type": "number",
+          "default": 1,
+          "min": 0.2,
+          "max": 10,
+          "step": 0.2,
+          "unit": "mm",
+          "group": "Plate",
+          "depends_on": [
+            "border"
+          ],
+          "help": "How far the frame stands above the plate."
+        },
+        {
+          "variable": "inlay_padding",
+          "label": "Inlay gap",
+          "type": "number",
+          "default": 2.5,
+          "min": 0.5,
+          "max": 20,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Plate",
+          "help": "Space between the letters and the wall of the two-colour inlay pocket."
+        },
+        {
+          "variable": "screw_holes",
+          "label": "Screw holes",
+          "type": "boolean",
+          "default": false,
+          "group": "Mounting",
+          "help": "Drill screw holes through the plate."
+        },
+        {
+          "variable": "hole_count",
+          "label": "Holes",
+          "type": "integer",
+          "default": 2,
+          "options": [
+            {
+              "value": 2,
+              "label": "Two"
+            },
+            {
+              "value": 4,
+              "label": "Four"
+            }
+          ],
+          "group": "Mounting",
+          "depends_on": [
+            "screw_holes"
+          ],
+          "help": "Two holes sit at mid height; four sit in the corners."
+        },
+        {
+          "variable": "hole_diameter",
+          "label": "Hole diameter",
+          "type": "number",
+          "default": 3.4,
+          "min": 1,
+          "max": 12,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "screw_holes"
+          ],
+          "help": "Clearance diameter for the screw shank."
+        },
+        {
+          "variable": "hole_inset",
+          "label": "Hole inset",
+          "type": "number",
+          "default": 5,
+          "min": 2,
+          "max": 60,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "screw_holes"
+          ],
+          "help": "Distance from the plate edge to the hole centre."
+        },
+        {
+          "variable": "countersink",
+          "label": "Countersink",
+          "type": "boolean",
+          "default": false,
+          "group": "Mounting",
+          "depends_on": [
+            "screw_holes"
+          ],
+          "help": "Flare the holes so a flat head screw sits flush."
+        },
+        {
+          "variable": "screw_head_diameter",
+          "label": "Screw head diameter",
+          "type": "number",
+          "default": 6.5,
+          "min": 2,
+          "max": 20,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "screw_holes",
+            "countersink"
+          ],
+          "help": "Width of the countersink at the surface; keep it above the hole diameter."
+        },
+        {
+          "variable": "magnet_holes",
+          "label": "Magnet holes",
+          "type": "boolean",
+          "default": false,
+          "group": "Mounting",
+          "help": "Press-fit pockets in the back for round magnets."
+        },
+        {
+          "variable": "magnet_count",
+          "label": "Magnets",
+          "type": "integer",
+          "default": 4,
+          "options": [
+            {
+              "value": 2,
+              "label": "Two"
+            },
+            {
+              "value": 4,
+              "label": "Four"
+            }
+          ],
+          "group": "Mounting",
+          "depends_on": [
+            "magnet_holes"
+          ],
+          "help": "Two pockets sit at mid height; four sit in the corners."
+        },
+        {
+          "variable": "magnet_diameter",
+          "label": "Magnet diameter",
+          "type": "number",
+          "default": 6.2,
+          "min": 2,
+          "max": 25,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "magnet_holes"
+          ],
+          "help": "Pocket diameter; add a few tenths for a slip fit."
+        },
+        {
+          "variable": "magnet_depth",
+          "label": "Magnet depth",
+          "type": "number",
+          "default": 2.4,
+          "min": 0.5,
+          "max": 15,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "magnet_holes"
+          ],
+          "help": "Pocket depth from the back; must stay below the plate thickness."
+        },
+        {
+          "variable": "magnet_inset",
+          "label": "Magnet inset",
+          "type": "number",
+          "default": 7,
+          "min": 2,
+          "max": 60,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "magnet_holes"
+          ],
+          "help": "Distance from the plate edge to the pocket centre."
+        },
+        {
+          "variable": "keyhole",
+          "label": "Keyhole mounts",
+          "type": "boolean",
+          "default": false,
+          "group": "Mounting",
+          "help": "Slots in the back so the sign hangs on screw heads."
+        },
+        {
+          "variable": "keyhole_count",
+          "label": "Keyholes",
+          "type": "integer",
+          "default": 1,
+          "options": [
+            {
+              "value": 1,
+              "label": "One"
+            },
+            {
+              "value": 2,
+              "label": "Two"
+            }
+          ],
+          "group": "Mounting",
+          "depends_on": [
+            "keyhole"
+          ],
+          "help": "One keyhole sits in the middle, two sit a quarter of the width apart."
+        },
+        {
+          "variable": "keyhole_head_diameter",
+          "label": "Keyhole head",
+          "type": "number",
+          "default": 8,
+          "min": 3,
+          "max": 25,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "keyhole"
+          ],
+          "help": "Round pocket the screw head passes through."
+        },
+        {
+          "variable": "keyhole_slot_width",
+          "label": "Keyhole slot",
+          "type": "number",
+          "default": 4.5,
+          "min": 1,
+          "max": 15,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "keyhole"
+          ],
+          "help": "Width of the slot the shank slides up into."
+        },
+        {
+          "variable": "keyhole_depth",
+          "label": "Keyhole depth",
+          "type": "number",
+          "default": 2.4,
+          "min": 0.5,
+          "max": 15,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "keyhole"
+          ],
+          "help": "Pocket depth from the back; must clear the screw head and stay below the plate thickness."
+        },
+        {
+          "variable": "keyhole_length",
+          "label": "Keyhole length",
+          "type": "number",
+          "default": 12,
+          "min": 4,
+          "max": 80,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "keyhole"
+          ],
+          "help": "Distance from the head pocket to the top of the slot."
+        },
+        {
+          "variable": "keyring",
+          "label": "Keyring hole",
+          "type": "boolean",
+          "default": false,
+          "group": "Mounting",
+          "help": "A hole at one end for a keyring, chain or cord."
+        },
+        {
+          "variable": "keyring_diameter",
+          "label": "Keyring diameter",
+          "type": "number",
+          "default": 5,
+          "min": 1.5,
+          "max": 20,
+          "step": 0.1,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "keyring"
+          ],
+          "help": "Diameter of the through hole."
+        },
+        {
+          "variable": "keyring_inset",
+          "label": "Keyring inset",
+          "type": "number",
+          "default": 2,
+          "min": 0.5,
+          "max": 20,
+          "step": 0.5,
+          "unit": "mm",
+          "group": "Mounting",
+          "depends_on": [
+            "keyring"
+          ],
+          "help": "Material between the hole and the plate edge."
+        },
+        {
+          "variable": "keyring_side",
+          "label": "Keyring side",
+          "type": "integer",
+          "default": 1,
+          "options": [
+            {
+              "value": 0,
+              "label": "Left"
+            },
+            {
+              "value": 1,
+              "label": "Right"
+            }
+          ],
+          "group": "Mounting",
+          "depends_on": [
+            "keyring"
+          ],
+          "help": "Which end of the plate carries the hole."
+        }
+      ],
+      "tags": [
+        "name",
+        "nameplate",
+        "plate",
+        "sign",
+        "label",
+        "text",
+        "badge",
+        "keychain",
+        "door",
+        "desk"
+      ],
+      "presets": [
+        {
+          "name": "Desk nameplate",
+          "description": "Wide raised-letter sign for a desk or shelf.",
+          "params": {
+            "text": "Desk",
+            "font_style": 2,
+            "text_size": 14,
+            "text_style": 0,
+            "plate_width": 100,
+            "plate_height": 35,
+            "plate_thickness": 4,
+            "corner_radius": 5,
+            "top_bevel": 1
+          }
+        },
+        {
+          "name": "Door sign",
+          "description": "Engraved sign with a raised frame and two keyhole mounts.",
+          "params": {
+            "text": "Welcome",
+            "font_style": 2,
+            "text_size": 14,
+            "text_style": 1,
+            "text_depth": 1,
+            "plate_width": 130,
+            "plate_height": 40,
+            "plate_thickness": 4,
+            "top_bevel": 1,
+            "padding_x": 12,
+            "padding_y": 10,
+            "border": true,
+            "border_width": 4,
+            "border_height": 1.2,
+            "keyhole": true,
+            "keyhole_count": 2
+          }
+        },
+        {
+          "name": "Two-colour badge",
+          "description": "Inlay pocket and flush letters for a filament swap.",
+          "params": {
+            "text": "Yazdan\nThe Maker",
+            "font_style": 2,
+            "text_size": 14,
+            "text_style": 3,
+            "line_spacing": 1.2,
+            "inlay_padding": 3,
+            "plate_width": 110,
+            "plate_height": 45,
+            "plate_thickness": 4,
+            "corner_radius": 6,
+            "top_bevel": 1
+          }
+        },
+        {
+          "name": "Keychain tag",
+          "description": "Auto-sized tag with a keyring hole.",
+          "params": {
+            "text": "Keys",
+            "font_style": 2,
+            "text_size": 8,
+            "text_style": 0,
+            "auto_size": true,
+            "padding_x": 6,
+            "padding_y": 4,
+            "plate_thickness": 3,
+            "top_bevel": 0.6,
+            "keyring": true,
+            "keyring_diameter": 5,
+            "keyring_inset": 2.5
+          }
+        },
+        {
+          "name": "Magnet label",
+          "description": "Small engraved label held on with four magnets.",
+          "params": {
+            "text": "Bits",
+            "font_style": 2,
+            "text_size": 10,
+            "text_style": 1,
+            "text_depth": 0.8,
+            "plate_width": 60,
+            "plate_height": 22,
+            "plate_thickness": 3,
+            "top_bevel": 0.6,
+            "magnet_holes": true,
+            "magnet_count": 4,
+            "magnet_inset": 6,
+            "magnet_depth": 2.4
+          }
+        },
+        {
+          "name": "Shelf label",
+          "description": "Flat engraved strip with screw holes.",
+          "params": {
+            "text": "Shelf 3",
+            "font_style": 1,
+            "text_size": 9,
+            "text_style": 1,
+            "text_depth": 0.6,
+            "plate_width": 80,
+            "plate_height": 14,
+            "plate_thickness": 2.6,
+            "corner_radius": 1,
+            "top_bevel": 0.4,
+            "padding_x": 6,
+            "screw_holes": true,
+            "hole_count": 2,
+            "hole_diameter": 3.2,
+            "hole_inset": 5
+          }
+        }
+      ]
+    },
     "splitflap_flap": {
       "label": "Split-Flap Card",
       "short": "Flap card",

@@ -100,17 +100,23 @@ def encode_define(name: str, value: Any) -> str:
         encoded = str(value)
     elif type(value) is float and math.isfinite(value):
         encoded = format(value, ".15g")
+    elif type(value) is str:
+        if len(value) > 2000:
+            raise ValueError("OpenSCAD -D string values must be short")
+        encoded = '"' + value.replace("\\", "\\\\").replace('"', '\\"') \
+            .replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t") + '"'
     else:
-        raise ValueError("OpenSCAD -D values must be finite numbers or booleans")
+        raise ValueError("OpenSCAD -D values must be finite numbers, booleans or strings")
     return f"{name}={encoded}"
 
 
 def backend_args(version: str | None) -> list[str]:
-    """Prefer the Manifold kernel: ~50x faster than CGAL for Gridfinity models."""
+    """Prefer the Manifold kernel and enable the text metrics the nameplate measures with."""
     year = version_tuple(version or "")[0]
+    flags = ["--enable=textmetrics"] if year >= 2023 else []
     if year >= 2024:
-        return ["--backend=Manifold"]
-    return ["--enable=manifold"] if year == 2023 else []
+        return [*flags, "--backend=Manifold"]
+    return [*flags, "--enable=manifold"] if year == 2023 else flags
 
 
 def build_argv(executable: str | os.PathLike[str], source: Path, output: Path,

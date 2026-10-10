@@ -9,11 +9,30 @@ from .catalog import defaults, parameter_specs
 from .errors import ValidationError
 
 
+def _check_text(key: str, spec: Mapping[str, Any], value: Any) -> None:
+    label = spec.get("label", key)
+    if not isinstance(value, str):
+        raise ValidationError(f"{label} must be text", key)
+    if not value.strip():
+        raise ValidationError(f"{label} cannot be empty", key)
+    limit = spec.get("max_length")
+    if limit and len(value) > limit:
+        raise ValidationError(f"{label} must be at most {limit} characters", key)
+    limit = spec.get("max_lines")
+    if limit and value.count("\n") + 1 > limit:
+        raise ValidationError(f"{label} must be at most {limit} lines", key)
+    if any(ord(character) < 32 and character != "\n" for character in value):
+        raise ValidationError(f"{label} contains a control character", key)
+
+
 def _check_value(key: str, spec: Mapping[str, Any], value: Any) -> None:
     label = spec.get("label", key)
     if spec["type"] == "boolean":
         if type(value) is not bool:
             raise ValidationError(f"{label} must be on or off", key)
+        return
+    if spec["type"] == "text":
+        _check_text(key, spec, value)
         return
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise ValidationError(f"{label} must be a number", key)
@@ -71,3 +90,12 @@ def _check_rules(name: str, p: dict[str, Any]) -> None:
             raise ValidationError("Holes must be narrower than the plate", "hole_diameter", "width")
         if p["hole_spacing"] + p["hole_diameter"] >= p["length"]:
             raise ValidationError("Holes must fit inside the plate length", "hole_spacing", "hole_diameter", "length")
+    elif name == "nameplate":
+        if p["top_bevel"] >= p["plate_thickness"]:
+            raise ValidationError("Top bevel must stay below the plate thickness", "top_bevel", "plate_thickness")
+        if p["text_style"] in (1, 3) and p["text_depth"] >= p["plate_thickness"]:
+            raise ValidationError("Text depth must stay below the plate thickness", "text_depth", "plate_thickness")
+        if p["magnet_holes"] and p["magnet_depth"] >= p["plate_thickness"]:
+            raise ValidationError("Magnet depth must stay below the plate thickness", "magnet_depth", "plate_thickness")
+        if p["keyhole"] and p["keyhole_depth"] >= p["plate_thickness"]:
+            raise ValidationError("Keyhole depth must stay below the plate thickness", "keyhole_depth", "plate_thickness")

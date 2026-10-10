@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.9.17 — Nameplate generator, text parameters and clickable model cards (2026-10-10)
+
+- **A new Nameplate object turns typed text into a printable sign.** 43
+  parameters cover the text (font, size, letter and line spacing, alignment,
+  raised/engraved/cut-through/two-colour inlay), the plate (six shapes, size,
+  thickness, corner radius, top bevel, raised border, auto-sizing to the text,
+  fit-to-plate shrinking) and the mounting (screw holes with countersinks,
+  magnet pockets, wall keyhole slots and a keyring hole). The catalog grows
+  from 149 to **150 objects**, with six ready-made presets from a desk
+  nameplate to a keychain tag.
+- **The catalog has a `text` parameter type.** The frontend renders it as a
+  textarea with a character counter and inline validation (non-empty, at most
+  120 characters, 6 lines and no control characters), and the backend enforces
+  the same limits in `validation.py`. `encode_define()` escapes strings into a
+  quoted `-D` value, so multi-line text reaches OpenSCAD intact and a quote in
+  the text cannot break out of the literal.
+- **The nameplate measures its own text.** `runner.backend_args()` now enables
+  the experimental `textmetrics()` builtin, and `nameplate.scad` splits the
+  text into lines with 2023-compatible string handling, measures each line and
+  lays the block out itself - so auto-sizing, fit-to-plate and per-line
+  alignment work on OpenSCAD 2023.09 and newer. If metrics are unavailable the
+  model still renders with approximate advances.
+- **Model cards are selectable again.** v0.9.14's card redesign dropped the
+  card's `onClick`, so clicking a model did nothing; the handler (and
+  `aria-pressed`) are restored, and the choice persists as before.
+
 ## 0.9.16 — Catalog expansion: 100 more open source models (2026-10-10)
 
 The library grows from 49 to **149 objects** across 13 new categories, all of

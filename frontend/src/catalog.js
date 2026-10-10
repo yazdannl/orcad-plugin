@@ -49,6 +49,14 @@ export function resultCounts(query = '', category = 'all') {
 // Mirrors the backend rules so an obviously bad value never costs a render.
 export function checkValue(param, value) {
   if (param.type === 'boolean') return typeof value === 'boolean' ? null : 'Must be on or off'
+  if (param.type === 'text') {
+    if (typeof value !== 'string') return 'Enter text'
+    if (!value.trim()) return 'Enter text'
+    if (param.max_length && Array.from(value).length > param.max_length) return `Maximum ${param.max_length} characters`
+    if (param.max_lines && value.split('\n').length > param.max_lines) return `Maximum ${param.max_lines} lines`
+    if (/[\t\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value)) return 'Remove the control character'
+    return null
+  }
   if (typeof value !== 'number' || !Number.isFinite(value)) return 'Enter a number'
   if (param.type === 'integer' && !Number.isInteger(value)) return 'Enter a whole number'
   const unit = param.unit ? ` ${param.unit}` : ''

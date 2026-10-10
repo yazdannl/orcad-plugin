@@ -352,6 +352,7 @@ export default function App() {
                   <div className="object-list">
                     {visibleObjects.map((key) => (
                       <button key={key} type="button" className={`object-card${key === objectKey ? ' is-active' : ''}`}
+                        aria-pressed={key === objectKey} onClick={() => setObjectKey(key)}
                         title={`${OBJECTS[key].label} - ${OBJECTS[key].description}`}>
                         <span className="object-thumb">
                           {THUMBNAILS[key] && <img src={THUMBNAILS[key]} alt="" loading="lazy" />}

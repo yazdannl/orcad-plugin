@@ -6,7 +6,10 @@ also embeds it into the single-file plugin.
 - `catalog.json` is the single source of truth for every object: label,
   category, icon, description, `.scad` source, and each parameter's exact
   OpenSCAD variable, type, default, range, step, unit, options, group, help,
-  `depends_on` and `conflicts_with`. Every object also carries a `tags` list
+  `depends_on` and `conflicts_with`. A parameter's type is `number`, `integer`,
+  `boolean` or `text`; a text parameter also carries `max_length`, `max_lines`,
+  `rows` and `placeholder` for the frontend's textarea. Every object also
+  carries a `tags` list
   (search terms the frontend matches on top of key, label and description) and
   a `presets` list of ready-made parameter sets: `[{name, description?,
   params: {variable: value}}]`, where every `params` key is one of that
@@ -15,10 +18,12 @@ also embeds it into the single-file plugin.
   profiles (`$fa`/`$fs`: draft 12/0.8, balanced 6/0.3, final 3/0.1) and the
   `libraries` map described below.
 - `validation.py` validates parameters strictly (types, ranges, steps, options,
-  cross-field rules) and reports errors as `{"fields": [...]}`.
+  text length/line/control-character limits, cross-field rules) and reports
+  errors as `{"fields": [...]}`.
 - `runner.py` probes OpenSCAD (2023 or newer; 2021.01 is rejected) and
   renders with safe argv lists (`-D name=value`, binary STL, the Manifold
-  kernel). Each render has a timeout, can be cancelled cooperatively, and runs
+  kernel, `--enable=textmetrics` for the nameplate's text layout). String
+  values are escaped into a quoted `-D` value. Each render has a timeout, can be cancelled cooperatively, and runs
   with a scrubbed environment. stderr is captured into readable errors with
   line numbers. Results go into a size-bounded, content-addressed STL cache
   keyed by object/code, parameters, quality, engine version and library

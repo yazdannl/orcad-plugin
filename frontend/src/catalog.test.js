@@ -28,6 +28,32 @@ test('saved parameters are restored only when still valid', () => {
   assert.deepEqual(restoreParams('box', null), defaults('box'))
 })
 
+test('text parameters mirror the backend length, line and control rules', () => {
+  const text = OBJECTS.nameplate.parameters.find((p) => p.variable === 'text')
+  assert.equal(text.type, 'text')
+  assert.equal(text.default, 'OrcaCAD')
+  assert.equal(checkValue(text, 'OrcaCAD'), null)
+  assert.equal(checkValue(text, 'Two\nLines'), null)
+  assert.match(checkValue(text, ''), /Enter text/)
+  assert.match(checkValue(text, '   '), /Enter text/)
+  assert.match(checkValue(text, 5), /Enter text/)
+  assert.match(checkValue(text, 'x'.repeat(121)), /Maximum 120/)
+  assert.match(checkValue(text, ['x', 'x', 'x', 'x', 'x', 'x', 'x'].join('\n')), /Maximum 6 lines/)
+  assert.match(checkValue(text, 'tab\there'), /control/)
+  assert.equal(restoreParams('nameplate', { text: 'Kept', bogus: 'x' }).text, 'Kept')
+  assert.equal(restoreParams('nameplate', { text: 42 }).text, text.default, 'bad saved text falls back')
+})
+
+test('nameplate presets carry text and only legal parameters', () => {
+  const list = presets('nameplate')
+  assert.ok(list.length >= 4)
+  const badge = list.find((p) => p.name === 'Two-colour badge')
+  assert.equal(badge.params.text_style, 3)
+  const values = applyPreset('nameplate', defaults('nameplate'), badge)
+  assert.equal(values.text, badge.params.text)
+  assert.equal(values.text_style, 3)
+})
+
 test('enabling an option switches off its conflicts; dependencies disable fields', () => {
   const bin = defaults('gridfinity_bin')
   assert.equal(bin.refined_holes, false)

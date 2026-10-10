@@ -50,8 +50,11 @@ def test_every_catalog_object_is_complete_and_its_defaults_validate():
         assert source_path(name).is_file(), name
         assert spec["label"] and spec["category"] and spec["icon"] and spec["description"]
         for param in spec["parameters"]:
-            assert param["type"] in ("boolean", "integer", "number")
+            assert param["type"] in ("boolean", "integer", "number", "text")
             assert param["variable"] not in ("$fa", "$fs")
+            if param["type"] == "text":
+                assert isinstance(param["default"], str) and param["default"].strip()
+                assert param["max_length"] > 0 and param["max_lines"] > 0
         assert validate_parameters(name, {}) == defaults(name)
 
 
@@ -150,6 +153,11 @@ def test_validation_is_strict_and_names_the_offending_fields():
         ("box", {"nope": 1}),
         ("gridfinity_bin", {"gridx": 2.0}),  # integer parameter given a float
         ("gridfinity_bin", {"style_tab": 9}),
+        ("nameplate", {"text": 5}),
+        ("nameplate", {"text": "   "}),
+        ("nameplate", {"text": "x" * 121}),
+        ("nameplate", {"text": "\n".join(["line"] * 7)}),
+        ("nameplate", {"text": "tab\there"}),
     ]
     for name, params in cases:
         with pytest.raises(BackendError) as info:
@@ -165,6 +173,11 @@ def test_validation_is_strict_and_names_the_offending_fields():
      {"refined_holes", "magnet_holes"}),
     ("gridfinity_bin", {"divx": 0}, {"divx", "divy"}),
     ("gridfinity_baseplate", {"gridx": 0}, {"gridx", "distancex"}),
+    ("nameplate", {"top_bevel": 5, "plate_thickness": 4}, {"top_bevel", "plate_thickness"}),
+    ("nameplate", {"text_style": 1, "text_depth": 4}, {"text_depth", "plate_thickness"}),
+    ("nameplate", {"text_style": 3, "text_depth": 4}, {"text_depth", "plate_thickness"}),
+    ("nameplate", {"magnet_holes": True, "magnet_depth": 4}, {"magnet_depth", "plate_thickness"}),
+    ("nameplate", {"keyhole": True, "keyhole_depth": 4}, {"keyhole_depth", "plate_thickness"}),
 ])
 def test_cross_field_rules(name, params, fields):
     with pytest.raises(BackendError) as info:
@@ -179,7 +192,14 @@ def test_defines_are_separate_safe_arguments():
     assert encode_define("scoop", 0.5) == "scoop=0.5"
     assert encode_define("include_lip", False) == "include_lip=false"
     assert encode_define("$fa", 6.0) == "$fa=6"
-    for name, value in (("x; y", 1), ("gridx", "2; rm -rf /"), ("gridx", float("inf")), ("gridx", None)):
+    assert encode_define("text", "OrcaCAD") == 'text="OrcaCAD"'
+    assert encode_define("text", 'He said "hi"') == 'text="He said \\"hi\\""'
+    assert encode_define("text", "first\nsecond") == 'text="first\\nsecond"'
+    assert encode_define("text", "back\\slash") == 'text="back\\\\slash"'
+    # A quote in the value cannot escape the string literal and inject code.
+    assert encode_define("text", '"; cube(1); x="') == 'text="\\"; cube(1); x=\\""'
+    for name, value in (("x; y", 1), ("gridx", float("inf")), ("gridx", None), ("gridx", [1]),
+                        ("gridx", "x" * 2001)):
         with pytest.raises(ValueError):
             encode_define(name, value)
 
@@ -191,7 +211,8 @@ def test_argv_requests_binary_stl_quality_and_the_fast_kernel():
     assert argv[argv.index("gridx=2") - 1] == "-D"
     assert "$fa=12" in argv and "$fs=0.8" in argv
     assert argv[-1] == str(Path("in dir/model.scad"))
-    assert backend_args("2023.09.11") == ["--enable=manifold"]
+    assert backend_args("2023.09.11") == ["--enable=textmetrics", "--enable=manifold"]
+    assert backend_args("2026.01.01") == ["--enable=textmetrics", "--backend=Manifold"]
     assert backend_args("2021.01") == [] and backend_args(None) == []
     with pytest.raises(BackendError):
         build_argv("openscad", Path("m.scad"), Path("x.stl"), {}, "ultra", "2026.01.01")
@@ -338,3 +359,18 @@ def test_real_openscad_renders_every_catalog_object(tmp_path):
     for name in CATALOG["objects"]:
         assert runner.render_object(name, {}, "draft").triangles > 0, name
     assert runner.render_code("include <src/core/standard.scad>\ncube(GRID_DIMENSIONS_MM.x);").triangles == 12
+
+
+@pytest.mark.skipif(not _real_openscad(), reason="needs OpenSCAD 2023+ on PATH")
+@pytest.mark.parametrize("params", [
+    {},
+    {"text": "Two\nLines", "text_style": 3, "auto_size": True},
+    {"text": "Cut out", "text_style": 2, "plate_shape": 4},
+    {"text": "Door", "keyhole": True, "keyhole_count": 2, "border": True},
+    {"text": "Tag", "keyring": True, "auto_size": True, "plate_thickness": 3, "top_bevel": 0.6},
+    {"text": "Magnets", "magnet_holes": True, "screw_holes": True, "countersink": True},
+    {"text": 'He said "hi" \\ ok', "text_align": 1, "font_style": 6},
+])
+def test_real_openscad_renders_nameplate_styles(tmp_path, params):
+    runner = OpenSCADRunner(cache_dir=tmp_path)
+    assert runner.render_object("nameplate", params, "draft").triangles > 0
