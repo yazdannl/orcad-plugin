@@ -57,6 +57,20 @@ Eleven objects need no wrapper at all: upstream already renders them the way
 the catalog wants, so their `source` points straight into the vendored tree and
 the catalog owns only the parameter ranges.
 
+Three wrapper shapes cover the libraries that are not plain `use`-and-call:
+
+- **String options.** catchnhole picks a bolt from a name string that `-D`
+  cannot set, so the wrapper maps an option index onto `["M3", "M4", "M5",
+  "M6", "M8"]` and passes `nut_names[nut_size_index]`.
+- **Cut-only modules.** BOSL's `nema_mount_holes()` and catchnhole's
+  `nutcatch_*` only subtract material, so the wrapper cuts them out of a block
+  or plate of its own.
+- **Include-time dimensions.** YAPP_Box sizes a box from top-level assignments
+  and derives many of them while the file is read, so that wrapper declares the
+  values with upstream's own variable names - a `-D` value then arrives before
+  the file derives anything - and calls `YAPPgenerate()` itself with `debug`
+  turned on, because upstream only builds a box under that flag.
+
 ## Vendored libraries
 
 `catalog.json`'s `libraries` map is the registry: one entry per vendored tree
@@ -66,6 +80,14 @@ with `label`, `root` (relative to `openscad/`), `revision` (the pinned commit),
 Gridfinity Rebuilt, so `include <src/core/standard.scad>` written for it keeps
 resolving; `vendor/` is on the path too, so a wrapper can address one library
 unambiguously as `<rackstack-8e296e93/rack-mount/tray/tray.scad>`.
+
+Eleven of those trees were added for the Building, Technic, Mechanical, Rounded
+shapes, Smooth shapes, Cases, Fasteners, Controls, Cycling, Computer hardware
+and Rocketry categories. Two of them deliberately keep a layout that is not
+flat, because upstream's own includes expect it: `bosl-*` keeps a `BOSL/`
+subdirectory (`use <BOSL/involute_gears.scad>`), and `catchnhole-*` keeps a
+`catchnhole/` subdirectory (`use <catchnhole/catchnhole.scad>`), which is how
+the author's own projects consume it.
 
 Nothing under `vendor/` is ever edited. Every tree keeps a `REVISION` file
 whose first line is the pinned commit and which also records the upstream URL,
@@ -83,6 +105,17 @@ from the catalog.
 | `threads-scad` | `threads.scad` | CC0-1.0 | rcolyer and contributors (public domain dedication) | `4ae9aeb3b136f9858200f77a304b909a000ce3b4` |
 | `splitflap` | the 25 `3d/**.scad` files (flap, spool, front panel, PCB, tools) | Apache-2.0 | Scott Bezek and the splitflap contributors | `87b17c531ca57b0bf10e86754e9d6b404b11a131` |
 | `rackstack` | the `rack-mount/`, `helper/`, `config/` and `rack/` OpenSCAD sources | MIT | Zhao Wang (jazwa) | `8e296e935aad89a6d1a5023da79becc634c10c2d` |
+| `lego-scad` | `LEGO.scad` | MIT | Christopher Finke | `d717ca8e29dbb62f271bf351b35179060eaa744e` |
+| `open-bricks-technic` | the 45 sources under `parts/` and `globals/` | MIT | Joerg Dettweiler (jaydee69) | `0465e456fbfa8a12772cc3ba7e4aff3f4cbe2487` |
+| `bosl` | the `BOSL/*.scad` modules the mechanical objects use (gears, joiners, bearings, threads, shapes) | BSD-2-Clause | Revar Desmera (revarbat) | `4ce427a8a38786e5f74b728c1e33d9fe7d4904d2` |
+| `round-anything` | `polyround.scad`, `MinkowskiRound.scad`, `unionRoundMask.scad` | MIT | Kurt Hutten (Irev-Dev) | `061fef7c429628808e847696bb345a9b0ec6e279` |
+| `smooth-prim` | `smooth_prim.scad` | CC0-1.0 | Ryan A. Colyer (public domain dedication) | `0d0038f984465f3eb0f6026a4d5de2f79d2dcea8` |
+| `yapp-box` | `YAPPgenerator_v3.scad` | MIT | Willem Aandewiel (mrWheel) | `f9400c419ef1dea7dc0b3607876989b4f3faa2b7` |
+| `catchnhole` | `catchnhole/catchnhole.scad`, `catchnhole/bolts.json`, `catchnhole/nuts.json` | MIT | Maciej Malecki (mmalecki) | `99428972ca2588f5ce33c0df54d097a14acf7f10` |
+| `openscad-knobs` | `knob.scad` | MIT | Maciej Malecki (mmalecki) | `ae3344fa8b312a8625ddbf9328a28e71f95183d7` |
+| `bike-mounts` | `bottle-cage.scad`, `handlebar.scad` | MIT | Maciej Malecki (mmalecki) | `55d636c45ec94d63732bd32591f42083e3099f09` |
+| `param-case` | the 12 case modules (defaults, fan, feet, front_panel, gpu, heatsink, mini-itx, motherboard, pci_bracket, power_switch, psu, vent) | BSD-2-Clause | Nirav Patel (eclecticc) | `b5f1ee43c1db93cac7657c52bcc5a97baa5df7c4` |
+| `rocket-fins` | `fins.scad` and the three ready-made fin sets | BSD-2-Clause | Adrian Schlatter | `57f2c9fd475be499aafb2655b12f20a75f135e60` |
 
 Upstream URLs are in the catalog and in each `REVISION` file; the full
 attribution is in `NOTICE` and `THIRD_PARTY_NOTICES` in the repository root.

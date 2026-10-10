@@ -1,0 +1,15 @@
+99428972ca2588f5ce33c0df54d097a14acf7f10
+
+Upstream: https://github.com/mmalecki/catchnhole
+License: MIT
+Copyright: Copyright (c) 2024 Maciej Malecki
+
+The library vendored the way the author's own projects consume it, as a submodule in
+a catchnhole/ directory, plus the upstream LICENSE, copied verbatim from the pinned
+commit.
+
+Files:
+  LICENSE
+  catchnhole/bolts.json
+  catchnhole/catchnhole.scad
+  catchnhole/nuts.json

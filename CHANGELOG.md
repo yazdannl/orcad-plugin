@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.9.16 — Catalog expansion: 100 more open source models (2026-10-10)
+
+The library grows from 49 to **149 objects** across 13 new categories, all of
+them vendored upstream OpenSCAD sources with pinned revisions, REVISION files
+and full attribution in `NOTICE` and `THIRD_PARTY_NOTICES`.
+
+- **Eleven new upstream libraries are vendored** under
+  `openscad/vendor/<name>-<revision>/`: `cfinke/LEGO.scad`,
+  `jaydee69/open-bricks-technic`, `revarbat/BOSL`, `Irev-Dev/Round-Anything`,
+  `rcolyer/smooth-prim`, `mrWheel/YAPP_Box`, `mmalecki/catchnhole`,
+  `mmalecki/openscad-knobs`, `mmalecki/openscad-bicycle-mounts`,
+  `eclecticc/ParametricCase` and `adrianschlatter/RocketFins`. Every tree keeps
+  its upstream license file and a REVISION file naming the pinned commit, the
+  license, the copyright holder and the vendored file list; the same revisions
+  are registered in `catalog.json`'s `libraries` map, so the catalog and the
+  vendored sources cannot drift apart.
+- **New categories and objects.**
+  - *Building* - 13 LEGO-compatible bricks, plates, tiles, slopes, round
+    bricks, wing bricks and baseplates.
+  - *Technic* - 12 open-bricks liftarms, axles, pins and connectors.
+  - *Mechanical* - 19 BOSL gears and racks, dovetail joiners, linear bearing
+    housings, threaded rods and nuts, metric screws, a NEMA17 mount plate and
+    chamfered blocks.
+  - *Rounded shapes* - 10 Round-Anything prisms, bars, tubes, plates and pegs.
+  - *Smooth shapes* - 9 smooth-prim cylinders, cubes, walls, filleted and
+    chamfered holes and cut corners.
+  - *Cases* - 8 YAPP_Box project boxes, from a slim small case to a large one
+    on a nearly full bed.
+  - *Fasteners* - 6 catchnhole nut catches and screw, hex head and countersunk
+    coupons.
+  - *Controls* - 4 knobs, three star and one round with a nut catch.
+  - *Cycling* - 2 bicycle mounts, a bottle cage plate and a handlebar clamp.
+  - *Computer hardware* - 5 ParametricCase vent panels, a heatsink and a USB
+    cutout panel.
+  - *Rocketry* - 4 airfoil fin sets and single blades.
+  - *Rack hardware* - 7 more rackstack catalog trays, from a slim DVD tray to a
+    switch tray, a rear fan mount and an enclosed box holder.
+- **Every new object is verified by a real render.** `tests/test_backend.py`
+  renders all 149 objects with OpenSCAD in CI, the thumbnail renderer produced
+  a preview for each of them, and all 100 new wrappers, parameters and presets
+  follow the same catalog invariants as the existing 49.
+- **Twelve new icons** in `frontend/src/components/Icons.jsx` for the new
+  categories: brick, gear, wrench, screw, sphere, pillow, rocket, server, dial,
+  chip, bike and a cube fallback.
+
 ## 0.9.15 — Model cards with a large preview header (2026-10-09)
 
 - **Every model in the library is a card with its preview on top.** The

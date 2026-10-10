@@ -1,0 +1,12 @@
+f9400c419ef1dea7dc0b3607876989b4f3faa2b7
+
+Upstream: https://github.com/mrWheel/YAPP_Box
+License: MIT
+Copyright: Copyright (c) 2021, 2022, 2023, 2024, 2025 Willem Aandewiel
+
+The single-project generator file plus the upstream LICENSE, copied verbatim from the
+pinned commit. The examples/ directory and the Customizer template are excluded.
+
+Files:
+  LICENSE
+  YAPPgenerator_v3.scad

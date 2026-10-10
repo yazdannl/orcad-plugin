@@ -1,0 +1,11 @@
+d717ca8e29dbb62f271bf351b35179060eaa744e
+
+Upstream: https://github.com/cfinke/LEGO.scad
+License: MIT
+Copyright: Copyright (c) 2015 Christopher Finke
+
+The single upstream block(Library) module file copied verbatim from the pinned commit.
+
+Files:
+  LEGO.scad
+  LICENSE

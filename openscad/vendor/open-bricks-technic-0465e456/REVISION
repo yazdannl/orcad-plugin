@@ -1,0 +1,57 @@
+0465e456fbfa8a12772cc3ba7e4aff3f4cbe2487
+
+Upstream: https://github.com/jaydee69/open-bricks-technic
+License: MIT
+Copyright: Copyright (c) 2019 Joerg Dettweiler
+
+The parts/, globals/ OpenSCAD sources that the vendored Technic models include, plus the
+upstream LICENSE, copied verbatim from the pinned commit. The example/ and overview files are
+excluded because they render test geometry at top level.
+
+Files:
+  LICENSE
+  parts/ObtParts.scad
+  parts/axles/../../globals/ObtGlobalConst.scad
+  parts/axles/ObtAxlConst.scad
+  parts/axles/ObtAxlStd.scad
+  parts/axles/ObtAxles.scad
+  parts/connectors/../../globals/ObtGlobalConst.scad
+  parts/connectors/../liftarms/../../globals/ObtGlobalConst.scad
+  parts/connectors/../liftarms/ObtLftCommonDiff.scad
+  parts/connectors/../liftarms/ObtLftConst.scad
+  parts/connectors/../pins/../../globals/ObtGlobalConst.scad
+  parts/connectors/../pins/ObtPinBase.scad
+  parts/connectors/../pins/ObtPinConnector.scad
+  parts/connectors/../pins/ObtPinConst.scad
+  parts/connectors/../pins/ObtPinDoubleConnector.scad
+  parts/connectors/../pins/ObtPins.scad
+  parts/connectors/ObtCon2PinSglHole.scad
+  parts/connectors/ObtCon4PinAngled.scad
+  parts/connectors/ObtCon4PinStd.scad
+  parts/connectors/ObtConCommonDiff.scad
+  parts/connectors/ObtConConst.scad
+  parts/connectors/ObtConCornerDblPin.scad
+  parts/connectors/ObtConEndDblPin.scad
+  parts/connectors/ObtConEndSglPin.scad
+  parts/connectors/ObtConInner.scad
+  parts/connectors/ObtConInnerSglHole.scad
+  parts/connectors/ObtConnectors.scad
+  parts/liftarms/../../globals/ObtGlobalConst.scad
+  parts/liftarms/ObtLftCommonDiff.scad
+  parts/liftarms/ObtLftConst.scad
+  parts/liftarms/ObtLftEll.scad
+  parts/liftarms/ObtLftEll5x3.scad
+  parts/liftarms/ObtLftEllBase.scad
+  parts/liftarms/ObtLftEnd.scad
+  parts/liftarms/ObtLftInner.scad
+  parts/liftarms/ObtLftStd.scad
+  parts/liftarms/ObtLftTee.scad
+  parts/liftarms/ObtLftTee3x3.scad
+  parts/liftarms/ObtLftTeeBase.scad
+  parts/liftarms/ObtLiftarms.scad
+  parts/pins/../../globals/ObtGlobalConst.scad
+  parts/pins/ObtPinBase.scad
+  parts/pins/ObtPinConnector.scad
+  parts/pins/ObtPinConst.scad
+  parts/pins/ObtPinDoubleConnector.scad
+  parts/pins/ObtPins.scad

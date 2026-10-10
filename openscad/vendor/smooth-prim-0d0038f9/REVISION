@@ -1,0 +1,12 @@
+0d0038f984465f3eb0f6026a4d5de2f79d2dcea8
+
+Upstream: https://github.com/rcolyer/smooth-prim
+License: CC0-1.0
+Copyright: Ryan A. Colyer (CC0 1.0 Universal dedicates the work to the public domain)
+
+The single library file plus the upstream LICENSE.txt, copied verbatim from the pinned
+commit.
+
+Files:
+  LICENSE.txt
+  smooth_prim.scad

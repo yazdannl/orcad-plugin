@@ -1,7 +1,7 @@
 Vendored OpenSCAD libraries
 ===========================
 
-Seven upstream OpenSCAD libraries are vendored unmodified under
+Eighteen upstream OpenSCAD libraries are vendored unmodified under
 `openscad/vendor/`. Each one keeps its upstream LICENSE and a `REVISION` file
 that records the pinned commit, the license, the copyright holder and the
 vendored file list; the same revisions are registered in the `libraries` map

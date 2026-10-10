@@ -1,0 +1,26 @@
+4ce427a8a38786e5f74b728c1e33d9fe7d4904d2
+
+Upstream: https://github.com/revarbat/BOSL
+License: BSD-2-Clause
+Copyright: Copyright (c) 2015-2018 Revar Desmera (revarbat)
+
+The OpenSCAD library modules, vendored the way upstream expects, under a BOSL/ directory,
+plus the upstream LICENSE, copied verbatim from the pinned commit. examples/, docs and the README
+are excluded.
+
+Files:
+  BOSL/compat.scad
+  BOSL/constants.scad
+  BOSL/involute_gears.scad
+  BOSL/joiners.scad
+  BOSL/linear_bearings.scad
+  BOSL/masks.scad
+  BOSL/math.scad
+  BOSL/metric_screws.scad
+  BOSL/nema_steppers.scad
+  BOSL/phillips_drive.scad
+  BOSL/shapes.scad
+  BOSL/threading.scad
+  BOSL/torx_drive.scad
+  BOSL/transforms.scad
+  LICENSE

@@ -1,0 +1,14 @@
+061fef7c429628808e847696bb345a9b0ec6e279
+
+Upstream: https://github.com/Irev-Dev/Round-Anything
+License: MIT
+Copyright: Copyright 2020 Kurt Hutten
+
+The three library files (polyround, MinkowskiRound, unionRoundMask) plus the upstream
+LICENSE, copied verbatim from the pinned commit. The examples are excluded.
+
+Files:
+  LICENSE
+  MinkowskiRound.scad
+  polyround.scad
+  unionRoundMask.scad

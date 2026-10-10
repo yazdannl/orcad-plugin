@@ -1,0 +1,13 @@
+55d636c45ec94d63732bd32591f42083e3099f09
+
+Upstream: https://github.com/mmalecki/openscad-bicycle-mounts
+License: MIT
+Copyright: Copyright (c) 2024 Maciej Malecki
+
+The two mount generators plus the upstream LICENSE, copied verbatim from the pinned
+commit.
+
+Files:
+  LICENSE
+  bottle-cage.scad
+  handlebar.scad

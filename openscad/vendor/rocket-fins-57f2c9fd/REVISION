@@ -1,0 +1,16 @@
+57f2c9fd475be499aafb2655b12f20a75f135e60
+
+Upstream: https://github.com/adrianschlatter/RocketFins
+License: BSD-2-Clause
+Copyright: Copyright (c) 2019, Adrian Schlatter
+
+The fin generators and the three ready-made fin sets plus the upstream LICENSE, copied
+verbatim from the pinned commit. gardena.scad, pco-1881.scad, rocket_fins.scad and rocket.scad are
+excluded: their include <threadlib/threadlib.scad> needs threadlib, which is not vendored.
+
+Files:
+  LICENSE
+  PN1_3_narrow_fins.scad
+  PN2_3_broad_fins.scad
+  PN3_5_narrow_fins.scad
+  fins.scad

@@ -1,6 +1,6 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.15)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.16)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on

@@ -8,7 +8,7 @@ General Public License, version 3 only (AGPL-3.0-only). See LICENSE.
 
 Vendored OpenSCAD libraries
 ---------------------------
-Seven upstream OpenSCAD libraries are vendored unmodified under
+Eighteen upstream OpenSCAD libraries are vendored unmodified under
 `openscad/vendor/<name>-<revision>/`. Every tree keeps its upstream `LICENSE`
 and a `REVISION` file naming the pinned commit, the license, the copyright
 holder and the vendored file list, and the same revisions are registered in the
@@ -65,6 +65,67 @@ THIRD_PARTY_NOTICES.
   8e296e935aad89a6d1a5023da79becc634c10c2d. The 99 OpenSCAD sources under
   rack-mount/, rack/, helper/ and config/ plus the upstream LICENSE: every rack
   case, tray, plate and panel model.
+
+- cfinke/LEGO.scad - MIT (Copyright (c) 2015 Christopher Finke) -
+  https://github.com/cfinke/LEGO.scad - commit
+  d717ca8e29dbb62f271bf351b35179060eaa744e. The block() library file plus the
+  upstream LICENSE: the bricks, plates, tiles, slopes, round bricks, wing bricks
+  and baseplates of the Building category.
+- jaydee69/open-bricks-technic - MIT (Copyright (c) 2019 Joerg Dettweiler) -
+  https://github.com/jaydee69/open-bricks-technic - commit
+  0465e456fbfa8a12772cc3ba7e4aff3f4cbe2487. The parts/ and globals/ OpenSCAD
+  sources plus the upstream LICENSE: the liftarms, axles, pins and connectors of
+  the Technic category. The example and overview files are not vendored, because
+  they render test geometry at top level.
+- revarbat/BOSL - BSD-2-Clause (Copyright (c) 2015-2018 Revar Desmera) -
+  https://github.com/revarbat/BOSL - commit
+  4ce427a8a38786e5f74b728c1e33d9fe7d4904d2. The library modules that the
+  Mechanical objects use - involute gears, racks, joiners, linear bearing
+  housings, screwed threads and shaped blocks - plus the upstream LICENSE.
+- Irev-Dev/Round-Anything - MIT (Copyright 2020 Kurt Hutten) -
+  https://github.com/Irev-Dev/Round-Anything - commit
+  061fef7c429628808e847696bb345a9b0ec6e279. polyround.scad, MinkowskiRound.scad
+  and unionRoundMask.scad plus the upstream LICENSE: the rounded prisms, bars,
+  tubes, plates and pegs of the Rounded shapes category.
+- rcolyer/smooth-prim - CC0-1.0 (Ryan A. Colyer; CC0 1.0 Universal dedicates
+  the work to the public domain) -
+  https://github.com/rcolyer/smooth-prim - commit
+  0d0038f984465f3eb0f6026a4d5de2f79d2dcea8. smooth_prim.scad plus the upstream
+  LICENSE.txt: the smooth cylinders, cubes, walls and cut corners of the Smooth
+  shapes category.
+- mrWheel/YAPP_Box - MIT (Copyright (c) 2021, 2022, 2023, 2024, 2025 Willem
+  Aandewiel) - https://github.com/mrWheel/YAPP_Box - commit
+  f9400c419ef1dea7dc0b3607876989b4f3faa2b7. YAPPgenerator_v3.scad plus the
+  upstream LICENSE: the project boxes of the Cases category. Upstream sizes a
+  box from its own top-level assignments, so the YAPP wrappers declare values
+  with upstream's variable names and run YAPPgenerate() themselves.
+- mmalecki/catchnhole - MIT (Copyright (c) 2024 Maciej Malecki) -
+  https://github.com/mmalecki/catchnhole - commit
+  99428972ca2588f5ce33c0df54d097a14acf7f10. catchnhole.scad, bolts.json and
+  nuts.json plus the upstream LICENSE, vendored the way the author's own
+  projects consume it in a catchnhole/ directory: the nut catch blocks, the
+  screw hole and hex head coupons.
+- mmalecki/openscad-knobs - MIT (Copyright (c) 2024 Maciej Malecki) -
+  https://github.com/mmalecki/openscad-knobs - commit
+  ae3344fa8b312a8625ddbf9328a28e71f95183d7. knob.scad plus the upstream
+  LICENSE: the star and round knobs of the Controls category.
+- mmalecki/openscad-bicycle-mounts - MIT (Copyright (c) 2024 Maciej Malecki) -
+  https://github.com/mmalecki/openscad-bicycle-mounts - commit
+  55d636c45ec94d63732bd32591f42083e3099f09. bottle-cage.scad and
+  handlebar.scad plus the upstream LICENSE: the cycling mounts. Both files
+  consume catchnhole as a submodule, which is why that library is vendored in
+  the layout upstream expects.
+- eclecticc/ParametricCase - BSD-2-Clause (Copyright (c) 2018, Nirav Patel) -
+  https://github.com/eclecticc/ParametricCase - commit
+  b5f1ee43c1db93cac7657c52bcc5a97baa5df7c4. The twelve case modules plus the
+  upstream LICENSE: the vent panels, the parametric heatsink and the USB panel
+  of the Computer hardware category.
+- adrianschlatter/RocketFins - BSD-2-Clause (Copyright (c) 2019, Adrian
+  Schlatter) - https://github.com/adrianschlatter/RocketFins - commit
+  57f2c9fd475be499aafb2655b12f20a75f135e60. fins.scad plus the three ready-made
+  fin sets and the upstream LICENSE: the Rocketry category. gardena.scad,
+  pco-1881.scad, rocket_fins.scad and rocket.scad are not vendored, because
+  their include of threadlib needs a library this project does not ship.
 
 OpenSCAD bootstrap attribution
 -------------------------------

@@ -1,0 +1,12 @@
+ae3344fa8b312a8625ddbf9328a28e71f95183d7
+
+Upstream: https://github.com/mmalecki/openscad-knobs
+License: MIT
+Copyright: Copyright (c) 2024 Maciej Malecki
+
+The single knob.scad file plus the upstream LICENSE, copied verbatim from the pinned
+commit.
+
+Files:
+  LICENSE
+  knob.scad

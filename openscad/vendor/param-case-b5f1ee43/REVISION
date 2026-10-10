@@ -1,0 +1,23 @@
+b5f1ee43c1db93cac7657c52bcc5a97baa5df7c4
+
+Upstream: https://github.com/eclecticc/ParametricCase
+License: BSD-2-Clause
+Copyright: Copyright (c) 2018, Nirav Patel
+
+The OpenSCAD case sources plus the upstream LICENSE, copied verbatim from the pinned
+commit. STL exports and images are excluded.
+
+Files:
+  LICENSE
+  defaults.scad
+  fan.scad
+  feet.scad
+  front_panel.scad
+  gpu.scad
+  heatsink.scad
+  mini-itx.scad
+  motherboard.scad
+  pci_bracket.scad
+  power_switch.scad
+  psu.scad
+  vent.scad
