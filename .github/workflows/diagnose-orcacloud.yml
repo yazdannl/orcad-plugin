@@ -1,11 +1,10 @@
 name: Diagnose OrcaCloud publish (temporary)
 
 # Temporary: reports why api.orcaslicer.com rejects this repository's publish
-# identity. It mints the same OIDC token packaging/publish_orcacloud.sh uses and
-# posts a probe with a deliberately too-low version, so nothing can be published:
-# the API answers the identity question (401) or the version question (non-401),
-# which separates the two failure modes. The token itself is never printed - only
-# its non-secret claims and the API's response.
+# identity. Mints the same OIDC token packaging/publish_orcacloud.sh requests and
+# posts probes with a deliberately too-low version, so a valid identity can only
+# ever be answered with a version error - the run separates the identity failure
+# (401) from any other. The token is never printed; only the API's responses are.
 on:
   push:
     branches: [main]
@@ -21,41 +20,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Mint the OIDC token and report its claims
-        id: token
-        env:
-          ACTIONS_ID_TOKEN_REQUEST_URL: ${{ env.nothing }}
+      - name: Probe every candidate audience
         run: |
           set -euo pipefail
-          response="$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=orcacloud")"
-          token="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("value",""))')"
-          if [ -z "$token" ]; then
-            echo "::error title=probe::no OIDC token in the response: ${response:0:300}"
-            exit 1
-          fi
-          # Only the payload's public claims; the signed token is never printed.
-          printf '%s' "$token" | python3 -c '
-          import base64, json, sys
-          token = sys.stdin.read()
-          payload = token.split(".")[1]
-          payload += "=" * (-len(payload) % 4)
-          claims = json.loads(base64.urlsafe_b64decode(payload))
-          for key in ("iss", "aud", "sub", "repository", "repository_owner",
-                      "workflow_ref", "job_workflow_ref", "ref", "sha",
-                      "runner_environment"):
-              print(f"{key}={claims.get(key)}")' > "$RUNNER_TEMP/claims.txt"
-          printf '%s' "$token" > "$RUNNER_TEMP/token.txt"
-          cat "$RUNNER_TEMP/claims.txt"
-      - name: Probe the publish endpoint
-        run: |
-          set -euo pipefail
-          printf '# version = "0.9.1"\n# probe file: the version is deliberately lower than\n# the published one, so a valid identity can only ever\n# be answered with a version error.\n' > orcad_probe.py
-          status="$(curl -sS -o "$RUNNER_TEMP/body.txt" -w '%{http_code}' \
-            -H "Authorization: Bearer $(cat "$RUNNER_TEMP/token.txt")" \
-            -F 'metadata={"version":"0.9.1"}' \
-            -F 'files=@orcad_probe.py' \
-            https://api.orcaslicer.com/api/v1/plugin-publish/releases)" || status="curl-failed"
-          echo "::notice title=probe::HTTP $status"
-          echo "::notice title=probe body::$(head -c 400 "$RUNNER_TEMP/body.txt")"
-          rm -f orcad_probe.py "$RUNNER_TEMP/token.txt"
+          mint() { # $1 = audience
+            curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=$1" |
+            python3 -c 'import json,sys; print(json.load(sys.stdin).get("value",""))'
+          }
+          printf '# version = "0.9.1"\n# probe only: the version is lower than the\n# published one, so nothing can be released.\n' > orcad_probe.py
+          for audience in orcacloud "https://api.orcaslicer.com" api.orcaslicer.com \
+                          orcaslicer orcacloud.com "https://orcacloud.com" \
+                          "https://api.orcaslicer.com/api/v1/plugin-publish/releases"; do
+            token="$(mint "$audience")"
+            if [ -z "$token" ]; then
+              echo "::notice title=probe [$audience]::no token returned"
+              continue
+            fi
+            status="$(curl -sS -o "$RUNNER_TEMP/body.txt" -w '%{http_code}' \
+              -H "Authorization: Bearer $token" \
+              -F 'metadata={"version":"0.9.1"}' -F 'files=@orcad_probe.py' \
+              https://api.orcaslicer.com/api/v1/plugin-publish/releases)" || status=curl-failed
+            echo "::notice title=probe [$audience]::HTTP $status $(head -c 300 "$RUNNER_TEMP/body.txt")"
+            unset token
+          done
+          rm -f orcad_probe.py
