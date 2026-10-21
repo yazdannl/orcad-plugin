@@ -29,7 +29,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from .errors import BackendError, ErrorCode
-from .runner import child_env, discover_openscad, popen_flags, probe_openscad
+from .runner import child_env, discover_openscad, platform_name, popen_flags, probe_openscad
 
 BOOTSTRAP_VERSION = "2026.09.22"
 SNAPSHOT_INDEX = "https://files.openscad.org/snapshots/"
@@ -81,8 +81,7 @@ ARTIFACTS = {
 
 
 def artifact_for(system: str | None = None, machine: str | None = None) -> OpenSCADArtifact:
-    system = system or sys.platform
-    system = "linux" if system.startswith("linux") else "win32" if system in ("win32", "windows") else system
+    system = platform_name(system)
     arch = (machine or platform.machine()).lower()
     arch = {"amd64": "x86_64", "x64": "x86_64", "arm64": "aarch64"}.get(arch, arch)
     key = (system, "universal") if system == "darwin" else (system, arch)
