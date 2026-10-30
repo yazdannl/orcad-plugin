@@ -60,8 +60,30 @@ class EngineInfo:
                 "supported": self.supported, "warning": self.warning}
 
 
+# Apps launched from the macOS Dock or Finder do not inherit the shell PATH, so
+# a Homebrew or drag-installed OpenSCAD is otherwise invisible to the plugin.
+_COMMON_LOCATIONS = {
+    "darwin": ("/opt/homebrew/bin/openscad", "/usr/local/bin/openscad",
+               "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD",
+               "~/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"),
+    "linux": ("/usr/local/bin/openscad", "/usr/bin/openscad", "/snap/bin/openscad"),
+}
+
+
+def _find_on_system() -> str | None:
+    found = shutil.which("openscad")
+    if found:
+        return found
+    system = "linux" if sys.platform.startswith("linux") else sys.platform
+    for location in _COMMON_LOCATIONS.get(system, ()):
+        path = os.path.expanduser(location)
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    return None
+
+
 def discover_openscad(executable: str | os.PathLike[str] | None = None) -> Path:
-    candidate = str(executable) if executable is not None else shutil.which("openscad")
+    candidate = str(executable) if executable is not None else _find_on_system()
     if not candidate:
         raise BackendError(ErrorCode.NOT_FOUND, "OpenSCAD executable was not found")
     path = Path(shutil.which(candidate) or candidate).resolve()
