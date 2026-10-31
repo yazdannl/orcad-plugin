@@ -60,8 +60,15 @@ class EngineInfo:
                 "supported": self.supported, "warning": self.warning}
 
 
+def platform_name(system: str | None = None) -> str:
+    system = system or sys.platform
+    return "linux" if system.startswith("linux") else "win32" if system in ("win32", "windows") else system
+
+
 # Apps launched from the macOS Dock or Finder do not inherit the shell PATH, so
 # a Homebrew or drag-installed OpenSCAD is otherwise invisible to the plugin.
+# These are trusted by location only, unlike the hash-verified download, so a
+# candidate that another user owns or can write to is skipped.
 _COMMON_LOCATIONS = {
     "darwin": ("/opt/homebrew/bin/openscad", "/usr/local/bin/openscad",
                "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD",
@@ -74,19 +81,25 @@ def _find_on_system() -> str | None:
     found = shutil.which("openscad")
     if found:
         return found
-    system = "linux" if sys.platform.startswith("linux") else sys.platform
-    for location in _COMMON_LOCATIONS.get(system, ()):
+    for location in _COMMON_LOCATIONS.get(platform_name(), ()):
         path = os.path.expanduser(location)
-        if os.path.isfile(path) and os.access(path, os.X_OK):
-            return path
+        if not (os.path.isfile(path) and os.access(path, os.X_OK)):
+            continue
+        st = os.stat(path)
+        if st.st_uid not in (0, os.getuid()) or st.st_mode & 0o022:
+            continue
+        return path
     return None
 
 
 def discover_openscad(executable: str | os.PathLike[str] | None = None) -> Path:
-    candidate = str(executable) if executable is not None else _find_on_system()
+    if executable is not None:
+        candidate = shutil.which(str(executable)) or str(executable)
+    else:
+        candidate = _find_on_system()
     if not candidate:
         raise BackendError(ErrorCode.NOT_FOUND, "OpenSCAD executable was not found")
-    path = Path(shutil.which(candidate) or candidate).resolve()
+    path = Path(candidate).resolve()
     if not path.is_file() or not os.access(path, os.X_OK):
         raise BackendError(ErrorCode.NOT_FOUND, "OpenSCAD executable is not runnable", {"executable": str(path)})
     return path

@@ -17,8 +17,9 @@ from openscad import (CATALOG, BackendError, OpenSCADRunner, backend_args, build
                       triangle_count, validate_parameters, write_3mf)
 from openscad.catalog import LIBRARIES, LIBRARY_DIRS, LIBRARY_SEARCH_PATH, ROOT
 from openscad.errors import ErrorCode
-from openscad.runner import _failure, child_env
-from fakes import fake_command
+from openscad import runner as runner_module
+from openscad.runner import _failure, child_env, discover_openscad, platform_name
+from fakes import fake_command, posix_exec_only
 
 CUBE = [((0, 0, 0), (1, 1, 0), (1, 0, 0)), ((0, 0, 0), (0, 1, 0), (1, 1, 0)),
         ((0, 0, 1), (1, 0, 1), (1, 1, 1)), ((0, 0, 1), (1, 1, 1), (0, 1, 1)),
@@ -403,6 +404,49 @@ def test_old_openscad_is_rejected(tmp_path):
         OpenSCADRunner(fake_openscad(tmp_path, "2021.01"), cache_dir=tmp_path)
     assert info.value.code == ErrorCode.UNSUPPORTED_VERSION
 
+
+
+def _common_locations(monkeypatch, tmp_path, *names, on_path=False):
+    """Put fake openscads at `names` under tmp_path as the only common install locations."""
+    path_dir = tmp_path / "path"
+    path_dir.mkdir()
+    if on_path:
+        fake_command(path_dir, "openscad", "")
+    monkeypatch.setenv("PATH", str(path_dir))
+    candidates = [fake_command(tmp_path / name, "openscad", "") for name in names]
+    monkeypatch.setitem(runner_module._COMMON_LOCATIONS, platform_name(), tuple(map(str, candidates)))
+    return path_dir / "openscad", candidates
+
+
+@posix_exec_only
+def test_a_common_install_location_is_used_when_path_misses(tmp_path, monkeypatch):
+    _, (installed,) = _common_locations(monkeypatch, tmp_path, "app")
+    assert discover_openscad() == installed.resolve()
+
+
+@posix_exec_only
+def test_a_path_hit_wins_over_common_install_locations(tmp_path, monkeypatch):
+    on_path, _ = _common_locations(monkeypatch, tmp_path, "app", on_path=True)
+    assert discover_openscad() == on_path.resolve()
+
+
+@posix_exec_only
+@pytest.mark.parametrize("mode", [0o644, 0o775, 0o757])
+def test_unrunnable_or_writable_common_locations_are_skipped(tmp_path, monkeypatch, mode):
+    _, (bad, good) = _common_locations(monkeypatch, tmp_path, "bad", "good")
+    bad.chmod(mode)
+    assert discover_openscad() == good.resolve()
+
+
+@posix_exec_only
+def test_common_locations_owned_by_another_user_are_skipped(tmp_path, monkeypatch):
+    _common_locations(monkeypatch, tmp_path, "app")
+    monkeypatch.setattr(runner_module.os, "getuid", lambda: os.stat(tmp_path).st_uid + 1)
+    if os.stat(tmp_path).st_uid == 0:
+        pytest.skip("root-owned files are always trusted")
+    with pytest.raises(BackendError) as info:
+        discover_openscad()
+    assert info.value.code == ErrorCode.NOT_FOUND
 
 def test_cache_is_pruned_oldest_first(tmp_path):
     runner = OpenSCADRunner(fake_openscad(tmp_path), cache_dir=tmp_path / "cache", cache_limit=len(stl()) * 2)
