@@ -7,7 +7,7 @@ from .errors import BackendError, ErrorCode, ValidationError
 from .mesh import IndexedMesh, index_stl, triangle_count, write_3mf
 from . import mesh_native
 from .runner import (EngineInfo, OpenSCADRunner, RenderResult, backend_args, build_argv, child_env, clean_log,
-                     discover_openscad, encode_define, probe_openscad)
+                     discover_openscad, encode_define, probe_openscad, program)
 from .validation import validate_parameters
 
 __all__ = [
@@ -16,6 +16,6 @@ __all__ = [
     "RenderResult", "SOURCE_REVISION", "ValidationError",
     "artifact_for", "backend_args", "build_argv", "cache_root", "child_env", "clean_log", "defaults", "discover_openscad",
     "encode_define", "ensure_openscad", "index_stl", "index_payload", "object_spec", "openscad_bootstrap_status",
-    "probe_openscad", "source_path", "spec_payload", "credit_for", "start_openscad_bootstrap", "triangle_count", "validate_parameters",
+    "probe_openscad", "program", "source_path", "spec_payload", "credit_for", "start_openscad_bootstrap", "triangle_count", "validate_parameters",
     "wait_for_openscad", "write_3mf",
 ]

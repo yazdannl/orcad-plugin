@@ -18,7 +18,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 import threading
 import time
 import urllib.error
@@ -193,10 +192,10 @@ def _find_executable(root: Path, name: str) -> Path:
     raise FileNotFoundError(f"{name} was not found in the OpenSCAD package")
 
 
-def _run_quiet(argv: list[str], cwd: Path | None = None) -> None:
+def _run_quiet(argv: list[str], cwd: Path | None = None, *, allow_failure: bool = False) -> None:
     result = subprocess.run(argv, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                             check=False, timeout=INSTALL_TIMEOUT, env=child_env(), **popen_flags())
-    if result.returncode:
+    if result.returncode and not allow_failure:
         raise RuntimeError(f"{Path(argv[0]).name} failed with exit code {result.returncode}")
 
 
@@ -215,16 +214,27 @@ def _install_appimage(archive: Path, destination: Path) -> Path:
 
 
 def _install_dmg(archive: Path, destination: Path) -> Path:
-    with tempfile.TemporaryDirectory(prefix="orcad-openscad-mount-", dir=destination) as mount:
-        _run_quiet(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", mount, str(archive)])
-        try:
-            app = next(iter(sorted(Path(mount).glob("*.app"))), None)
-            if app is None:
-                raise FileNotFoundError("OpenSCAD.app was not found in the disk image")
-            _run_quiet(["ditto", str(app), str(destination / app.name)])
-        finally:
-            subprocess.run(["hdiutil", "detach", mount, "-force"], stdout=subprocess.DEVNULL,
-                           stderr=subprocess.DEVNULL, check=False, timeout=INSTALL_TIMEOUT)
+    """Copy OpenSCAD.app out of the disk image.
+
+    The mount point is fixed under the cache rather than a fresh temp directory:
+    OrcaSlicer's plugin audit hook remembers a process grant per exact command
+    string, and a random directory in the hdiutil command line would ask for the
+    same permission on every install attempt.
+    """
+    mount = destination / "mnt"
+    shutil.rmtree(mount, ignore_errors=True)
+    mount.mkdir(parents=True)
+    _run_quiet(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mount), str(archive)])
+    try:
+        app = next(iter(sorted(mount.glob("*.app"))), None)
+        if app is None:
+            raise FileNotFoundError("OpenSCAD.app was not found in the disk image")
+        # ditto, not a copy: the bundle's signature and extended attributes are
+        # what macOS checks before it runs the app.
+        _run_quiet(["ditto", str(app), str(destination / app.name)])
+    finally:
+        _run_quiet(["hdiutil", "detach", str(mount), "-force"], allow_failure=True)
+        shutil.rmtree(mount, ignore_errors=True)
     return _find_executable(destination, "OpenSCAD")
 
 

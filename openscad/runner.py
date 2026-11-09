@@ -111,12 +111,30 @@ def version_tuple(version: str) -> tuple[int, int]:
 
 
 def probe_openscad(executable: str | os.PathLike[str] | None = None, *, timeout: float = 15.0) -> EngineInfo:
+    """Run `--version` once, surviving the plugin audit hook's first crack at it.
+
+    OrcaSlicer asks the user before a plugin starts a process. On a worker thread
+    it denies the call that found the dialog still open and only then saves the
+    grant, so the first launch of OpenSCAD comes back as PermissionError while
+    the answer the user gave was Yes. Trying once more after the dialog had time
+    to close turns that into the silent start it should have been.
+    """
     path = discover_openscad(executable)
-    try:
-        result = subprocess.run([str(path), "--version"], capture_output=True, text=True, check=False,
-                                timeout=timeout, env=child_env(), **popen_flags())
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise BackendError(ErrorCode.PROBE_FAILED, "OpenSCAD could not be started", {"executable": str(path)}) from exc
+    for attempt in (0, 1):
+        try:
+            result = subprocess.run([str(path), "--version"], capture_output=True, text=True, check=False,
+                                    timeout=timeout, env=child_env(), **popen_flags())
+            break
+        except PermissionError as exc:
+            if attempt:
+                raise BackendError(ErrorCode.PROBE_FAILED,
+                                   "OrcaSlicer did not allow OpenSCAD to start. Allow it in the "
+                                   "permission dialog, then try again.",
+                                   {"executable": str(path)}) from exc
+            time.sleep(1.0)
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise BackendError(ErrorCode.PROBE_FAILED, "OpenSCAD could not be started",
+                               {"executable": str(path)}) from exc
     match = _VERSION_RE.search(f"{result.stdout}\n{result.stderr}")
     if result.returncode or not match:
         raise BackendError(ErrorCode.PROBE_FAILED, "OpenSCAD did not report a version", {"returncode": result.returncode})
@@ -154,23 +172,52 @@ def backend_args(version: str | None) -> list[str]:
     return [*flags, "--enable=manifold"] if year == 2023 else flags
 
 
-def build_argv(executable: str | os.PathLike[str], source: Path, output: Path,
-               defines: dict[str, Any], quality: str, version: str | None) -> list[str]:
+def build_argv(executable: str | os.PathLike[str], program: Path, output: Path,
+               version: str | None) -> list[str]:
+    """The OpenSCAD command line for one install.
+
+    Nothing that varies per render may appear here. OrcaSlicer's plugin audit
+    hook asks the user before plugin code starts a process and remembers the
+    answer per exact command string, so a command line carrying the parameters
+    or a per-render file name asks again on every single change. The parameters
+    and the source therefore live in the program file (see `program`), and this
+    argv stays byte-identical for every model, every parameter change and every
+    restart.
+    """
+    return [str(executable), "-o", str(output), "--export-format", "binstl",
+            *backend_args(version), str(program)]
+
+
+def program(source: Path | None, defines: dict[str, Any], quality: str) -> str:
+    """The OpenSCAD source for one render.
+
+    Parameter values are assignments at the end of the top-level scope rather
+    than -D arguments: OpenSCAD applies the last assignment to a name, which is
+    the same rule that makes -D override the file, so a parameter still wins
+    over the object's own default. A catalog wrapper is pulled in with an
+    absolute `include` so its relative `use`/`include` paths keep resolving.
+    """
     if quality not in QUALITY_PROFILES:
         raise BackendError(ErrorCode.INVALID_VALUE, f"Unknown quality profile {quality!r}")
     profile = QUALITY_PROFILES[quality]
-    argv = [str(executable), "-o", str(output), "--export-format", "binstl", *backend_args(version)]
-    for name, value in {**defines, "$fa": profile["fa"], "$fs": profile["fs"]}.items():
-        argv += ["-D", encode_define(name, value)]
-    return [*argv, str(source)]
+    head = ""
+    if source is not None:
+        location = source.as_posix()
+        if any(character in location for character in '<>"\n\r'):
+            raise BackendError(ErrorCode.OUTPUT_ERROR, "The model source path cannot be used by OpenSCAD",
+                               {"source": str(source)})
+        head = f"include <{location}>\n"
+    return head + "".join(f"{encode_define(name, value)};\n"
+                          for name, value in {**defines, "$fa": profile["fa"],
+                                              "$fs": profile["fs"]}.items())
 
 
-def clean_log(text: str, source: Path | None = None) -> list[str]:
+def clean_log(text: str, *sources: Path) -> list[str]:
     lines = []
     for line in text.splitlines():
         if not line.strip() or line.startswith(_NOISE):
             continue
-        if source is not None:
+        for source in sources:
             line = line.replace(f"'{source}'", "your code").replace(str(source), "your code")
         lines.append(line.rstrip())
     return lines[-200:]
@@ -202,7 +249,16 @@ class RenderResult:
 
 
 class OpenSCADRunner:
-    """Serial renderer with a size-bounded, content-addressed STL cache."""
+    """Serial renderer with a size-bounded, content-addressed STL cache.
+
+    Every render runs the same command line over the same two files in `work/`.
+    OrcaSlicer's plugin audit hook remembers a process grant per exact command
+    string, so a per-render source or output name would ask the user for
+    permission again on every change; see `build_argv`.
+    """
+
+    PROGRAM = "model.scad"
+    OUTPUT = "out.stl"
 
     def __init__(self, executable: str | os.PathLike[str] | None = None, *,
                  cache_dir: str | os.PathLike[str], cache_limit: int = 512 * 1024 * 1024):
@@ -212,12 +268,21 @@ class OpenSCADRunner:
                                self.engine.to_dict())
         self.cache_dir = Path(cache_dir)
         self.cache_limit = cache_limit
+        # Fixed for the life of the install, not per render: renders are serial in
+        # one worker, so one shared pair of files cannot collide there.
+        # ponytail: two OrcaSlicer windows sharing this directory that render at
+        # the same instant can interleave the work files; per-process names would
+        # cost a permission prompt after every start. Add an exclusive lock here
+        # if the plugin ever has to support that.
+        self.work = self.cache_dir / "work"
 
     def render_object(self, name: str, params: dict[str, Any], quality: str = "balanced", *,
                       timeout: float = 180.0, cancel: Cancel = None) -> RenderResult:
         checked = validate_parameters(name, params)
+        source = source_path(name)
         identity = {"object": name, "params": checked}
-        return self._render(source_path(name), checked, quality, identity, timeout, cancel)
+        return self._render(program(source, checked, quality), quality, identity, timeout, cancel,
+                            scrub=(source,))
 
     def render_code(self, code: str, quality: str = "balanced", *,
                     timeout: float = 180.0, cancel: Cancel = None) -> RenderResult:
@@ -225,14 +290,10 @@ class OpenSCADRunner:
             raise BackendError(ErrorCode.INVALID_VALUE, "The code is empty")
         if len(code) > MAX_CODE_CHARS:
             raise BackendError(ErrorCode.INVALID_VALUE, "The code is too large (over 200,000 characters)")
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="code-", dir=self.cache_dir) as work:
-            source = Path(work) / "model.scad"
-            source.write_text(code, encoding="utf-8")
-            return self._render(source, {}, quality, {"code": code}, timeout, cancel)
+        return self._render(code + "\n" + program(None, {}, quality), quality, {"code": code}, timeout, cancel)
 
-    def _render(self, source: Path, defines: dict[str, Any], quality: str, identity: dict[str, Any],
-                timeout: float, cancel: Cancel) -> RenderResult:
+    def _render(self, text: str, quality: str, identity: dict[str, Any], timeout: float, cancel: Cancel,
+                scrub: tuple[Path, ...] = ()) -> RenderResult:
         started = time.monotonic()
         payload = {**identity, "quality": quality, "engine": self.engine.version, "library": LIBRARY_REVISION}
         key = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
@@ -247,22 +308,25 @@ class OpenSCADRunner:
             except (BackendError, OSError):
                 stl.unlink(missing_ok=True)
 
-        temp = self.cache_dir / f".{key}.{os.getpid()}.tmp.stl"
-        argv = build_argv(self.engine.executable, source, temp, defines, quality, self.engine.version)
+        source, output = self.work / self.PROGRAM, self.work / self.OUTPUT
+        self.work.mkdir(parents=True, exist_ok=True)
+        source.write_text(text, encoding="utf-8")
+        output.unlink(missing_ok=True)
+        argv = build_argv(self.engine.executable, source, output, self.engine.version)
         try:
             with tempfile.TemporaryFile(dir=self.cache_dir) as stderr:
-                returncode = _run(argv, source.parent, stderr, timeout, cancel)
+                returncode = _run(argv, self.work, stderr, timeout, cancel)
                 stderr.seek(0)
-                log = clean_log(stderr.read().decode("utf-8", "replace"), source)
+                log = clean_log(stderr.read().decode("utf-8", "replace"), source, *scrub)
             if returncode != 0:
                 raise _failure(log, returncode)
-            if not temp.is_file():
+            if not output.is_file():
                 raise BackendError(ErrorCode.OUTPUT_ERROR, "OpenSCAD did not produce an STL")
-            triangles = triangle_count(temp.read_bytes())
-            os.replace(temp, stl)
+            triangles = triangle_count(output.read_bytes())
+            os.replace(output, stl)
             log_path.write_text("\n".join(log), encoding="utf-8")
         finally:
-            temp.unlink(missing_ok=True)
+            output.unlink(missing_ok=True)
         self._prune()
         return RenderResult(stl, False, _elapsed(started), log, triangles)
 

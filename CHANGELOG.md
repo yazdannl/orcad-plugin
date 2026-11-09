@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.9.22 — one permission prompt instead of one per change (2026-11-09)
+
+- **Rendering no longer asks OrcaSlicer for permission on every change.**
+  OrcaSlicer's plugin audit hook asks the user before plugin code starts a
+  process and remembers the answer per exact command line. Every render used to
+  build a new one: the parameter values went in as `-D` arguments and the output
+  was a per-render file name, so each edit, each newly selected model and each
+  restart asked again. The parameters and the model now travel in
+  `<cache>/work/model.scad`, OpenSCAD always runs over that file and
+  `<cache>/work/out.stl`, and the finished STL is moved into the
+  content-addressed cache afterwards. The command line is therefore identical
+  for every render, so the audit grant covers all of them. Catalog objects put
+  the parameters after an absolute `include` of their wrapper, which keeps the
+  wrapper's relative `use`/`include` paths resolving and produces byte-identical
+  STLs (`pytest` compares them against the old `-D` command line).
+- **A launch that OrcaSlicer denied is retried instead of reported as
+  unavailable.** Off the main thread the audit hook denies the call that finds
+  its permission dialog still open and saves the grant only once the user
+  answers, so the first OpenSCAD launch on macOS surfaced as
+  "OpenSCAD could not be started" - a `PermissionError` that read like a broken
+  install. The version probe now tries once more after the dialog can have
+  closed, and a real denial says to allow OpenSCAD in the permission dialog.
+- **The macOS disk image is mounted at a fixed path** (`<cache>/mnt`) instead of
+  a fresh temporary directory, so `hdiutil`'s audited command line repeats
+  exactly and an approved install is not asked about again.
+- **The test fakes set their own file mode.** Discovery rejects a command
+  another user could write to, which made the common-location tests fail on
+  machines whose umask is 002.
+
 ## 0.9.21 — the backend is checked before it is used (2026-10-18)
 
 - **A half-unpacked backend is no longer permanent.** OrcaCAD unpacks its

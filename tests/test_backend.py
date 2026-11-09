@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from openscad import (CATALOG, BackendError, OpenSCADRunner, backend_args, build_argv, clean_log, credit_for, defaults,
-                      encode_define, index_payload, index_stl, probe_openscad, source_path, spec_payload,
+                      encode_define, index_payload, index_stl, probe_openscad, program, source_path, spec_payload,
                       triangle_count, validate_parameters, write_3mf)
 from openscad.catalog import LIBRARIES, LIBRARY_DIRS, LIBRARY_SEARCH_PATH, ROOT
 from openscad.errors import ErrorCode
@@ -271,18 +271,31 @@ def test_defines_are_separate_safe_arguments():
             encode_define(name, value)
 
 
-def test_argv_requests_binary_stl_quality_and_the_fast_kernel():
-    argv = build_argv("openscad", Path("in dir/model.scad"), Path("out dir/x.stl"), {"gridx": 2}, "draft", "2026.09.22")
-    assert argv[:5] == ["openscad", "-o", str(Path("out dir/x.stl")), "--export-format", "binstl"]
-    assert "--backend=Manifold" in argv
-    assert argv[argv.index("gridx=2") - 1] == "-D"
-    assert "$fa=12" in argv and "$fs=0.8" in argv
-    assert argv[-1] == str(Path("in dir/model.scad"))
+def test_the_command_line_is_the_same_for_every_render():
+    # OrcaSlicer's plugin audit hook asks before plugin code starts a process and
+    # remembers the answer per exact command string: a command carrying the
+    # parameters or a per-render file name would ask again on every change.
+    argv = build_argv("openscad", Path("work/model.scad"), Path("work/out.stl"), "2026.09.22")
+    assert argv == ["openscad", "-o", str(Path("work/out.stl")), "--export-format", "binstl",
+                    "--enable=textmetrics", "--backend=Manifold", str(Path("work/model.scad"))]
+    assert all("-D" not in argument for argument in argv)
     assert backend_args("2023.09.11") == ["--enable=textmetrics", "--enable=manifold"]
     assert backend_args("2026.01.01") == ["--enable=textmetrics", "--backend=Manifold"]
     assert backend_args("2021.01") == [] and backend_args(None) == []
+
+
+def test_the_program_carries_the_parameters_the_command_line_used_to():
+    text = program(Path("in dir/model.scad"), {"gridx": 2, "text": 'a "b"'}, "draft")
+    assert text.startswith("include <in dir/model.scad>\n")  # relative use/include paths keep working
+    assert "gridx=2;" in text and '$fa=12;' in text and "$fs=0.8;" in text
+    # the value is still escaped, so a quote cannot escape the literal
+    assert 'text="a \\"b\\"";' in text
+    assert program(None, {}, "final") == "$fa=3;\n$fs=0.1;\n"
     with pytest.raises(BackendError):
-        build_argv("openscad", Path("m.scad"), Path("x.stl"), {}, "ultra", "2026.01.01")
+        program(Path("model.scad"), {}, "ultra")
+    # an install path that would close the include and inject code is refused
+    with pytest.raises(BackendError):
+        program(Path("a>\ncube(1);"), {}, "draft")
 
 
 def test_child_env_drops_host_library_paths_and_exposes_the_library(monkeypatch):
@@ -344,7 +357,9 @@ def fake_openscad(tmp_path: Path, version="2026.09.22", delay=0.0, stderr="", fa
         "import json, os, pathlib, sys, time\n"
         f"if '--version' in sys.argv:\n    print('OpenSCAD version {version}'); raise SystemExit(0)\n"
         "log = pathlib.Path(__file__).with_name('calls.jsonl')\n"
+        "source = pathlib.Path(sys.argv[-1])\n"
         "with log.open('a') as f: f.write(json.dumps({'argv': sys.argv, 'cwd': os.getcwd(),"
+        " 'program': source.read_text() if source.is_file() else None,"
         " 'env': {k: os.environ.get(k) for k in ('OPENSCADPATH', 'LD_LIBRARY_PATH')}}) + '\\n')\n"
         f"time.sleep({delay})\n"
         f"sys.stderr.write({stderr!r})\n"
@@ -363,13 +378,32 @@ def test_render_object_runs_once_then_serves_the_cache(tmp_path, monkeypatch):
     first = runner.render_object("box", {"length": 30}, "draft")
     assert (first.triangles, first.cached, first.log) == (12, False, ["ECHO: hello"])
     call = calls(tmp_path)[0]
-    assert "length=30" in call["argv"] and call["env"]["LD_LIBRARY_PATH"] is None
-    assert Path(call["cwd"]) == source_path("box").parent
+    assert call["env"]["LD_LIBRARY_PATH"] is None
+    # the parameter and the wrapper travel in the program file, not the command line
+    assert f"include <{source_path('box').as_posix()}>" in call["program"]
+    assert "length=30;" in call["program"] and "$fa=12;" in call["program"]
+    assert not any("length=30" in argument for argument in call["argv"])
+    assert Path(call["cwd"]) == Path(call["argv"][-1]).parent
     second = runner.render_object("box", {"length": 30}, "draft")
     assert second.cached and second.stl == first.stl and second.log == ["ECHO: hello"]
     assert len(calls(tmp_path)) == 1
     runner.render_object("box", {"length": 30}, "final")
     assert len(calls(tmp_path)) == 2
+
+
+def test_every_render_reuses_one_command_line(tmp_path):
+    # What the user sees: one permission dialog for the first render, none after.
+    runner = OpenSCADRunner(fake_openscad(tmp_path), cache_dir=tmp_path / "cache")
+    for name, params, quality in (("box", {"length": 30}, "draft"), ("box", {"length": 40}, "final"),
+                                  ("cylinder", {}, "draft")):
+        runner.render_object(name, params, quality)
+    runner.render_code("cube(3);", "balanced")
+    runner.render_code("sphere(4);", "balanced")
+    seen = calls(tmp_path)
+    assert len(seen) == 5
+    assert len({tuple(call["argv"]) for call in seen}) == 1, "the command line must not change per render"
+    assert len({call["cwd"] for call in seen}) == 1
+    assert seen[3]["program"] == "cube(3);\n$fa=6;\n$fs=0.3;\n"  # the quality still applies
 
 
 def test_render_code_reports_the_openscad_error(tmp_path):
@@ -382,6 +416,8 @@ def test_render_code_reports_the_openscad_error(tmp_path):
     with pytest.raises(BackendError):
         runner.render_code("   ")
     assert not list((tmp_path / "cache").glob("*.stl"))
+    # a failed render leaves no half-written output behind for the next one
+    assert not list((tmp_path / "cache" / "work").glob("*.stl"))
 
 
 def test_timeout_and_cancel_kill_the_process(tmp_path):
@@ -404,6 +440,39 @@ def test_old_openscad_is_rejected(tmp_path):
         OpenSCADRunner(fake_openscad(tmp_path, "2021.01"), cache_dir=tmp_path)
     assert info.value.code == ErrorCode.UNSUPPORTED_VERSION
 
+
+
+def test_a_probe_that_the_audit_hook_denied_is_tried_once_more(tmp_path, monkeypatch):
+    # OrcaSlicer denies the call that found its permission dialog still open and
+    # saves the grant afterwards, so the retry is the launch the user approved.
+    executable = fake_openscad(tmp_path)
+    real_run = runner_module.subprocess.run
+    attempts = []
+
+    def denied_once(argv, **kwargs):
+        attempts.append(list(argv))
+        if len(attempts) == 1:
+            raise PermissionError(13, "denied by the plugin audit hook")
+        return real_run(argv, **kwargs)
+
+    monkeypatch.setattr(runner_module.subprocess, "run", denied_once)
+    monkeypatch.setattr(runner_module.time, "sleep", lambda _seconds: None)
+    assert probe_openscad(executable).version == "2026.09.22"
+    assert len(attempts) == 2 and attempts[0] == attempts[1]
+
+
+def test_a_probe_denied_twice_names_the_permission_dialog(tmp_path, monkeypatch):
+    executable = fake_openscad(tmp_path)
+
+    def always_denied(*_args, **_kwargs):
+        raise PermissionError(13, "denied by the plugin audit hook")
+
+    monkeypatch.setattr(runner_module.subprocess, "run", always_denied)
+    monkeypatch.setattr(runner_module.time, "sleep", lambda _seconds: None)
+    with pytest.raises(BackendError) as info:
+        probe_openscad(executable)
+    assert info.value.code == ErrorCode.PROBE_FAILED
+    assert "permission dialog" in info.value.message
 
 
 def _common_locations(monkeypatch, tmp_path, *names, on_path=False):

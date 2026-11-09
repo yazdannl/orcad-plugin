@@ -28,7 +28,12 @@ def assert_mode(path: Path, mode: int) -> None:
 
 
 def fake_command(directory: Path, name: str, source: str) -> Path:
-    """Write `source` as an executable command named `name`; return the runnable path."""
+    """Write `source` as an executable command named `name`; return the runnable path.
+
+    The mode is set outright: the discovery tests reject a command another user
+    could write to, and an inherited umask of 002 would otherwise make every fake
+    group-writable.
+    """
     directory.mkdir(parents=True, exist_ok=True)
     if WINDOWS:
         script = directory / f"{name}.py"
@@ -38,5 +43,5 @@ def fake_command(directory: Path, name: str, source: str) -> Path:
         return wrapper
     path = directory / name
     path.write_text(f"#!{sys.executable}\n{source}", encoding="utf-8")
-    path.chmod(path.stat().st_mode | stat.S_IXUSR)
+    path.chmod(0o755)
     return path
