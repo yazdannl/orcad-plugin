@@ -90,7 +90,10 @@ After that, tagging a release publishes both places:
 The script refuses a tag that disagrees with the plugin's own `version`, and
 fails with a readable reason otherwise: HTTP 401 means the repository is not
 connected to one of your plugins, and a version error means the tag is not
-higher than the published one. Orca Cloud requires the uploaded filename to end
+higher than the published one. On a 401 the run also prints the OIDC token's
+public claims (`sub`, `repository`, `repository_id`, `workflow_ref`) next to the
+portal's **Connected to …** line, so a link that exists but still gets rejected
+can be compared claim by claim instead of guessed at. Orca Cloud requires the uploaded filename to end
 in a supported target OS/arch suffix, hence the `orcad_any.py` copy of
 `orcad.py` (universal, pure Python).
 

@@ -106,6 +106,26 @@ status="$(curl -sS -o "$response" -w '%{http_code}' \
   https://api.orcaslicer.com/api/v1/plugin-publish/releases)"
 body="$(cat "$response")"
 echo "$body"
+# A 401 means Orca Cloud did not accept the identity, so report the identity it
+# was given: the token's public claims are safe to print (the signature is not),
+# and repository_id is what the portal connection records at connect time.
+if [ "$status" = "401" ]; then
+  claims="$(OIDC_TOKEN="$oidc_token" python3 - <<'PY'
+import base64
+import json
+import os
+
+payload = os.environ["OIDC_TOKEN"].split(".")[1]
+payload += "=" * (-len(payload) % 4)
+claims = json.loads(base64.urlsafe_b64decode(payload))
+print("; ".join(
+    f"{key}={claims.get(key)}"
+    for key in ("iss", "aud", "sub", "repository", "repository_id", "workflow_ref", "ref")
+))
+PY
+)"
+  echo "::notice title=Orca Cloud saw this identity::$claims"
+fi
 if [ "$status" != "201" ]; then
   case "$status" in
     401) reason="Orca Cloud rejected the identity from ${GITHUB_WORKFLOW_REF:-${GITHUB_WORKFLOW:-unknown}}: is $GITHUB_REPOSITORY connected to one of your plugins, and is that connection bound to this workflow?" ;;
