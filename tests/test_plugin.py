@@ -767,6 +767,51 @@ def test_page_capability_names_the_tab_and_carries_the_icon(monkeypatch):
     assert Path(page.get_icon()).is_file()
 
 
+def test_a_page_reports_why_its_session_could_not_start(monkeypatch):
+    """A session that cannot be built must not leave the tab on "Connecting"."""
+    page = _load_with_orca(monkeypatch)["OrcadPage"]()
+    posted = []
+    page.post_message = posted.append
+
+    def broken(_post):
+        raise TypeError("PiAgent.__init__() got an unexpected keyword argument 'openscad_version'")
+
+    monkeypatch.setattr(orcad, "Session", broken)
+    page.on_message(json.dumps({"type": "hello"}))
+    assert posted and posted[0]["type"] == "error"
+    assert "could not start" in posted[0]["message"] and "openscad_version" in posted[0]["message"]
+
+
+def test_a_backend_folder_from_another_release_is_ignored(tmp_path, monkeypatch):
+    """An update in place leaves the page new and the backend old; the tab hung.
+
+    OrcaSlicer installs plugins as a folder, so replacing orcad.py (or a cloud
+    refresh) can leave the previous release's `openscad/` and `ai/` beside it.
+    The page then calls backend functions that do not exist yet and every
+    message raised inside on_message. The embedded copy always matches the file.
+    """
+    if not orcad._EMBEDDED_BACKEND:
+        pytest.skip("run packaging/bundle.py to embed the backend")
+    package = tmp_path / "openscad"
+    package.mkdir()
+    (package / "__init__.py").write_text('BACKEND_VERSION = "0.0.1"\nraise RuntimeError("stale backend")\n',
+                                         encoding="utf-8")
+    monkeypatch.setattr(orcad, "HERE", tmp_path)
+    _redirect_cache(monkeypatch, tmp_path)
+    before_root = orcad._BACKEND_ROOT
+    before = {name: module for name, module in sys.modules.items() if name.startswith("orcad_openscad")}
+    try:
+        assert orcad._folder_backend_version() == "0.0.1"
+        backend = orcad._load_backend()  # importing the folder copy would raise
+        assert backend.CATALOG["objects"], "the embedded copy carries the catalog"
+        assert Path(backend.__file__).resolve().is_relative_to((orcad._cache_root() / "backend").resolve())
+    finally:
+        orcad._BACKEND_ROOT = before_root
+        for name in [name for name in sys.modules if name.startswith("orcad_openscad")]:
+            del sys.modules[name]
+        sys.modules.update(before)
+
+
 def test_old_oraslicer_builds_get_a_named_fallback(monkeypatch):
     classes = _load_with_orca(monkeypatch, pages=False)  # no orca.pages: the build is too old
     assert classes["OrcadNeedsPages"]().get_name() == "OrcaCAD (needs a newer OrcaSlicer)"

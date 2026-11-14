@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.9.25 — an updated file in an old plugin folder always works (2026-11-14)
+
+- **A half-updated folder install no longer hangs the tab at "Connecting".**
+  OrcaSlicer installs plugins as a folder, so replacing `orcad.py` (or a cloud
+  refresh) can leave the previous release's `openscad/` and `ai/` beside it.
+  The new page then called a backend function that did not exist yet, the
+  exception escaped `on_message` before a session was built, and every message
+  - the greeting, the previews, the parameter list - failed the same way, so the
+  page waited forever. `openscad/__init__.py` now records `BACKEND_VERSION` and
+  the plugin ignores a backend folder whose release is not its own, using the
+  copy embedded in `orcad.py` instead (nothing in the folder is touched).
+- **A session that cannot start says so.** If creating the session still fails,
+  the page receives an error message with the reason instead of showing
+  "Connecting" for good.
+- The version test now also pins `BACKEND_VERSION`, so a release cannot forget
+  to update it.
+
 ## 0.9.24 — one permission prompt, no environment reads (2026-11-14)
 
 - **A whole session now costs OrcaSlicer at most one permission dialog.** The

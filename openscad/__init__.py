@@ -1,4 +1,8 @@
 """OpenSCAD backend for the orcad OrcaSlicer plugin (standard library only)."""
+# The release this backend belongs to. orcad.py compares it with its own version
+# before using a backend folder that lies beside it: a page from one release and
+# a backend from another cannot import against each other.
+BACKEND_VERSION = "0.9.25"
 from .bootstrap import (ARTIFACTS, BOOTSTRAP_VERSION, artifact_for, cache_root, ensure_openscad,
                         openscad_bootstrap_status, start_openscad_bootstrap, wait_for_openscad)
 from .catalog import (CATALOG, LIBRARIES, LIBRARY_DIR, LIBRARY_DIRS, LIBRARY_REVISION, QUALITY_PROFILES,
@@ -11,7 +15,7 @@ from .runner import (EngineInfo, OpenSCADRunner, RenderResult, backend_args, bui
 from .validation import validate_parameters
 
 __all__ = [
-    "ARTIFACTS", "BOOTSTRAP_VERSION", "BackendError", "CATALOG", "EngineInfo", "ErrorCode", "IndexedMesh",
+    "ARTIFACTS", "BACKEND_VERSION", "BOOTSTRAP_VERSION", "BackendError", "CATALOG", "EngineInfo", "ErrorCode", "IndexedMesh",
     "LIBRARIES", "LIBRARY_DIR", "LIBRARY_DIRS", "LIBRARY_REVISION", "OpenSCADRunner", "QUALITY_PROFILES",
     "RenderResult", "SOURCE_REVISION", "ValidationError",
     "artifact_for", "backend_args", "build_argv", "cache_root", "child_env", "clean_log", "defaults", "discover_openscad",

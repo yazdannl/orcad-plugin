@@ -1,6 +1,6 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.24)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.25)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -215,7 +215,10 @@ instead of a tab.
   `<Orca data dir>/orca_plugins/orcad/orcad.py`.
 - **Folder:** `orcad.py` plus `frontend/dist/index.html`,
   `frontend/dist/viewport.js`, `openscad/`, and `ai/` in the same folder. Files
-  beside `orcad.py` take precedence over embedded copies.
+  beside `orcad.py` take precedence over embedded copies, unless they come from
+  another release: `openscad/__init__.py` records its `BACKEND_VERSION`, and a
+  folder that disagrees with the plugin file is ignored in favour of the
+  embedded copy, so replacing `orcad.py` alone always works.
 
 ### Permissions
 

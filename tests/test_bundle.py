@@ -78,5 +78,9 @@ def test_versions_agree():
     header = re.search(r'^# version = "([^"]+)"', plugin, re.M).group(1)
     constant = re.search(r'^PLUGIN_VERSION = "([^"]+)"', plugin, re.M).group(1)
     package = json.loads((ROOT / "frontend" / "package.json").read_text(encoding="utf-8"))["version"]
-    assert header == constant == package
+    backend = re.search(r'^BACKEND_VERSION = "([^"]+)"',
+                        (ROOT / "openscad" / "__init__.py").read_text(encoding="utf-8"), re.M).group(1)
+    # A folder install compares the backend's release with the plugin's, so a
+    # mixed install falls back to the embedded copy instead of hanging.
+    assert header == constant == package == backend
     assert '# dependencies = []' in plugin  # the plugin must install without pulling wheels
