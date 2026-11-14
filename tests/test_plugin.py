@@ -483,7 +483,12 @@ def test_cache_root_comes_from_home_not_the_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "env-cache"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "env-cache"))
-    base = home / "Library" / "Caches" if sys.platform == "darwin" else home / ".cache"
+    if sys.platform == "win32":
+        base = home / "AppData" / "Local"
+    elif sys.platform == "darwin":
+        base = home / "Library" / "Caches"
+    else:
+        base = home / ".cache"
     assert orcad._cache_root() == base / "orcad"
 
 
