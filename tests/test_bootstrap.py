@@ -93,11 +93,30 @@ def test_zip_install_is_verified_and_reused_without_network(tmp_path, monkeypatc
     payload = zip_with({"OpenSCAD/openscad.exe": version_script()})
     artifact = use_artifact(monkeypatch, ("win32", "x86_64"), sha256=hashlib.sha256(payload).hexdigest())
     server = Server({artifact.url: payload})
-    path = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=server)
+    path, version = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=server)
     assert path.name == "openscad.exe" and path.is_relative_to(tmp_path / "win32-x86_64")
+    assert version == artifact.version, "the pinned version is recorded without starting the download"
     assert not (tmp_path / artifact.filename).exists()  # the archive is removed after install
     again = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=server)
-    assert again == path and len(server.requests) == 1
+    assert again == (path, version) and len(server.requests) == 1
+
+
+@posix_exec_only
+def test_install_never_starts_the_downloaded_binary(tmp_path, monkeypatch, no_system_openscad):
+    """One audited command line: installing must not run a `--version` probe.
+
+    OrcaSlicer asks the user about each distinct command a plugin starts, so a
+    probe during setup would be a second prompt before the first render.
+    """
+    marker = tmp_path / "ran"
+    script = (f"#!{sys.executable}\nimport pathlib\npathlib.Path({str(marker)!r}).write_text('x')\n"
+              "print('OpenSCAD version 2026.09.27')\n").encode()
+    payload = zip_with({"OpenSCAD/openscad.exe": script})
+    artifact = use_artifact(monkeypatch, ("win32", "x86_64"), sha256=hashlib.sha256(payload).hexdigest())
+    path, version = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64",
+                                              opener=Server({artifact.url: payload}))
+    assert path.is_file() and version == artifact.version
+    assert not marker.exists(), "the downloaded OpenSCAD was executed during setup"
 
 
 def test_checksum_mismatch_installs_nothing(tmp_path, monkeypatch, no_system_openscad):
@@ -120,8 +139,8 @@ def test_missing_pinned_snapshot_falls_back_to_the_newest_published_one(tmp_path
     server = Server({artifact.url: 404, bootstrap.SNAPSHOT_INDEX: index,
                      bootstrap.SNAPSHOT_INDEX + newest: payload,
                      bootstrap.SNAPSHOT_INDEX + newest + ".sha256": f"{hashlib.sha256(payload).hexdigest()}  {newest}\n".encode()})
-    path = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=server)
-    assert path.is_file()
+    path, version = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=server)
+    assert path.is_file() and version == "2026.10.02"
     assert server.requests[-1] == bootstrap.SNAPSHOT_INDEX + newest
 
 
@@ -134,8 +153,8 @@ def test_appimage_is_extracted_so_fuse_is_not_needed(tmp_path, monkeypatch, no_s
                 f"    (target / 'openscad').write_text({inner!r}); raise SystemExit(0)\n"
                 "raise SystemExit('FUSE is not available')\n").encode()
     artifact = use_artifact(monkeypatch, ("linux", "x86_64"), sha256=hashlib.sha256(appimage).hexdigest())
-    path = bootstrap.ensure_openscad(root=tmp_path, system="linux", machine="x86_64",
-                                     opener=Server({artifact.url: appimage}))
+    path, _version = bootstrap.ensure_openscad(root=tmp_path, system="linux", machine="x86_64",
+                                               opener=Server({artifact.url: appimage}))
     assert path.parts[-4:] == ("squashfs-root", "usr", "bin", "openscad")
     assert path.stat().st_mode & stat.S_IXUSR
     assert not (path.parents[3] / artifact.filename).exists()
@@ -155,12 +174,14 @@ def test_background_state_reports_failures_and_retries(tmp_path, monkeypatch):
         attempts.append(root)
         if len(attempts) == 1:
             raise BackendError(ErrorCode.INSTALL_FAILED, "offline")
-        return Path("/opt/openscad")
+        return Path("/opt/openscad"), "2026.09.22"
 
     monkeypatch.setattr(bootstrap, "ensure_openscad", fake_ensure)
-    monkeypatch.setattr(bootstrap, "_STATE", {"state": "idle", "path": None, "error": None, "progress": None})
+    monkeypatch.setattr(bootstrap, "_STATE", {"state": "idle", "path": None, "version": None, "error": None,
+                                              "progress": None})
     with pytest.raises(BackendError, match="offline"):
         bootstrap.wait_for_openscad(timeout=5)
     assert bootstrap.openscad_bootstrap_status()["state"] == "failed"
     assert bootstrap.wait_for_openscad(timeout=5) == Path("/opt/openscad")
-    assert bootstrap.openscad_bootstrap_status()["state"] == "ready" and len(attempts) == 2
+    status = bootstrap.openscad_bootstrap_status()
+    assert status["state"] == "ready" and status["version"] == "2026.09.22" and len(attempts) == 2

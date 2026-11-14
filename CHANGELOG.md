@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.24 — one permission prompt, no environment reads (2026-11-14)
+
+- **A whole session now costs OrcaSlicer at most one permission dialog.** The
+  plugin used to spawn two different OpenSCAD command lines (a `--version`
+  probe, then the render), and the AI panel changed its command line with the
+  chosen provider, model and thinking level. OrcaSlicer remembers a grant per
+  exact command, so every variation asked again. The verified install now
+  records the version it downloaded (the archive is checked against a pinned
+  SHA-256, so running it to ask its version only produced a second prompt), and
+  the AI process is started with one fixed command line: the system prompt
+  lives in `<ai data>/system-prompt.md`, the model and thinking level are set
+  over Pi's RPC, the sign-in helper reads its action from
+  `auth-request.json`, the npm install always uses the same paths, and the
+  installed Pi CLI is no longer started for a `--version` check.
+- **Nothing is downloaded while OrcaSlicer starts.** Registering the tab used to
+  begin the OpenSCAD download in the background; the setup now starts when the
+  user asks for the first render, which is also when its progress is shown. The
+  engine pill explains the one-time prompt instead of claiming a setup nobody
+  started.
+- **The plugin reads no environment variables.** Every child process gets an
+  environment built from scratch - `HOME`, `TEMP`, `PATH` and `OPENSCADPATH`
+  from constants and the home directory - so an API key, token or an AppImage's
+  `LD_LIBRARY_PATH` in OrcaSlicer's process can never reach OpenSCAD, npm or
+  the AI runtime. The per-user cache paths are derived from the home directory
+  instead of `LOCALAPPDATA`/`XDG_CACHE_HOME`.
+- **The embedded payload is documented.** The compressed backend that a
+  single-file install unpacks is unavoidable (the installer accepts one `.py`),
+  so it now carries `PAYLOAD.md`, a sorted list of every member with its size
+  and SHA-256, and `native/mesh.c` ships beside the compiled mesh libraries it
+  was built from. Reading the payload no longer requires decoding it.
+
 ## 0.9.22 — one permission prompt instead of one per change (2026-11-09)
 
 - **Rendering no longer asks OrcaSlicer for permission on every change.**

@@ -1,6 +1,6 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.22)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.24)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -217,6 +217,16 @@ instead of a tab.
   `frontend/dist/viewport.js`, `openscad/`, and `ai/` in the same folder. Files
   beside `orcad.py` take precedence over embedded copies.
 
+### Permissions
+
+OrcaSlicer asks before a plugin starts a program, and remembers the answer per
+exact command line. OrcaCAD starts one fixed OpenSCAD command for every render
+and one fixed command for its optional AI runtime (the model is chosen over
+RPC, not on the command line), so a session asks once - on the first render,
+while OpenSCAD is set up - and not again after that. The plugin reads none of
+OrcaSlicer's environment variables: each program it starts gets a freshly built
+environment holding only the paths and `OPENSCADPATH` it needs.
+
 Restart OrcaSlicer and enable **OrcaCAD** in the Plugins dialog. Runtime data
 lives next to the plugin: `exports/` (your files) and `.cache/` (rendered STL
 cache, capped at 512 MB). For a single-file install the OpenSCAD backend is
@@ -235,6 +245,8 @@ Orca Cloud is already a long path. The AI cache location is listed above.
   which answer you picked. 0.9.12 moves the cache to `<Orca data dir>/orcad` and
   the question is gone. Update the plugin (or install the current `orcad.py` from
   the release page); no cleanup of the old folder is needed.
+- **OrcaSlicer asks once whether OrcaCAD may run OpenSCAD:** answer **Yes**.
+  Every render then uses that same command line, so the dialog does not return.
 - **"Setting up OpenSCAD" never finishes or fails:** the first run needs
   network access to `files.openscad.org`. Hover or click the red pill for the
   reason. As an alternative, install an OpenSCAD 2023+ development snapshot

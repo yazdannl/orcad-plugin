@@ -53,9 +53,14 @@ function EnginePill({ engine, onDetails }) {
   const [tone, text] = state === 'ready' ? ['ok', engine.version ? `OpenSCAD ${engine.version}` : 'OpenSCAD ready']
     : state === 'failed' ? ['bad', 'OpenSCAD unavailable']
       : state === 'offline' ? ['idle', 'Not connected']
-        : state === 'connecting' ? ['busy', 'Connecting…'] : ['busy', `Setting up OpenSCAD${pct}`]
+        : state === 'connecting' ? ['busy', 'Connecting…']
+          : state === 'idle' ? ['idle', 'OpenSCAD on first render']
+            : ['busy', `Setting up OpenSCAD${pct}`]
   const title = state === 'failed' ? engine.error : state === 'offline'
-    ? 'Open this page from the OrcaCAD tab in OrcaSlicer to render models.' : text
+    ? 'Open this page from the OrcaCAD tab in OrcaSlicer to render models.'
+    : state === 'idle'
+      ? 'OpenSCAD is set up once, when you render your first model. OrcaSlicer then asks whether OrcaCAD may start it: choose Yes once and it will not ask again.'
+      : text
   return (
     <button type="button" className={`pill pill-${tone}`} title={title} onClick={onDetails}>
       <span className="pill-dot" />

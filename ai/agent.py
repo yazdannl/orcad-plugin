@@ -107,6 +107,7 @@ class PiAgent:
 
     def __init__(self, post: Callable[[dict[str, Any]], None], *, root: str | os.PathLike[str] | None = None,
                  library: str | os.PathLike[str], openscad: Callable[[], str | os.PathLike[str] | None],
+                 openscad_version: Callable[[], str | None] | None = None,
                  child_env: Callable[[], dict[str, str]] | None = None,
                  command_factory: Callable[[dict[str, Any]], list[str]] | None = None,
                  auth_helper_factory: Callable[[str, str, str, str, str, str], list[str]] | None = None):
@@ -115,6 +116,7 @@ class PiAgent:
         self.workspace = self.root / "workspace"
         self.library = Path(library)
         self.openscad = openscad
+        self.openscad_version = openscad_version
         self.base_env = child_env or _default_child_env
         self.command_factory = command_factory
         self.auth_helper_factory = auth_helper_factory
@@ -408,24 +410,17 @@ class PiAgent:
             from orcad_openscad import backend_args, probe_openscad
         except ImportError:
             from openscad import backend_args, probe_openscad
-        version = probe_openscad(openscad).version
+        # Prefer the version the session already knows: running `openscad
+        # --version` here would be another command line for OrcaSlicer to ask
+        # about, right after the render one.
+        version = self.openscad_version() if self.openscad_version is not None else None
+        if not version:
+            version = probe_openscad(openscad).version
         flags = backend_args(version)
         env = _clean_pi_environment({**self.base_env(), "OPENSCADPATH": str(self.library)},
                                     {**self._config, "openscad": str(openscad), "library": str(self.library),
                                      "backend_flag": flags[0] if flags else ""}, self.root)
-        if self.command_factory:
-            command = self.command_factory(self._config)
-        else:
-            command = [paths["node"], paths["pi"], "--mode", "rpc", "--no-session", "--tools",
-                       "read,edit,write,render_openscad", "--extension", str(extension), "--no-extensions",
-                       "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-approve",
-                       "--system-prompt", SYSTEM_PROMPT]
-            if self._config.get("provider"):
-                command += ["--provider", self._config["provider"]]
-            if self._config.get("model"):
-                command += ["--model", self._config["model"]]
-            if self._config.get("thinking"):
-                command += ["--thinking", self._config["thinking"]]
+        command = self._command(paths, extension)
         self.workspace.mkdir(parents=True, exist_ok=True)
         process = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.DEVNULL, env=env, **bootstrap.popen_flags())
@@ -437,6 +432,29 @@ class PiAgent:
             self._reader = threading.Thread(target=self._read_loop, args=(process,), name="orcad-pi-rpc", daemon=True)
             self._reader.start()
 
+    def _command(self, paths: dict[str, str], extension: Path) -> list[str]:
+        """The process command line, which must be the same for every session.
+
+        OrcaSlicer's plugin audit asks the user before a plugin starts a program
+        and remembers the answer per exact command line. A provider, model or
+        thinking level in argv would therefore ask again on every settings
+        change, so those travel over RPC (`_apply_selection`) and the system
+        prompt lives in a fixed file.
+        """
+        if self.command_factory:
+            return self.command_factory(self._config)
+        prompt_path = self.root / "system-prompt.md"
+        try:
+            current = prompt_path.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            current = ""
+        if current != SYSTEM_PROMPT:
+            _atomic_write(prompt_path, SYSTEM_PROMPT.encode("utf-8"), 0o600)
+        return [paths["node"], paths["pi"], "--mode", "rpc", "--no-session", "--tools",
+                "read,edit,write,render_openscad", "--extension", str(extension), "--no-extensions",
+                "--no-context-files", "--no-skills", "--no-prompt-templates", "--no-themes", "--no-approve",
+                "--system-prompt", str(prompt_path)]
+
     def _refresh_models(self) -> None:
         response = self._rpc("get_available_models", timeout=30)
         models = response.get("data", {}).get("models", []) if response.get("success") else []
@@ -444,6 +462,25 @@ class PiAgent:
             self._models = [{"provider": str(item.get("provider", "")), "id": str(item.get("id", "")),
                              "name": str(item.get("name", item.get("id", "")))}
                             for item in models if item.get("provider") and item.get("id")]
+        self._apply_selection()
+
+    def _apply_selection(self) -> None:
+        """Put the configured model on the running agent over RPC.
+
+        This is what lets the process command line stay fixed: a model switch is
+        an RPC message instead of a new `node ... --model x` command line, so it
+        never asks for permission a second time.
+        """
+        with self._lock:
+            provider, model = self._config.get("provider"), self._config.get("model")
+            thinking = self._config.get("thinking")
+        if provider and model:
+            self._rpc("set_model", provider=provider, modelId=model, timeout=30)
+        if thinking:
+            try:
+                self._rpc("set_thinking_level", level=thinking, timeout=30)
+            except (RuntimeError, TimeoutError, OSError):
+                pass  # a model without reasoning levels is not an error
 
     def _custom_records(self) -> list[dict[str, Any]]:
         path = self.root / "private-agent" / "custom-providers.json"
@@ -597,8 +634,23 @@ class PiAgent:
         if self.auth_helper_factory:
             return self.auth_helper_factory(paths["node"], paths["pi"], str(agent_dir), action, provider_id, auth_type)
         package_root = str(Path(paths["pi"]).parents[2])
-        helper = Path(__file__).with_name("pi_auth_helper.mjs")
-        return [paths["node"], str(helper), package_root, str(agent_dir), action, provider_id, auth_type]
+        # A copy under the AI data root, not the unpacked backend: that path
+        # carries a per-release digest, and a new digest would be a new command
+        # line - and so a new permission prompt after every update.
+        helper = self.root / "pi_auth_helper.mjs"
+        bundled = Path(__file__).with_name("pi_auth_helper.mjs").read_bytes()
+        try:
+            current = helper.read_bytes()
+        except OSError:
+            current = None
+        if current != bundled:
+            _atomic_write(helper, bundled, 0o600)
+        # The action travels in a fixed request file so the helper's command
+        # line is identical for sign-in, sign-out and the provider list.
+        _atomic_write(Path(agent_dir) / "auth-request.json",
+                      json.dumps({"action": action, "provider": provider_id, "auth_type": auth_type}).encode("utf-8"),
+                      0o600)
+        return [paths["node"], str(helper), package_root, str(agent_dir)]
 
     @staticmethod
     def _safe_auth_url(value: Any) -> str:

@@ -28,16 +28,47 @@ _NOISE = ("Geometries in cache", "Geometry cache size", "CGAL Polyhedrons", "CGA
           "Total rendering time", "Top level object is", "   ", "Rendering Polygon Mesh",
           "Parsing design", "Compiling design", "Rendering finished", "Normalized tree",
           "Simple:", "Convex:", "Vertices:", "Facets:", "Triangles:", "Volumes:")
-# Host variables (e.g. from an OrcaSlicer AppImage) that break other executables.
-_HOST_ENV = ("LD_LIBRARY_PATH", "LD_PRELOAD", "PYTHONHOME", "PYTHONPATH", "QT_PLUGIN_PATH",
-             "QT_QPA_PLATFORM_PLUGIN_PATH", "GDK_PIXBUF_MODULE_FILE", "GIO_MODULE_DIR",
-             "GSETTINGS_SCHEMA_DIR", "APPDIR", "APPIMAGE", "ARGV0", "OWD", "DYLD_LIBRARY_PATH",
-             "DYLD_FRAMEWORK_PATH")
 Cancel = Callable[[], bool] | None
+_UNIX_PATH = ":".join(("/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"))
+
+
+def _windows_directory() -> str:
+    """The Windows directory without reading the environment; programs need it."""
+    try:
+        import ctypes
+
+        buffer = ctypes.create_unicode_buffer(260)
+        if ctypes.windll.kernel32.GetWindowsDirectoryW(buffer, len(buffer)):
+            return buffer.value
+    except Exception:
+        pass
+    return "C:\\Windows"
 
 
 def child_env() -> dict[str, str]:
-    env = {key: value for key, value in os.environ.items() if key not in _HOST_ENV}
+    """The environment for every program the plugin starts.
+
+    Built from scratch instead of filtered from `os.environ`: a credential, a
+    token or a shell setting exported in OrcaSlicer's process has no business
+    in a renderer, and the host also carries an AppImage's LD_LIBRARY_PATH and
+    LD_PRELOAD, which break an unrelated OpenSCAD. OPENSCADPATH is the one
+    variable the vendored OpenSCAD libraries need.
+    """
+    home = Path.home()
+    if os.name == "nt":
+        root = Path(_windows_directory())
+        temp = tempfile.gettempdir()
+        env = {
+            "SystemRoot": str(root), "WINDIR": str(root), "SYSTEMDRIVE": root.drive or "C:",
+            "COMSPEC": str(root / "System32" / "cmd.exe"), "PATHEXT": ".COM;.EXE;.BAT;.CMD",
+            "PATH": os.pathsep.join((str(root / "System32"), str(root), str(root / "System32" / "Wbem"))),
+            "USERPROFILE": str(home), "HOMEDRIVE": home.drive or "C:",
+            "HOMEPATH": str(home)[len(home.drive):] or "\\",
+            "APPDATA": str(home / "AppData" / "Roaming"), "LOCALAPPDATA": str(home / "AppData" / "Local"),
+            "TEMP": temp, "TMP": temp,
+        }
+    else:
+        env = {"HOME": str(home), "TMPDIR": tempfile.gettempdir(), "PATH": _UNIX_PATH}
     # OpenSCAD separates library roots with os.pathsep (';' on Windows).
     env["OPENSCADPATH"] = os.pathsep.join(str(path) for path in LIBRARY_SEARCH_PATH)
     return env
@@ -110,6 +141,17 @@ def version_tuple(version: str) -> tuple[int, int]:
     return (int(match.group(1)), int(match.group(2))) if match else (0, 0)
 
 
+def _run_probe(argv: list[str], timeout: float):
+    try:
+        return subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout,
+                              env=child_env(), **popen_flags())
+    except OSError:
+        if os.name != "nt":  # a missing piece of the built environment is Windows-only;
+            raise            # inheriting everything is still better than a dead plugin there
+        return subprocess.run(argv, capture_output=True, text=True, check=False, timeout=timeout,
+                              env=None, **popen_flags())
+
+
 def probe_openscad(executable: str | os.PathLike[str] | None = None, *, timeout: float = 15.0) -> EngineInfo:
     """Run `--version` once, surviving the plugin audit hook's first crack at it.
 
@@ -122,8 +164,7 @@ def probe_openscad(executable: str | os.PathLike[str] | None = None, *, timeout:
     path = discover_openscad(executable)
     for attempt in (0, 1):
         try:
-            result = subprocess.run([str(path), "--version"], capture_output=True, text=True, check=False,
-                                    timeout=timeout, env=child_env(), **popen_flags())
+            result = _run_probe([str(path), "--version"], timeout)
             break
         except PermissionError as exc:
             if attempt:
@@ -261,8 +302,23 @@ class OpenSCADRunner:
     OUTPUT = "out.stl"
 
     def __init__(self, executable: str | os.PathLike[str] | None = None, *,
-                 cache_dir: str | os.PathLike[str], cache_limit: int = 512 * 1024 * 1024):
-        self.engine = probe_openscad(executable)
+                 cache_dir: str | os.PathLike[str], cache_limit: int = 512 * 1024 * 1024,
+                 version: str | None = None):
+        """Open a renderer.
+
+        `version` is the version a verified install recorded when it unpacked,
+        and passing it is what keeps a session to one audited command line: the
+        `--version` probe is a second, different command, and OrcaSlicer asks the
+        user about each distinct command once. Without it (an OpenSCAD the user
+        installed) the probe runs, which is then the only extra prompt.
+        """
+        if version is None:
+            self.engine = probe_openscad(executable)
+        else:
+            path = discover_openscad(executable)
+            supported = version_tuple(version) >= MIN_VERSION
+            self.engine = EngineInfo(str(path), version, supported, None if supported else
+                                     f"OpenSCAD {version} is too old; version 2023 or newer is required.")
         if not self.engine.supported:
             raise BackendError(ErrorCode.UNSUPPORTED_VERSION, self.engine.warning or "unsupported OpenSCAD",
                                self.engine.to_dict())
@@ -344,8 +400,14 @@ class OpenSCADRunner:
 
 def _run(argv: list[str], cwd: Path, stderr, timeout: float, cancel: Cancel) -> int:
     started = time.monotonic()
-    process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=stderr, stderr=stderr,
-                               env=child_env(), **popen_flags())
+    try:
+        process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=stderr, stderr=stderr,
+                                   env=child_env(), **popen_flags())
+    except OSError:
+        if os.name != "nt":
+            raise
+        process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=stderr, stderr=stderr,
+                                   env=None, **popen_flags())
     try:
         while True:
             try:

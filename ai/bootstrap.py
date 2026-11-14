@@ -79,10 +79,9 @@ def artifact_for(system: str | None = None, machine: str | None = None) -> NodeA
 
 
 def data_root(root: str | os.PathLike[str] | None = None) -> Path:
-    """Match OpenSCAD's cache base: <cache>/orcad/ai; allow isolated test roots."""
-    override = root or os.environ.get("ORCAD_AI_DATA_DIR")
-    if override is not None:
-        return Path(override).expanduser()
+    """Match OpenSCAD's cache base: <cache>/orcad/ai."""
+    if root is not None:
+        return Path(root).expanduser()
     return openscad_cache_root().parent / "ai"
 
 
@@ -228,16 +227,17 @@ def _pi_cli(root: Path) -> Path:
     raise FileNotFoundError("the pinned Pi CLI was not installed")
 
 
-def _verify_pi(root: Path, node: Path, env: dict[str, str]) -> Path:
+def _verify_pi(root: Path) -> Path:
+    """Check the installed Pi without starting it.
+
+    Running `node cli.js --version` would be a second command line for
+    OrcaSlicer to ask about; the package metadata and the pinned marker already
+    prove the install is the one this plugin ships.
+    """
     cli = _pi_cli(root)
     package = json.loads((cli.parents[2] / "package.json").read_text(encoding="utf-8"))
     if package.get("version") != PI_VERSION:
         raise RuntimeError("the installed Pi version does not match the pinned release")
-    result = subprocess.run([str(node), str(cli), "--version"], stdin=subprocess.DEVNULL,
-                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-                            timeout=30, env=env, **popen_flags())
-    if result.returncode:
-        raise RuntimeError("the installed Pi CLI could not start")
     return cli
 
 
@@ -274,7 +274,9 @@ def ensure_ai(*, root: str | os.PathLike[str] | None = None, system: str | None 
         if installed := _installed(destination, artifact):
             return installed
         destination.mkdir(parents=True, exist_ok=True)
-        staging = destination / f".install-{os.getpid()}-{threading.get_ident()}"
+        # A fixed staging path, so the npm command line is byte-identical on
+        # every attempt and OrcaSlicer's per-command grant covers all of them.
+        staging = destination / ".install"
         shutil.rmtree(staging, ignore_errors=True)
         staging.mkdir()
         archive = staging / artifact.filename
@@ -318,7 +320,7 @@ def ensure_ai(*, root: str | os.PathLike[str] | None = None, system: str | None 
             except RuntimeError:
                 # npm may fail after writing an optional dependency; trust only an exact, runnable Pi install.
                 pass
-            cli = _verify_pi(staging, node, env)
+            cli = _verify_pi(staging)
             shutil.rmtree(staging / "npm-cache", ignore_errors=True)
             marker = {"node": NODE_VERSION, "pi": PI_VERSION, "artifact": artifact.filename,
                       "sha256": artifact.sha256}

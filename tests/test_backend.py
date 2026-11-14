@@ -298,16 +298,32 @@ def test_the_program_carries_the_parameters_the_command_line_used_to():
         program(Path("a>\ncube(1);"), {}, "draft")
 
 
-def test_child_env_drops_host_library_paths_and_exposes_the_library(monkeypatch):
+def test_child_env_is_built_from_scratch_and_exposes_the_library(monkeypatch):
+    """Nothing the host exported - a loader path or an API key - reaches a child."""
     monkeypatch.setenv("LD_LIBRARY_PATH", "/tmp/.mount_orca/usr/lib")
     monkeypatch.setenv("PYTHONHOME", "/orca/python")
+    monkeypatch.setenv("OPENAI_API_KEY", "not-a-real-key")
     env = child_env()
-    assert "LD_LIBRARY_PATH" not in env and "PYTHONHOME" not in env
+    assert not {"LD_LIBRARY_PATH", "PYTHONHOME", "OPENAI_API_KEY"} & set(env)
     roots = env["OPENSCADPATH"].split(os.pathsep)
     assert roots == [str(path) for path in LIBRARY_SEARCH_PATH]
     assert roots[0] == str(LIBRARY_DIRS["gridfinity-rebuilt-openscad"]), "gridfinity-rebuilt resolves src/... includes"
     assert all(Path(root).is_dir() for root in roots), roots
     assert Path(roots[0]).joinpath("src", "core", "standard.scad").is_file()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="fake executables are shebang scripts")
+def test_a_recorded_version_needs_no_version_probe(tmp_path):
+    """A verified install supplies the version; the probe is a second prompt."""
+    marker = tmp_path / "ran"
+    exe = fake_command(tmp_path / "bin", "openscad",
+                       f"import pathlib\npathlib.Path({str(marker)!r}).write_text('x')\n"
+                       "print('OpenSCAD version 2026.09.22')\n")
+    runner = OpenSCADRunner(exe, cache_dir=tmp_path / "cache", version="2026.09.22")
+    assert runner.engine.version == "2026.09.22"
+    assert not marker.exists(), "the runner must not run OpenSCAD before the first render"
+    with pytest.raises(BackendError):
+        OpenSCADRunner(exe, cache_dir=tmp_path / "old", version="2021.01")
 
 
 def test_logs_are_cleaned_and_failures_are_readable(tmp_path):
@@ -536,7 +552,9 @@ def _real_openscad():
 def test_real_openscad_renders_every_catalog_object(tmp_path):
     runner = OpenSCADRunner(cache_dir=tmp_path)
     for name in CATALOG["objects"]:
-        assert runner.render_object(name, {}, "draft").triangles > 0, name
+        # A generous timeout: this is a correctness sweep over the whole catalog,
+        # and a few vendor models take minutes on a slow machine in draft mode.
+        assert runner.render_object(name, {}, "draft", timeout=900).triangles > 0, name
     assert runner.render_code("include <src/core/standard.scad>\ncube(GRID_DIMENSIONS_MM.x);").triangles == 12
 
 

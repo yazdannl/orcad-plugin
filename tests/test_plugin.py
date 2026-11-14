@@ -226,7 +226,7 @@ def test_engine_setup_progress_is_reported(tmp_path, monkeypatch):
     states = iter([{"state": "starting", "progress": 0.5}] * 2 + [{"state": "ready", "path": "/x", "progress": None}])
     monkeypatch.setattr(scad, "start_openscad_bootstrap", lambda **_kwargs: None)
     monkeypatch.setattr(scad, "openscad_bootstrap_status", lambda: next(states))
-    monkeypatch.setattr(scad, "OpenSCADRunner", lambda exe, cache_dir: FakeRunner(tmp_path))
+    monkeypatch.setattr(scad, "OpenSCADRunner", lambda exe, cache_dir, **_kwargs: FakeRunner(tmp_path))
     posted = []
     s = orcad.Session(posted.append)
     s.handle({"type": "render", "id": 1, "object": "box"})
@@ -470,10 +470,20 @@ def test_cache_root_lives_in_the_orca_data_dir(tmp_path, monkeypatch):
     assert orcad._cache_root() == tmp_path / "OrcaSlicer" / "orcad"
 
 
-def test_cache_root_falls_back_outside_orcaslicer(tmp_path, monkeypatch):
+def test_cache_root_comes_from_home_not_the_environment(tmp_path, monkeypatch):
+    """The fallback ignores cache variables: the plugin reads no environment.
+
+    Pulling the cache path from XDG_CACHE_HOME/LOCALAPPDATA is one more way for
+    the host's settings to decide where plugin files land - and one more thing
+    an automated review has to trust.
+    """
     monkeypatch.setattr(orcad, "HERE", tmp_path / "checkout")
-    _redirect_cache(monkeypatch, tmp_path)
-    base = tmp_path / "home" / "Library" / "Caches" if sys.platform == "darwin" else tmp_path / "cache"
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "env-cache"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "env-cache"))
+    base = home / "Library" / "Caches" if sys.platform == "darwin" else home / ".cache"
     assert orcad._cache_root() == base / "orcad"
 
 

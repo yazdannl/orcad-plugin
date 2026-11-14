@@ -1,7 +1,7 @@
 {
   "name": "orcad-ui",
   "private": true,
-  "version": "0.9.22",
+  "version": "0.9.24",
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {

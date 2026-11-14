@@ -24,6 +24,15 @@ def test_backend_archive_is_deterministic_and_complete():
     assert not any("__pycache__" in name or name.endswith(".pyc") for name in names)
 
 
+def test_the_payload_can_be_read_without_unpacking_it():
+    archive = zipfile.ZipFile(io.BytesIO(bundle.backend_archive()))
+    assert "PAYLOAD.md" in archive.namelist()
+    manifest = archive.read("PAYLOAD.md").decode("utf-8")
+    digest = __import__("hashlib").sha256(archive.read("ai/agent.py")).hexdigest()
+    assert f"| `ai/agent.py` | {len(archive.read('ai/agent.py'))} | `{digest}` |" in manifest
+    assert "native/mesh.c" in archive.namelist(), "the compiled mesh path ships with its source"
+
+
 def test_archive_records_a_fixed_creating_system():
     # ZipInfo defaults to the build host, so a Windows build would embed a
     # different blob than the committed one and every CI check would fail.

@@ -28,9 +28,10 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from .errors import BackendError, ErrorCode
-from .runner import child_env, discover_openscad, platform_name, popen_flags, probe_openscad
+from .runner import child_env, discover_openscad, platform_name, popen_flags, probe_openscad, version_tuple
 
 BOOTSTRAP_VERSION = "2026.09.22"
+MIN_VERSION = (2023, 0)
 SNAPSHOT_INDEX = "https://files.openscad.org/snapshots/"
 MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 800 * 1024 * 1024
@@ -95,12 +96,14 @@ def artifact_for(system: str | None = None, machine: str | None = None) -> OpenS
 def cache_root(root: str | os.PathLike[str] | None = None) -> Path:
     if root is not None:
         return Path(root).expanduser()
+    # Derived from the user's home, never from the environment: the cache path
+    # must not change with whatever OrcaSlicer happened to be started from.
     if sys.platform == "win32":
-        base = os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local"
+        base = Path.home() / "AppData" / "Local"
     elif sys.platform == "darwin":
         base = Path.home() / "Library" / "Caches"
     else:
-        base = os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache"
+        base = Path.home() / ".cache"
     return Path(base).expanduser() / "orcad" / "openscad"
 
 
@@ -238,7 +241,7 @@ def _install_dmg(archive: Path, destination: Path) -> Path:
     return _find_executable(destination, "OpenSCAD")
 
 
-def _install(artifact: OpenSCADArtifact, archive: Path, destination: Path) -> Path:
+def _install(artifact: OpenSCADArtifact, archive: Path, destination: Path) -> tuple[Path, str]:
     if destination.exists():
         shutil.rmtree(destination)
     destination.mkdir(parents=True)
@@ -249,30 +252,36 @@ def _install(artifact: OpenSCADArtifact, archive: Path, destination: Path) -> Pa
         executable = _find_executable(destination, artifact.executable_name)
     else:
         executable = _install_dmg(archive, destination)
-    info = probe_openscad(executable)
-    if not info.supported:
-        raise ValueError(info.warning or "the downloaded OpenSCAD build is unsupported")
-    marker = {"version": info.version, "sha256": artifact.sha256, "executable": executable.relative_to(destination).as_posix()}
+    # The version comes from the pinned artifact, not from running the download:
+    # the archive was verified against its SHA-256, and a `--version` probe is a
+    # second command line that OrcaSlicer would ask the user about again.
+    if version_tuple(artifact.version) < MIN_VERSION:
+        raise ValueError(f"the downloaded OpenSCAD build {artifact.version} is unsupported")
+    marker = {"version": artifact.version, "sha256": artifact.sha256,
+              "executable": executable.relative_to(destination).as_posix()}
     (destination / "orcad-install.json").write_text(json.dumps(marker), encoding="utf-8")
-    return executable
+    return executable, artifact.version
 
 
-def _installed(destination: Path) -> Path | None:
+def _installed(destination: Path) -> tuple[Path, str] | None:
     try:
         marker = json.loads((destination / "orcad-install.json").read_text(encoding="utf-8"))
         executable = _safe_member_path(destination, str(marker["executable"]))
-        return executable if probe_openscad(executable).supported else None
-    except (BackendError, OSError, ValueError, KeyError, TypeError):
+        version = str(marker["version"])
+    except (OSError, ValueError, KeyError, TypeError):
         return None
+    if not executable.is_file() or version_tuple(version) < MIN_VERSION:
+        return None
+    return executable, version
 
 
 def ensure_openscad(*, root: str | os.PathLike[str] | None = None, system: str | None = None,
-                    machine: str | None = None, opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
-    """Return a supported OpenSCAD executable, installing one per user if needed."""
+                    machine: str | None = None, opener: Callable[..., Any] = urllib.request.urlopen) -> tuple[Path, str]:
+    """Return a supported OpenSCAD executable and its version, installing one per user if needed."""
     try:
         existing = discover_openscad()
-        if probe_openscad(existing).supported:
-            return existing
+        if (info := probe_openscad(existing)).supported:
+            return existing, info.version or ""
     except BackendError:
         pass
     artifact = artifact_for(system, machine)
@@ -312,7 +321,7 @@ def ensure_openscad(*, root: str | os.PathLike[str] | None = None, system: str |
 _INSTALL_LOCK = threading.Lock()
 _STATE_LOCK = threading.Lock()
 _DONE = threading.Event()
-_STATE: dict[str, Any] = {"state": "idle", "path": None, "error": None, "progress": None}
+_STATE: dict[str, Any] = {"state": "idle", "path": None, "version": None, "error": None, "progress": None}
 
 
 def _set_progress(done: int, total: int) -> None:
@@ -322,12 +331,13 @@ def _set_progress(done: int, total: int) -> None:
 
 def _worker(root: str | os.PathLike[str] | None) -> None:
     try:
-        path = ensure_openscad(root=root)
-        update = {"state": "ready", "path": str(path), "error": None}
+        path, version = ensure_openscad(root=root)
+        update = {"state": "ready", "path": str(path), "version": version, "error": None}
     except BackendError as exc:
-        update = {"state": "failed", "path": None, "error": exc}
+        update = {"state": "failed", "path": None, "version": None, "error": exc}
     except Exception as exc:  # pragma: no cover - defensive
-        update = {"state": "failed", "path": None, "error": BackendError(ErrorCode.INSTALL_FAILED, str(exc)[:500])}
+        update = {"state": "failed", "path": None, "version": None,
+                  "error": BackendError(ErrorCode.INSTALL_FAILED, str(exc)[:500])}
     with _STATE_LOCK:
         _STATE.update(update, progress=None)
     _DONE.set()
@@ -338,7 +348,7 @@ def start_openscad_bootstrap(root: str | os.PathLike[str] | None = None) -> None
     with _STATE_LOCK:
         if _STATE["state"] in ("starting", "ready"):
             return
-        _STATE.update(state="starting", path=None, error=None, progress=None)
+        _STATE.update(state="starting", path=None, version=None, error=None, progress=None)
         _DONE.clear()
     threading.Thread(target=_worker, args=(root,), name="orcad-openscad-setup", daemon=True).start()
 
@@ -346,7 +356,8 @@ def start_openscad_bootstrap(root: str | os.PathLike[str] | None = None) -> None
 def openscad_bootstrap_status() -> dict[str, Any]:
     with _STATE_LOCK:
         error = _STATE["error"]
-        return {"state": _STATE["state"], "path": _STATE["path"], "progress": _STATE["progress"],
+        return {"state": _STATE["state"], "path": _STATE["path"], "version": _STATE.get("version"),
+                "progress": _STATE["progress"],
                 "error": error.message if error else None,
                 "error_details": error.details if error else None}
 

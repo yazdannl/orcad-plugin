@@ -1,13 +1,23 @@
-import { mkdir, chmod } from "node:fs/promises";
+import { mkdir, chmod, readFile, rm } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { createInterface } from "node:readline";
 
 const packageRoot = resolve(process.argv[2]);
 const agentDir = resolve(process.argv[3]);
-const action = process.argv[4];
-const providerId = process.argv[5] || "";
-const authType = process.argv[6] || "";
+// The action travels in a fixed file so this command line never changes; see
+// PiAgent._auth_helper_command.
+const requestPath = join(agentDir, "auth-request.json");
+let request = {};
+try {
+  request = JSON.parse(await readFile(requestPath, "utf8"));
+  await rm(requestPath, { force: true });
+} catch {
+  request = {};
+}
+const action = typeof request.action === "string" ? request.action : "";
+const providerId = typeof request.provider === "string" ? request.provider : "";
+const authType = typeof request.auth_type === "string" ? request.auth_type : "";
 const authPath = join(agentDir, "auth.json");
 const modelsPath = join(agentDir, "models.json");
 

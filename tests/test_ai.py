@@ -90,7 +90,7 @@ def test_bootstrap_download_checksum_atomic_install_and_reuse(tmp_path, monkeypa
         (cli.parents[2] / "package.json").write_text('{"version":"0.87.1"}', encoding="utf-8")
 
     monkeypatch.setattr(bootstrap, "_run_install", install)
-    monkeypatch.setattr(bootstrap, "_verify_pi", lambda root, _node, _env: bootstrap._pi_cli(root))
+    monkeypatch.setattr(bootstrap, "_verify_pi", lambda root: bootstrap._pi_cli(root))
     monkeypatch.setattr(bootstrap, "child_env", lambda: {
         "ORCAD_CUSTOM_TEST_API_KEY": "dummy-custom-key", "OPENAI_API_KEY": "dummy-openai-key", "PATH": "/usr/bin"})
     progress = []
@@ -179,6 +179,49 @@ def _wait_for(messages, predicate, timeout=5):
             return found
         time.sleep(0.01)
     raise AssertionError(f"timed out waiting for RPC event; got {messages!r}")
+
+
+def _bare_agent(tmp_path):
+    return agent_module.PiAgent(lambda _message: None, root=tmp_path / "data", library=tmp_path,
+                                openscad=lambda: "/opt/openscad", child_env=lambda: {})
+
+
+def test_the_process_command_line_never_changes_with_the_model(tmp_path):
+    """One audited command line: the model is selected over RPC, not in argv."""
+    instance = _bare_agent(tmp_path)
+    paths = {"node": "/opt/node", "pi": "/opt/pi/cli.js"}
+    extension = tmp_path / "orcad-render.ts"
+    extension.write_text("", encoding="utf-8")
+    seen = []
+    for config in ({}, {"provider": "openai", "model": "a", "thinking": "low"},
+                   {"provider": "openai", "model": "b", "thinking": "high"}):
+        instance._config.update(config)
+        seen.append(instance._command(paths, extension))
+    assert seen[0] == seen[1] == seen[2]
+    assert not {"--provider", "--model", "--thinking"} & set(seen[0])
+    assert seen[0][-2] == "--system-prompt" and Path(seen[0][-1]).is_file()
+
+
+def test_the_model_is_selected_over_rpc(tmp_path):
+    instance = _bare_agent(tmp_path)
+    calls = []
+    instance._rpc = lambda command, timeout=20, **values: calls.append((command, values)) or {"success": True}
+    instance._config.update({"provider": "openai", "model": "gpt-x", "thinking": "low"})
+    instance._apply_selection()
+    assert calls == [("set_model", {"provider": "openai", "modelId": "gpt-x"}),
+                     ("set_thinking_level", {"level": "low"})]
+
+
+def test_the_auth_helper_command_line_never_changes(tmp_path):
+    instance = _bare_agent(tmp_path)
+    paths = {"node": "/opt/node",
+             "pi": "/opt/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"}
+    agent_dir = tmp_path / "private-agent"
+    first = instance._auth_helper_command(paths, agent_dir, "login", "openai", "oauth")
+    second = instance._auth_helper_command(paths, agent_dir, "logout", "", "")
+    assert first == second, "the action travels in a file, the command line stays fixed"
+    assert json.loads((agent_dir / "auth-request.json").read_text(encoding="utf-8")) == {
+        "action": "logout", "provider": "", "auth_type": ""}
 
 
 def test_rpc_events_map_text_thinking_tool_and_changed_code(tmp_path, monkeypatch):
