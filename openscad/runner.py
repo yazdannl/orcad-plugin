@@ -398,7 +398,10 @@ class OpenSCADRunner:
             log_path.write_text("\n".join(log), encoding="utf-8")
         finally:
             output.unlink(missing_ok=True)
-            error_log.unlink(missing_ok=True)
+            try:
+                error_log.unlink(missing_ok=True)
+            except OSError:  # Windows can still hold the handle of a process just killed
+                pass
         self._prune()
         return RenderResult(stl, False, _elapsed(started), log, triangles)
 
