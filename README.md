@@ -1,6 +1,6 @@
 <img src="assets/orcad-logo.png" width="96" align="right" alt="OrcaCAD logo">
 
-# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.25)
+# OrcaCAD: parametric CAD tab for OrcaSlicer (v0.9.26)
 
 OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer. It
 lets you pick a parametric model, tune it with live 3D preview, and put it on
@@ -222,13 +222,14 @@ instead of a tab.
 
 ### Permissions
 
-OrcaSlicer asks before a plugin starts a program, and remembers the answer per
-exact command line. OrcaCAD starts one fixed OpenSCAD command for every render
-and one fixed command for its optional AI runtime (the model is chosen over
-RPC, not on the command line), so a session asks once - on the first render,
-while OpenSCAD is set up - and not again after that. The plugin reads none of
-OrcaSlicer's environment variables: each program it starts gets a freshly built
-environment holding only the paths and `OPENSCADPATH` it needs.
+OrcaCAD declares what it needs from OrcaSlicer while it loads (creating a
+thread, and either the OpenSCAD download host or the exact render command), so
+OrcaSlicer shows one combined prompt and stores the answer. It starts one fixed
+OpenSCAD command for every render and one fixed command for its optional AI
+runtime (the model is chosen over RPC, not on the command line), so a session
+asks nothing after that. The plugin reads none of OrcaSlicer's environment
+variables: each program it starts gets a freshly built environment holding only
+the paths and `OPENSCADPATH` it needs.
 
 Restart OrcaSlicer and enable **OrcaCAD** in the Plugins dialog. Runtime data
 lives next to the plugin: `exports/` (your files) and `.cache/` (rendered STL

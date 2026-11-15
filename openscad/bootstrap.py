@@ -28,7 +28,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from .errors import BackendError, ErrorCode
-from .runner import child_env, discover_openscad, platform_name, popen_flags, probe_openscad, version_tuple
+from .runner import DEVNULL_OUT, child_env, discover_openscad, platform_name, popen_flags, probe_openscad, version_tuple
 
 BOOTSTRAP_VERSION = "2026.09.22"
 MIN_VERSION = (2023, 0)
@@ -196,7 +196,7 @@ def _find_executable(root: Path, name: str) -> Path:
 
 
 def _run_quiet(argv: list[str], cwd: Path | None = None, *, allow_failure: bool = False) -> None:
-    result = subprocess.run(argv, cwd=cwd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    result = subprocess.run(argv, cwd=cwd, stdout=DEVNULL_OUT, stderr=DEVNULL_OUT,
                             check=False, timeout=INSTALL_TIMEOUT, env=child_env(), **popen_flags())
     if result.returncode and not allow_failure:
         raise RuntimeError(f"{Path(argv[0]).name} failed with exit code {result.returncode}")
@@ -261,6 +261,21 @@ def _install(artifact: OpenSCADArtifact, archive: Path, destination: Path) -> tu
               "executable": executable.relative_to(destination).as_posix()}
     (destination / "orcad-install.json").write_text(json.dumps(marker), encoding="utf-8")
     return executable, artifact.version
+
+
+def installed_engine(root: str | os.PathLike[str] | None = None) -> tuple[Path, str] | None:
+    """The OpenSCAD this plugin installed, without running anything.
+
+    Reads the marker written at install time. It is what lets the plugin
+    declare its exact render command while OrcaSlicer loads it, instead of
+    meeting a permission prompt on the first render.
+    """
+    try:
+        artifact = artifact_for()
+    except BackendError:
+        return None
+    destination = cache_root(root) / f"{artifact.platform}-{artifact.architecture}"
+    return _installed(destination)
 
 
 def _installed(destination: Path) -> tuple[Path, str] | None:

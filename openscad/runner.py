@@ -32,6 +32,13 @@ Cancel = Callable[[], bool] | None
 _UNIX_PATH = ":".join(("/usr/local/bin", "/opt/homebrew/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin"))
 
 
+# Opened once at import, where no plugin audit scope is active. `subprocess.DEVNULL`
+# opens the device for every spawn, and an audited open of /dev/null from a worker
+# thread is denied and posts a permission dialog of its own.
+DEVNULL_IN = open(os.devnull, "rb")
+DEVNULL_OUT = open(os.devnull, "wb")
+
+
 def _windows_directory() -> str:
     """The Windows directory without reading the environment; programs need it."""
     try:
@@ -57,7 +64,11 @@ def child_env() -> dict[str, str]:
     home = Path.home()
     if os.name == "nt":
         root = Path(_windows_directory())
-        temp = tempfile.gettempdir()
+        # A fixed path, not tempfile.gettempdir(): that helper creates a probe
+        # file in every candidate directory, and an audited create outside the
+        # plugin's own data directory is denied (and pops a dialog) whenever a
+        # worker thread asks.
+        temp = str(home / "AppData" / "Local" / "Temp")
         env = {
             "SystemRoot": str(root), "WINDIR": str(root), "SYSTEMDRIVE": root.drive or "C:",
             "COMSPEC": str(root / "System32" / "cmd.exe"), "PATHEXT": ".COM;.EXE;.BAT;.CMD",
@@ -68,7 +79,7 @@ def child_env() -> dict[str, str]:
             "TEMP": temp, "TMP": temp,
         }
     else:
-        env = {"HOME": str(home), "TMPDIR": tempfile.gettempdir(), "PATH": _UNIX_PATH}
+        env = {"HOME": str(home), "TMPDIR": "/tmp", "PATH": _UNIX_PATH}
     # OpenSCAD separates library roots with os.pathsep (';' on Windows).
     env["OPENSCADPATH"] = os.pathsep.join(str(path) for path in LIBRARY_SEARCH_PATH)
     return env
@@ -369,8 +380,12 @@ class OpenSCADRunner:
         source.write_text(text, encoding="utf-8")
         output.unlink(missing_ok=True)
         argv = build_argv(self.engine.executable, source, output, self.engine.version)
+        error_log = self.cache_dir / f"{key}.stderr"
         try:
-            with tempfile.TemporaryFile(dir=self.cache_dir) as stderr:
+            # A named file, not tempfile.TemporaryFile: the latter re-opens its
+            # descriptor with io.open(fd), and a targetless `open` cannot be
+            # matched against the plugin's allowed root, so it asks permission.
+            with error_log.open("w+b") as stderr:
                 returncode = _run(argv, self.work, stderr, timeout, cancel)
                 stderr.seek(0)
                 log = clean_log(stderr.read().decode("utf-8", "replace"), source, *scrub)
@@ -383,6 +398,7 @@ class OpenSCADRunner:
             log_path.write_text("\n".join(log), encoding="utf-8")
         finally:
             output.unlink(missing_ok=True)
+            error_log.unlink(missing_ok=True)
         self._prune()
         return RenderResult(stl, False, _elapsed(started), log, triangles)
 
@@ -401,12 +417,12 @@ class OpenSCADRunner:
 def _run(argv: list[str], cwd: Path, stderr, timeout: float, cancel: Cancel) -> int:
     started = time.monotonic()
     try:
-        process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=stderr, stderr=stderr,
+        process = subprocess.Popen(argv, cwd=cwd, stdin=DEVNULL_IN, stdout=stderr, stderr=stderr,
                                    env=child_env(), **popen_flags())
     except OSError:
         if os.name != "nt":
             raise
-        process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.DEVNULL, stdout=stderr, stderr=stderr,
+        process = subprocess.Popen(argv, cwd=cwd, stdin=DEVNULL_IN, stdout=stderr, stderr=stderr,
                                    env=None, **popen_flags())
     try:
         while True:

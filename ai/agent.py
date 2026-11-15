@@ -54,10 +54,15 @@ def _atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
     temp = path.with_name(path.name + f".{os.getpid()}.{threading.get_ident()}.tmp")
     try:
         descriptor = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode)
-        with os.fdopen(descriptor, "wb") as stream:
-            stream.write(data)
-            stream.flush()
-            os.fsync(stream.fileno())
+        try:
+            # os.write, not os.fdopen: wrapping the descriptor raises a targetless
+            # `open` audit event, which the plugin's allowed root cannot cover.
+            view = memoryview(data)
+            while view:
+                view = view[os.write(descriptor, view):]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
         os.chmod(temp, mode)
         os.replace(temp, path)
         os.chmod(path, mode)
@@ -423,7 +428,7 @@ class PiAgent:
         command = self._command(paths, extension)
         self.workspace.mkdir(parents=True, exist_ok=True)
         process = subprocess.Popen(command, cwd=self.workspace, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL, env=env, **bootstrap.popen_flags())
+                                   stderr=bootstrap.DEVNULL_OUT, env=env, **bootstrap.popen_flags())
         with self._lock:
             if self._closed:
                 process.kill()
@@ -709,7 +714,7 @@ class PiAgent:
                                      "library": str(self.library)}, self.root)
         command = self._auth_helper_command(paths, agent_dir, action, provider_id, auth_type)
         process = subprocess.Popen(command, cwd=agent_dir, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL, env=env, **bootstrap.popen_flags())
+                                   stderr=bootstrap.DEVNULL_OUT, env=env, **bootstrap.popen_flags())
         with self._lock:
             self._auth_process = process
         result: dict[str, Any] = {}

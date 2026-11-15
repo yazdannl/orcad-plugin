@@ -20,10 +20,10 @@ from typing import Any, Callable
 
 try:
     from orcad_openscad.bootstrap import cache_root as openscad_cache_root
-    from orcad_openscad.runner import child_env, popen_flags
+    from orcad_openscad.runner import DEVNULL_IN, DEVNULL_OUT, child_env, popen_flags
 except ImportError:
     from openscad.bootstrap import cache_root as openscad_cache_root
-    from openscad.runner import child_env, popen_flags
+    from openscad.runner import DEVNULL_IN, DEVNULL_OUT, child_env, popen_flags
 
 NODE_VERSION = "24.21.0"
 PI_VERSION = "0.87.1"
@@ -198,8 +198,8 @@ def _extract_tar(archive: Path, target: Path) -> None:
 
 def _run_install(argv: list[str], env: dict[str, str], cancel: threading.Event) -> None:
     prefix = Path(argv[argv.index("--prefix") + 1])
-    process = subprocess.Popen(argv, cwd=prefix.parent, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                               stderr=subprocess.DEVNULL, env=env, **popen_flags())
+    process = subprocess.Popen(argv, cwd=prefix.parent, stdin=DEVNULL_IN, stdout=DEVNULL_OUT,
+                               stderr=DEVNULL_OUT, env=env, **popen_flags())
     try:
         deadline = time.monotonic() + INSTALL_TIMEOUT
         while process.poll() is None:

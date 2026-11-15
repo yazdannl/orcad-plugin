@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.26 — permissions are declared, not chased (2026-11-15)
+
+- **The plugin declares its permissions while OrcaSlicer loads it.** A
+  declaration is asked once on the main thread and stored (`orca.request_permissions`);
+  the same request raised later from the render worker is denied instead and
+  only posts a dialog. A fresh install therefore failed its first render while
+  the user was still answering prompts, and every retry asked again: that is
+  the stack of "Plugin permission request" dialogs. The plugin now asks for
+  `threading` up front, plus either the OpenSCAD download host (nothing
+  installed yet) or the exact render command (the verified install records its
+  version and path, so the command can be spelled out at load). Renders and the
+  one-time OpenSCAD setup then run without a prompt at all; builds from before
+  the declaration API keep the old runtime prompts.
+- **Building the child environment no longer probes the temp directory.**
+  `tempfile.gettempdir()` creates and deletes a probe file in every candidate
+  directory (`/tmp`, `/usr/tmp`, the AppImage mount, ...) to see which is
+  writable. From a plugin worker thread those creates are audited, denied, and
+  each one posted another permission dialog. The child environment now names
+  `/tmp` (or `%LOCALAPPDATA%\Temp`) directly.
+
 ## 0.9.25 — an updated file in an old plugin folder always works (2026-11-14)
 
 - **A half-updated folder install no longer hangs the tab at "Connecting".**
