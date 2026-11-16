@@ -61,7 +61,7 @@ function mount({ THREE, OrbitControls }, el, { setNote, setMeasure, onCamera }) 
   const {
     BufferAttribute, BufferGeometry, DirectionalLight, EdgesGeometry, GridHelper, Group, HemisphereLight,
     LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-    PerspectiveCamera, Raycaster, Scene, Sphere, Vector2, Vector3, WebGLRenderer,
+    PerspectiveCamera, Raycaster, Scene, Sphere, SphereGeometry, Vector2, Vector3, WebGLRenderer,
   } = THREE
   const scene = new Scene()
   const camera = new PerspectiveCamera(35, 1, 0.1, 20000)
@@ -98,7 +98,7 @@ function mount({ THREE, OrbitControls }, el, { setNote, setMeasure, onCamera }) 
   scene.add(model)
   const markers = new Group()
   markers.visible = false
-  const markerGeom = new Sphere(1, 10, 8)
+  const markerGeom = new SphereGeometry(1, 10, 8)
   const markerA = new Mesh(markerGeom, new MeshBasicMaterial({ color: 0xfbbf24, depthTest: false }))
   const markerB = new Mesh(markerGeom, new MeshBasicMaterial({ color: 0x22d3ee, depthTest: false }))
   markerA.renderOrder = markerB.renderOrder = 10

@@ -7,7 +7,7 @@
 import {
   BufferAttribute, BufferGeometry, Color, DirectionalLight, EdgesGeometry, GridHelper, Group, HemisphereLight,
   LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera,
-  Raycaster, Scene, Sphere, Vector2, Vector3, WebGLRenderer,
+  Raycaster, Scene, Sphere, SphereGeometry, Vector2, Vector3, WebGLRenderer,
 } from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 
@@ -15,7 +15,7 @@ globalThis.__orcadThree = {
   THREE: {
     BufferAttribute, BufferGeometry, Color, DirectionalLight, EdgesGeometry, GridHelper, Group, HemisphereLight,
     LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera,
-    Raycaster, Scene, Sphere, Vector2, Vector3, WebGLRenderer,
+    Raycaster, Scene, Sphere, SphereGeometry, Vector2, Vector3, WebGLRenderer,
   },
   OrbitControls,
 }
