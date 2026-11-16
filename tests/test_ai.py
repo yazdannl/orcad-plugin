@@ -73,7 +73,31 @@ def test_node_artifacts_are_pinned_for_supported_platforms():
     assert bootstrap.data_root("/isolated/ai") == Path("/isolated/ai")
 
 
+def test_system_pi_is_reused_before_managed_install(tmp_path, monkeypatch):
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    node, command = bin_dir / "node", bin_dir / "pi"
+    package_root = bin_dir / "node_modules/@earendil-works/pi-coding-agent"
+    cli = package_root / "dist/cli.js"
+    cli.parent.mkdir(parents=True)
+    node.touch()
+    command.touch()
+    cli.write_text("// system Pi CLI", encoding="utf-8")
+    (package_root / "package.json").write_text(
+        '{"name":"@earendil-works/pi-coding-agent","version":"2.0.0"}', encoding="utf-8")
+    commands = {"node": str(node), "pi": str(command)}
+    monkeypatch.setattr(bootstrap.shutil, "which", lambda name: commands.get(name))
+
+    paths = bootstrap.ensure_ai(root=tmp_path / "cache", system="unsupported", machine="unknown",
+                                opener=lambda *_args, **_kwargs: pytest.fail("system Pi should avoid downloading"))
+
+    assert paths == {"node": str(node), "pi": str(cli), "node_version": None, "pi_version": "2.0.0"}
+    assert bootstrap.pi_package_root(cli) == package_root
+    assert not (tmp_path / "cache").exists()
+
+
 def test_bootstrap_download_checksum_atomic_install_and_reuse(tmp_path, monkeypatch):
+    monkeypatch.setattr(bootstrap, "_system_pi", lambda: None)
     payload = fake_node_zip()
     digest = hashlib.sha256(payload).hexdigest()
     monkeypatch.setitem(bootstrap.NODE_HASHES, "win-x64", digest)
@@ -117,6 +141,7 @@ def test_download_cancellation_removes_partial_archive(tmp_path):
 
 
 def test_bootstrap_rejects_bad_digest_and_cleans_partial_install(tmp_path, monkeypatch):
+    monkeypatch.setattr(bootstrap, "_system_pi", lambda: None)
     monkeypatch.setitem(bootstrap.NODE_HASHES, "win-x64", "0" * 64)
     with pytest.raises(ValueError, match="checksum"):
         bootstrap.ensure_ai(root=tmp_path, system="win32", machine="x86_64", opener=Server(fake_node_zip()))
@@ -229,6 +254,8 @@ def test_rpc_events_map_text_thinking_tool_and_changed_code(tmp_path, monkeypatc
     assert instance.prompt("run-1", "make a cube", "// initial")
     done = _wait_for(messages, lambda item: item.get("type") == "ai_done")
     assert done["id"] == "run-1" and done["ok"] and "cube([20,20,20])" in done["code"]
+    assert (tmp_path / "data/orcad-render.ts").is_file()
+    assert not (bootstrap.pi_package_root(instance._config["pi"]) / "orcad-render.ts").exists()
     assert any(item.get("kind") == "text" and item.get("delta") == "Working" for item in messages)
     assert any(item.get("kind") == "thinking" for item in messages)
     assert [(item.get("phase"), item.get("name")) for item in messages if item.get("kind") == "tool"] == [
@@ -426,10 +453,13 @@ def test_private_key_config_is_0600_and_never_echoed(tmp_path, monkeypatch):
     assert_mode(keyfile, 0o600)
     status = instance.status()
     assert status["config"]["source"] == "managed" and status["config"]["has_key"]
+    package_root = str(tmp_path / "pi-package")
     child = agent_module._clean_pi_environment(
-        {}, {**instance._config, "node": sys.executable, "openscad": "openscad", "library": str(tmp_path)},
-        tmp_path / "data")
+        {"ORCAD_PI_PACKAGE_ROOT": "untrusted"},
+        {**instance._config, "node": sys.executable, "openscad": "openscad", "library": str(tmp_path),
+         "package_root": package_root}, tmp_path / "data")
     assert "OPENAI_API_KEY" in child and child["PI_CODING_AGENT_DIR"] == str(tmp_path / "data/private-agent")
+    assert child["ORCAD_PI_PACKAGE_ROOT"] == package_root
     switched = agent_module._clean_pi_environment(
         {}, {**instance._config, "provider": "anthropic", "node": sys.executable,
             "openscad": "openscad", "library": str(tmp_path)}, tmp_path / "data")

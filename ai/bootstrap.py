@@ -1,4 +1,4 @@
-"""Install the pinned Node.js runtime and Pi under the orcad AI cache."""
+"""Reuse a system Pi installation or provision the pinned runtime under the orcad AI cache."""
 from __future__ import annotations
 
 import hashlib
@@ -227,6 +227,43 @@ def _pi_cli(root: Path) -> Path:
     raise FileNotFoundError("the pinned Pi CLI was not installed")
 
 
+def pi_package_root(cli: str | os.PathLike[str]) -> Path:
+    cli = Path(cli)
+    if cli.parent.name == "bundle" and cli.parent.parent.name == "dist":
+        return cli.parents[2]
+    if cli.parent.name == "dist":
+        return cli.parents[1]
+    raise ValueError("the Pi CLI is not in a supported package layout")
+
+
+def _system_pi() -> dict[str, Any] | None:
+    """Locate an npm-installed Pi from PATH without starting an extra audited process."""
+    node, command = shutil.which("node"), shutil.which("pi")
+    if not node or not command:
+        return None
+    executable = Path(command)
+    candidates = []
+    try:
+        candidates.append(executable.resolve())
+    except OSError:
+        pass
+    dist = executable.parent / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist"
+    candidates.extend((dist / "bundle" / "cli.js", dist / "cli.js"))
+    for cli in dict.fromkeys(candidates):
+        if not cli.is_file():
+            continue
+        try:
+            package = json.loads((pi_package_root(cli) / "package.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(package, dict):
+            continue
+        version = package.get("version")
+        if package.get("name") == "@earendil-works/pi-coding-agent" and isinstance(version, str):
+            return {"node": node, "pi": str(cli), "node_version": None, "pi_version": version}
+    return None
+
+
 def _verify_pi(root: Path) -> Path:
     """Check the installed Pi without starting it.
 
@@ -235,13 +272,13 @@ def _verify_pi(root: Path) -> Path:
     prove the install is the one this plugin ships.
     """
     cli = _pi_cli(root)
-    package = json.loads((cli.parents[2] / "package.json").read_text(encoding="utf-8"))
+    package = json.loads((pi_package_root(cli) / "package.json").read_text(encoding="utf-8"))
     if package.get("version") != PI_VERSION:
         raise RuntimeError("the installed Pi version does not match the pinned release")
     return cli
 
 
-def _installed(root: Path, artifact: NodeArtifact) -> dict[str, str] | None:
+def _installed(root: Path, artifact: NodeArtifact) -> dict[str, Any] | None:
     try:
         current = json.loads((root / "current.json").read_text(encoding="utf-8"))
         name = current["runtime"]
@@ -253,10 +290,10 @@ def _installed(root: Path, artifact: NodeArtifact) -> dict[str, str] | None:
         cli = _pi_cli(install)
         if marker.get("node") != NODE_VERSION or marker.get("pi") != PI_VERSION or not node.is_file() or not cli.is_file():
             return None
-        package = json.loads((cli.parents[2] / "package.json").read_text(encoding="utf-8"))
+        package = json.loads((pi_package_root(cli) / "package.json").read_text(encoding="utf-8"))
         if package.get("version") != PI_VERSION:
             return None
-        return {"node": str(node), "pi": str(cli)}
+        return {"node": str(node), "pi": str(cli), "node_version": NODE_VERSION, "pi_version": PI_VERSION}
     except (OSError, ValueError, KeyError, TypeError):
         return None
 
@@ -264,13 +301,16 @@ def _installed(root: Path, artifact: NodeArtifact) -> dict[str, str] | None:
 def ensure_ai(*, root: str | os.PathLike[str] | None = None, system: str | None = None,
               machine: str | None = None, opener: Callable[..., Any] = urllib.request.urlopen,
               cancel: threading.Event | None = None,
-              progress: Callable[[str, float | None], None] | None = None) -> dict[str, str]:
-    """Install exact Node/Pi versions, atomically, entirely below the AI data root."""
-    artifact = artifact_for(system, machine)
+              progress: Callable[[str, float | None], None] | None = None) -> dict[str, Any]:
+    """Reuse system Pi when available; otherwise install the pinned runtime below the AI data root."""
     destination = data_root(root)
     cancelled = cancel or threading.Event()
     report = progress or (lambda _message, _fraction: None)
     with _INSTALL_LOCK:
+        report("Checking for system Pi", None)
+        if installed := _system_pi():
+            return installed
+        artifact = artifact_for(system, machine)
         if installed := _installed(destination, artifact):
             return installed
         destination.mkdir(parents=True, exist_ok=True)
@@ -338,7 +378,8 @@ def ensure_ai(*, root: str | os.PathLike[str] | None = None, system: str | None 
             os.replace(pointer_tmp, pointer)
             report("Ready", 1.0)
             return {"node": str(target / "runtime" / artifact.platform_dir / ("node.exe" if artifact.key.startswith("win-") else "bin/node")),
-                    "pi": str(target / "pi" / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist" / "bundle" / "cli.js")}
+                    "pi": str(target / "pi" / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist" / "bundle" / "cli.js"),
+                    "node_version": NODE_VERSION, "pi_version": PI_VERSION}
         except Exception:
             shutil.rmtree(staging, ignore_errors=True)
             raise
@@ -348,7 +389,8 @@ _INSTALL_LOCK = threading.Lock()
 _STATE_LOCK = threading.Lock()
 _DONE = threading.Event()
 _CANCEL = threading.Event()
-_STATE: dict[str, Any] = {"state": "missing", "node": None, "pi": None, "message": None, "progress": None}
+_STATE: dict[str, Any] = {"state": "missing", "node": None, "pi": None, "node_version": None,
+                          "pi_version": None, "message": None, "progress": None}
 
 
 def _worker(root: str | os.PathLike[str] | None, notify: Callable[[], None] | None = None) -> None:
@@ -362,11 +404,12 @@ def _worker(root: str | os.PathLike[str] | None, notify: Callable[[], None] | No
         if notify:
             notify()
     except InterruptedError:
-        _update(state="missing", message=None, progress=None, node=None, pi=None)
+        _update(state="missing", message=None, progress=None, node=None, pi=None, node_version=None, pi_version=None)
         if notify:
             notify()
     except Exception as exc:
-        _update(state="error", message=str(exc)[:400], progress=None, node=None, pi=None)
+        _update(state="error", message=str(exc)[:400], progress=None, node=None, pi=None,
+                node_version=None, pi_version=None)
         if notify:
             notify()
     finally:

@@ -134,14 +134,17 @@ them. `packaging/bundle.py --check` fails if the built page grows past 1 MB.
 
 ### AI assistant: setup, authentication, and privacy
 
-On request, **Install pi** provisions official Node.js **24.21.0** (SHA-256
-pinned per supported platform) and installs `@earendil-works/pi-coding-agent`
-**0.87.1** with that runtime's npm. The Node archive is about **27–38 MB**
-compressed depending on platform; the Pi package tarball is about **7.3 MB**
-(23 MB unpacked), plus its npm dependencies. No admin rights are required.
+On request, OrcaCAD first looks on `PATH` for a system-installed
+`@earendil-works/pi-coding-agent` and Node.js, and reuses them when found.
+Otherwise it provisions official Node.js **24.21.0** (SHA-256 pinned per
+supported platform) and installs Pi **0.87.1** with that runtime's npm. The
+Node archive is about **27–38 MB** compressed depending on platform; the Pi
+package tarball is about **7.3 MB** (23 MB unpacked), plus its npm dependencies.
+No admin rights are required.
 
-The runtime, `model.scad` workspace, OrcaCAD-managed Pi agent directory, and
-custom endpoint key files live under `<Orca data dir>/orcad/ai` (or
+The managed runtime (when needed), `model.scad` workspace, OrcaCAD-managed Pi
+agent directory, and custom endpoint key files live under
+`<Orca data dir>/orcad/ai` (or
 `%LOCALAPPDATA%\orcad/ai`, `~/Library/Caches/orcad/ai` or
 `$XDG_CACHE_HOME/orcad/ai` outside OrcaSlicer).
 

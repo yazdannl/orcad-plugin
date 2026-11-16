@@ -411,14 +411,14 @@ export function AiPanel({ state, dispatch, code, configChoice, onConfigChoice, o
       {(setupState === 'missing' || setupState === 'installing' || setupState === 'error' || !status) && (
         <div className={`ai-setup${setupState === 'error' ? ' is-error' : ''}`}>
           <div className="ai-setup-copy">
-            <strong>{setupState === 'installing' ? 'Installing pi…' : setupState === 'error' ? 'AI setup failed' : !status ? 'Checking AI setup…' : 'Set up AI coding'}</strong>
-            <span>{status?.message || 'Install the pi coding agent to generate and edit OpenSCAD code.'}</span>
+            <strong>{setupState === 'installing' ? 'Setting up pi…' : setupState === 'error' ? 'AI setup failed' : !status ? 'Checking AI setup…' : 'Set up AI coding'}</strong>
+            <span>{status?.message || 'Find or install the pi coding agent to generate and edit OpenSCAD code.'}</span>
           </div>
-          {typeof status?.progress === 'number' && <div className="ai-progress" role="progressbar" aria-label="AI installation progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(status.progress * 100)}>
+          {typeof status?.progress === 'number' && <div className="ai-progress" role="progressbar" aria-label="AI setup progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(status.progress * 100)}>
             <span style={{ width: `${Math.max(0, Math.min(1, status.progress)) * 100}%` }} />
           </div>}
           <button type="button" className="btn btn-sm btn-primary" disabled={!status || setupState === 'installing'} onClick={startSetup}>
-            {setupState === 'installing' ? 'Installing…' : setupState === 'error' ? 'Retry install' : 'Install pi'}
+            {setupState === 'installing' ? 'Setting up…' : setupState === 'error' ? 'Retry setup' : 'Find or install pi'}
           </button>
         </div>
       )}

@@ -46,7 +46,7 @@ _SECRET_ENV = set(PROVIDER_KEY_ENV.values()) | {
     "NPM_TOKEN", "NODE_AUTH_TOKEN", "GITHUB_TOKEN", "GH_TOKEN",
 }
 _PI_ENV = {"PI_CODING_AGENT_DIR", "PI_CODING_AGENT_SESSION_DIR", "PI_PACKAGE_DIR", "PI_OFFLINE",
-           "PI_TELEMETRY", "PI_SKIP_VERSION_CHECK"}
+           "PI_TELEMETRY", "PI_SKIP_VERSION_CHECK", "ORCAD_PI_PACKAGE_ROOT"}
 
 
 def _atomic_write(path: Path, data: bytes, mode: int = 0o600) -> None:
@@ -84,6 +84,8 @@ def _clean_pi_environment(base: dict[str, str], config: dict[str, Any], root: Pa
         env["OPENSCAD_BACKEND_FLAG"] = config["backend_flag"]
     env["PI_CODING_AGENT_DIR"] = (str(Path.home() / ".pi" / "agent") if config["source"] == "pi"
                                   else str(root / "private-agent"))
+    if config.get("package_root"):
+        env["ORCAD_PI_PACKAGE_ROOT"] = config["package_root"]
     if config["source"] == "key" and config.get("provider") == config.get("key_provider") and config.get("provider"):
         key_env = PROVIDER_KEY_ENV.get(config["provider"])
         if key_env:
@@ -129,7 +131,8 @@ class PiAgent:
         self._write_lock = threading.Lock()
         self._spawn_lock = threading.Lock()
         self._config: dict[str, Any] = {"source": "pi", "provider": None, "model": None, "thinking": None,
-                                        "key_provider": None, "has_key": False, "node": None, "pi": None}
+                                        "key_provider": None, "has_key": False, "node": None, "pi": None,
+                                        "package_root": None}
         self._models: list[dict[str, str]] = []
         self._providers: list[dict[str, Any]] = []
         self._custom_providers: list[dict[str, Any]] = []
@@ -163,8 +166,9 @@ class PiAgent:
             busy = self._active_id is not None or self._configuring > 0 or self._auth_busy
         message = setup.get("message")
         return {"type": "ai_status", "state": setup["state"], "message": message,
-                "progress": setup.get("progress"), "node_version": bootstrap.NODE_VERSION if setup["state"] == "ready" else None,
-                "pi_version": bootstrap.PI_VERSION if setup["state"] == "ready" else None,
+                "progress": setup.get("progress"),
+                "node_version": setup.get("node_version") if setup["state"] == "ready" else None,
+                "pi_version": setup.get("pi_version") if setup["state"] == "ready" else None,
                 "busy": busy, "auth_busy": self._auth_busy, "config": config, "models": models,
                 "providers": providers, "custom_providers": custom}
 
@@ -404,8 +408,9 @@ class PiAgent:
         openscad = self.openscad()
         if not openscad:
             raise RuntimeError("OpenSCAD is not ready")
-        self._config.update(node=paths["node"], pi=paths["pi"])
-        extension = extension or Path(paths["pi"]).parents[2] / "orcad-render.ts"
+        package_root = bootstrap.pi_package_root(paths["pi"])
+        self._config.update(node=paths["node"], pi=paths["pi"], package_root=str(package_root))
+        extension = extension or self.root / "orcad-render.ts"
         bundled = Path(__file__).with_name("render_openscad.ts")
         if not bundled.is_file():
             raise RuntimeError("The OpenSCAD render extension is missing")
@@ -638,7 +643,7 @@ class PiAgent:
                              provider_id: str, auth_type: str) -> list[str]:
         if self.auth_helper_factory:
             return self.auth_helper_factory(paths["node"], paths["pi"], str(agent_dir), action, provider_id, auth_type)
-        package_root = str(Path(paths["pi"]).parents[2])
+        package_root = str(bootstrap.pi_package_root(paths["pi"]))
         # A copy under the AI data root, not the unpacked backend: that path
         # carries a per-release digest, and a new digest would be a new command
         # line - and so a new permission prompt after every update.

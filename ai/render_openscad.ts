@@ -1,8 +1,18 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
+import { pathToFileURL } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+
+const packageRoot = process.env.ORCAD_PI_PACKAGE_ROOT;
+if (!packageRoot) throw new Error("orcad did not configure the Pi package location");
+const require = createRequire(resolve(packageRoot, "package.json"));
+const piAiEntry = require.resolve.paths("@earendil-works/pi-ai")
+  ?.map((directory) => resolve(directory, "@earendil-works/pi-ai/dist/index.js"))
+  .find((path) => existsSync(path));
+if (!piAiEntry) throw new Error("orcad could not locate Pi's AI package");
+const { Type } = await import(pathToFileURL(piAiEntry).href);
 
 function bounds(path: string): number[][] | null {
   const data = readFileSync(path);
