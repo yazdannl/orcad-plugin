@@ -64,6 +64,7 @@ ARTIFACTS = {
         SNAPSHOT_INDEX + "OpenSCAD-2023.09.11.ai-aarch64.AppImage",
         "84d7bb1c71e14b4e248a84fbe0a4b02f58bcbf5326f0ee81c8a4de3653a3b568",
         "appimage", "openscad", "2023.09.11",
+        pattern=r"OpenSCAD-(\d{4}\.\d\d\.\d\d)(?:\.ai\d*)?-aarch64\.AppImage",
     ),
     ("darwin", "universal"): OpenSCADArtifact(
         "darwin", "universal", "OpenSCAD-2026.09.22.dmg",
@@ -116,6 +117,20 @@ def _fetch(url: str, opener: Callable[..., Any]):
         response.close()
         raise ValueError("download was redirected to a non-HTTPS URL")
     return response
+
+
+def _download_with_retry(artifact: OpenSCADArtifact, destination: Path, opener: Callable[..., Any]) -> None:
+    """Retry a dropped connection once; never retry a checksum or HTTP status failure."""
+    for attempt in (0, 1):
+        try:
+            _download(artifact, destination, opener)
+            return
+        except urllib.error.HTTPError:
+            raise
+        except (urllib.error.URLError, TimeoutError, ConnectionError):
+            if attempt:
+                raise
+            time.sleep(1)
 
 
 def newest_snapshot(artifact: OpenSCADArtifact, opener: Callable[..., Any] = urllib.request.urlopen) -> OpenSCADArtifact:
@@ -310,23 +325,27 @@ def ensure_openscad(*, root: str | os.PathLike[str] | None = None, system: str |
         try:
             try:
                 archive = cache / artifact.filename
-                _download(artifact, archive, opener)
+                _download_with_retry(artifact, archive, opener)
             except urllib.error.HTTPError as exc:
                 if exc.code not in (403, 404, 410) or not artifact.pattern:
                     raise
                 artifact = newest_snapshot(artifact, opener)
                 archive = cache / artifact.filename
-                _download(artifact, archive, opener)
+                _download_with_retry(artifact, archive, opener)
             try:
                 return _install(artifact, archive, destination)
             finally:
                 archive.unlink(missing_ok=True)
         except Exception as exc:
             shutil.rmtree(destination, ignore_errors=True)
+            reason = str(exc)[:200]
+            message = (f"Automatic OpenSCAD setup failed: {reason}. "
+                       "Check the network connection and retry, or install an OpenSCAD 2023+ development "
+                       "snapshot and add it to PATH.") if reason else (
+                       "Automatic OpenSCAD setup failed. Check the network connection and retry, or install an "
+                       "OpenSCAD 2023+ development snapshot and add it to PATH.")
             raise BackendError(
-                ErrorCode.INSTALL_FAILED,
-                "Automatic OpenSCAD setup failed. Check the network connection and retry, or install an "
-                "OpenSCAD 2023+ development snapshot and add it to PATH.",
+                ErrorCode.INSTALL_FAILED, message,
                 {"cause": str(exc)[:500], "version": artifact.version},
             ) from exc
 
@@ -349,6 +368,13 @@ def _worker(root: str | os.PathLike[str] | None) -> None:
         path, version = ensure_openscad(root=root)
         update = {"state": "ready", "path": str(path), "version": version, "error": None}
     except BackendError as exc:
+        try:
+            if root is not None:
+                target = Path(root) / "setup-error.txt"
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(f"{exc.message}\n{exc.details}\n", encoding="utf-8")
+        except OSError:
+            pass
         update = {"state": "failed", "path": None, "version": None, "error": exc}
     except Exception as exc:  # pragma: no cover - defensive
         update = {"state": "failed", "path": None, "version": None,

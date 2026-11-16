@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import re
 import stat
 import sys
 import urllib.error
@@ -83,6 +84,8 @@ def test_artifacts_are_pinned_https_snapshots():
         assert len(artifact.sha256) == 64 and int(artifact.version[:4]) >= 2023
     assert bootstrap.artifact_for("win32", "AMD64").platform == "win32"
     assert bootstrap.artifact_for("darwin", "arm64").architecture == "universal"
+    aarch64 = bootstrap.ARTIFACTS[("linux", "aarch64")]
+    assert aarch64.pattern and re.search(aarch64.pattern, aarch64.filename)
     with pytest.raises(BackendError) as info:
         bootstrap.artifact_for("freebsd", "x86_64")
     assert info.value.code == ErrorCode.UNSUPPORTED_PLATFORM
@@ -125,6 +128,7 @@ def test_checksum_mismatch_installs_nothing(tmp_path, monkeypatch, no_system_ope
     with pytest.raises(BackendError) as info:
         bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=server)
     assert info.value.code == ErrorCode.INSTALL_FAILED and "checksum" in info.value.details["cause"]
+    assert "setup failed:" in info.value.message and "checksum" in info.value.message
     assert not (tmp_path / "win32-x86_64").exists()
     assert not list(tmp_path.glob("*.part"))
 
@@ -142,6 +146,28 @@ def test_missing_pinned_snapshot_falls_back_to_the_newest_published_one(tmp_path
     path, version = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=server)
     assert path.is_file() and version == "2026.10.02"
     assert server.requests[-1] == bootstrap.SNAPSHOT_INDEX + newest
+
+
+@posix_exec_only
+def test_a_dropped_connection_is_retried_once(tmp_path, monkeypatch, no_system_openscad):
+    payload = zip_with({"openscad.exe": version_script()})
+    artifact = use_artifact(monkeypatch, ("win32", "x86_64"), sha256=hashlib.sha256(payload).hexdigest())
+    attempts = []
+
+    class Flaky:
+        def __init__(self):
+            self.requests = []
+
+        def __call__(self, request, timeout):
+            self.requests.append(request.full_url)
+            if len(self.requests) == 1:
+                raise urllib.error.URLError("connection reset")
+            return Response(payload, request.full_url)
+
+    opener = Flaky()
+    path, version = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64", opener=opener)
+    assert path.is_file() and version == artifact.version
+    assert opener.requests == [artifact.url, artifact.url]
 
 
 @posix_exec_only
@@ -165,6 +191,18 @@ def test_archive_paths_cannot_escape(tmp_path):
     archive.write_bytes(zip_with({"../escape.exe": b"x"}))
     with pytest.raises(ValueError, match="unsafe"):
         bootstrap._safe_extract_zip(archive, tmp_path / "out")
+
+
+def test_failed_setup_writes_a_diagnostic(tmp_path, monkeypatch):
+    def fake_ensure(root=None):
+        raise BackendError(ErrorCode.INSTALL_FAILED, "offline")
+
+    monkeypatch.setattr(bootstrap, "ensure_openscad", fake_ensure)
+    monkeypatch.setattr(bootstrap, "_STATE", {"state": "idle", "path": None, "version": None, "error": None,
+                                              "progress": None})
+    with pytest.raises(BackendError, match="offline"):
+        bootstrap.wait_for_openscad(timeout=5, root=tmp_path)
+    assert "offline" in (tmp_path / "setup-error.txt").read_text(encoding="utf-8")
 
 
 def test_background_state_reports_failures_and_retries(tmp_path, monkeypatch):

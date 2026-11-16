@@ -516,6 +516,18 @@ def test_a_path_hit_wins_over_common_install_locations(tmp_path, monkeypatch):
 
 
 @posix_exec_only
+def test_windows_installer_location_is_used_when_path_misses(tmp_path, monkeypatch):
+    assert any("Program Files" in path for path in runner_module._COMMON_LOCATIONS["win32"])
+    path_dir = tmp_path / "path"
+    path_dir.mkdir()
+    monkeypatch.setenv("PATH", str(path_dir))
+    installed = fake_command(tmp_path / "Program Files" / "OpenSCAD", "openscad.exe", "")
+    monkeypatch.setitem(runner_module._COMMON_LOCATIONS, "win32", (str(installed),))
+    monkeypatch.setattr(runner_module, "platform_name", lambda *_args, **_kwargs: "win32")
+    assert discover_openscad() == installed.resolve()
+
+
+@posix_exec_only
 @pytest.mark.parametrize("mode", [0o644, 0o775, 0o757])
 def test_unrunnable_or_writable_common_locations_are_skipped(tmp_path, monkeypatch, mode):
     _, (bad, good) = _common_locations(monkeypatch, tmp_path, "bad", "good")

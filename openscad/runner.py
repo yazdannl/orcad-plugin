@@ -116,6 +116,11 @@ _COMMON_LOCATIONS = {
                "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD",
                "~/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"),
     "linux": ("/usr/local/bin/openscad", "/usr/bin/openscad", "/snap/bin/openscad"),
+    # OrcaSlicer launched from the desktop does not inherit the shell PATH, so
+    # the normal Windows installer location is invisible to shutil.which().
+    "win32": (r"C:\Program Files\OpenSCAD\openscad.exe",
+              r"C:\Program Files (x86)\OpenSCAD\openscad.exe",
+              r"~/AppData/Local/Programs/OpenSCAD/openscad.exe"),
 }
 
 
@@ -127,9 +132,10 @@ def _find_on_system() -> str | None:
         path = os.path.expanduser(location)
         if not (os.path.isfile(path) and os.access(path, os.X_OK)):
             continue
-        st = os.stat(path)
-        if st.st_uid not in (0, os.getuid()) or st.st_mode & 0o022:
-            continue
+        if os.name != "nt":
+            st = os.stat(path)
+            if st.st_uid not in (0, os.getuid()) or st.st_mode & 0o022:
+                continue
         return path
     return None
 

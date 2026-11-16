@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Fixed automatic OpenSCAD setup failures.** OpenSCAD installed with the standard Windows installer is now found even when OrcaSlicer was launched from the desktop without the shell `PATH`; a dropped network connection is retried once; the aarch64 download can fall back to a newer published snapshot; and a failed setup now shows the underlying reason instead of a generic network hint.
+
 - **Fixed a blank 3D preview.** The measurement markers were created from three.js's `Sphere` math type instead of `SphereGeometry`, which threw while the viewport mounted and left the stage empty even though the render itself succeeded.
 
 - **Favorites and recently used models.** Every card has a star, the library has Favorites and Recent chips, and both lists survive a restart (invalid model keys are dropped when the catalog changes).
