@@ -96,6 +96,32 @@ def test_system_pi_is_reused_before_managed_install(tmp_path, monkeypatch):
     assert not (tmp_path / "cache").exists()
 
 
+def test_windows_npm_global_pi_is_found_without_path(tmp_path, monkeypatch):
+    roaming = tmp_path / "Roaming"
+    program_files = tmp_path / "Program Files"
+    package_root = roaming / "npm/node_modules/@earendil-works/pi-coding-agent"
+    cli = package_root / "dist/bundle/cli.js"
+    node = program_files / "nodejs/node.exe"
+    cli.parent.mkdir(parents=True)
+    node.parent.mkdir(parents=True)
+    cli.write_text("// system Pi CLI", encoding="utf-8")
+    node.touch()
+    (package_root / "package.json").write_text(
+        '{"name":"@earendil-works/pi-coding-agent","version":"2.0.0"}', encoding="utf-8")
+    monkeypatch.setattr(bootstrap.shutil, "which", lambda _name: None)
+    monkeypatch.setattr(bootstrap.sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(roaming))
+    monkeypatch.setenv("ProgramFiles", str(program_files))
+    monkeypatch.delenv("ProgramFiles(x86)", raising=False)
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+
+    paths = bootstrap.ensure_ai(root=tmp_path / "cache", system="unsupported", machine="unknown",
+                                opener=lambda *_args, **_kwargs: pytest.fail("system Pi should avoid downloading"))
+
+    assert paths == {"node": str(node), "pi": str(cli), "node_version": None, "pi_version": "2.0.0"}
+    assert not (tmp_path / "cache").exists()
+
+
 def test_bootstrap_download_checksum_atomic_install_and_reuse(tmp_path, monkeypatch):
     monkeypatch.setattr(bootstrap, "_system_pi", lambda: None)
     payload = fake_node_zip()

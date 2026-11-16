@@ -423,10 +423,10 @@ html:root .check input { width: 15px; height: 15px; accent-color: var(--accent);
   opacity: .7; user-select: none; border-right: 1px solid var(--line); background: var(--hover);
 }
 .editor-gutter .is-error { color: #fff; background: var(--danger); opacity: 1; border-radius: 0 4px 4px 0; }
-html:root .editor-input {
-  flex: 1; min-width: 0; padding: 10px 12px; resize: none; white-space: pre; overflow: auto; color: var(--text);
-  font: inherit; tab-size: 2; caret-color: #22d3ee;
-}
+html:root .editor-input { flex: 1; min-width: 0; min-height: 0; overflow: hidden; font: inherit; }
+html:root .editor-input .cm-editor { height: 100%; background: transparent; }
+html:root .editor-input .cm-line { padding: 0; }
+html:root .editor-input .cm-selectionBackground { background: rgba(34, 211, 238, .24); }
 .code-hint { font-size: .8rem; color: var(--muted); }
 .code-hint code, kbd { font-family: var(--mono); font-size: .76rem; padding: 1px 5px; border-radius: 5px; background: var(--hover); border: 1px solid var(--line); }
 .ai-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

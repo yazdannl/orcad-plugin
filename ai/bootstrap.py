@@ -237,18 +237,36 @@ def pi_package_root(cli: str | os.PathLike[str]) -> Path:
 
 
 def _system_pi() -> dict[str, Any] | None:
-    """Locate an npm-installed Pi from PATH without starting an extra audited process."""
+    """Locate npm's global Pi package without starting an extra audited process."""
     node, command = shutil.which("node"), shutil.which("pi")
-    if not node or not command:
-        return None
-    executable = Path(command)
     candidates = []
-    try:
-        candidates.append(executable.resolve())
-    except OSError:
-        pass
-    dist = executable.parent / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist"
-    candidates.extend((dist / "bundle" / "cli.js", dist / "cli.js"))
+    if command:
+        executable = Path(command)
+        try:
+            candidates.append(executable.resolve())
+        except OSError:
+            pass
+        dist = executable.parent / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist"
+        candidates.extend((dist / "bundle" / "cli.js", dist / "cli.js"))
+
+    if sys.platform == "win32":
+        roaming = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
+        prefixes = [roaming / "npm"]
+        program_files = [os.environ.get("ProgramFiles"), os.environ.get("ProgramFiles(x86)")]
+        prefixes.extend(Path(path) / "nodejs" for path in program_files if path)
+        for prefix in prefixes:
+            dist = prefix / "node_modules" / "@earendil-works" / "pi-coding-agent" / "dist"
+            candidates.extend((dist / "bundle" / "cli.js", dist / "cli.js"))
+        if not node:
+            node_candidates = [Path(path) / "nodejs" / "node.exe" for path in program_files if path]
+            local_app_data = os.environ.get("LOCALAPPDATA")
+            if local_app_data:
+                node_candidates.append(Path(local_app_data) / "Programs" / "nodejs" / "node.exe")
+            node_candidates.append(Path.home() / "AppData" / "Local" / "Programs" / "nodejs" / "node.exe")
+            node = next((str(path) for path in node_candidates if path.is_file()), None)
+
+    if not node:
+        return None
     for cli in dict.fromkeys(candidates):
         if not cli.is_file():
             continue

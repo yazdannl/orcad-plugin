@@ -134,9 +134,11 @@ them. `packaging/bundle.py --check` fails if the built page grows past 1 MB.
 
 ### AI assistant: setup, authentication, and privacy
 
-On request, OrcaCAD first looks on `PATH` for a system-installed
-`@earendil-works/pi-coding-agent` and Node.js, and reuses them when found.
-Otherwise it provisions official Node.js **24.21.0** (SHA-256 pinned per
+On request, OrcaCAD first looks for a system-installed
+`@earendil-works/pi-coding-agent` and Node.js. It checks `PATH` and, on
+Windows, npm's standard per-user global package directory even when the GUI
+was launched without that directory on `PATH`. Found installations are reused;
+otherwise OrcaCAD provisions official Node.js **24.21.0** (SHA-256 pinned per
 supported platform) and installs Pi **0.87.1** with that runtime's npm. The
 Node archive is about **27–38 MB** compressed depending on platform; the Pi
 package tarball is about **7.3 MB** (23 MB unpacked), plus its npm dependencies.
