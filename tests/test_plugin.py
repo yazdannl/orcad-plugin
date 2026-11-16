@@ -80,6 +80,22 @@ def test_hello_engine_and_malformed_messages(session):
     assert session.handle({"type": "fly"})["type"] == "error"
 
 
+def test_snapshot_is_saved_as_a_png_export(session):
+    png = b"\x89PNG\r\n\x1a\n" + b"snapshot bytes"
+    data = "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+    reply = session.handle({"type": "save_png", "id": 7, "name": "My model", "data": data})
+    assert reply["ok"] is True and reply["purpose"] == "snapshot"
+    target = Path(reply["file"])
+    assert target.parent == session._runner.path.parent / "exports"
+    assert target.read_bytes() == png
+    assert reply["filename"] == target.name
+
+    for bad in ("not a data URL", "data:image/png;base64,not!base64",
+                "data:image/png;base64," + base64.b64encode(b"hello").decode("ascii")):
+        reply = session.handle({"type": "save_png", "id": 8, "data": bad})
+        assert reply["ok"] is False and reply["error"] == "Invalid PNG data"
+
+
 def test_page_carries_the_catalog_index_and_stays_under_the_budget():
     page = orcad.page_html()
     assert len(page.encode("utf-8")) < 1024 * 1024, "the host hands the page to the webview in one string"

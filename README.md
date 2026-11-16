@@ -37,7 +37,9 @@ the build plate with one click.
   too, so you can build your own bins, racks and split-flap parts.
 - **Preview:** Three.js viewport with orbit/pan/zoom, iso/front/right/top views,
   wireframe, edge and build-plate toggles. It falls back to a software renderer
-  when the webview has no WebGL.
+  when the webview has no WebGL. The camera button saves a PNG to the exports
+  folder, the ruler measures between two points on the model, and each model
+  remembers its viewing angle.
 - **Output:** export **STL** or **3MF**, or **Send to plate**, which hands the
   STL to the running OrcaSlicer. The side panel shows dimensions, volume,
   triangle count, render time, recent exports and the OpenSCAD console.

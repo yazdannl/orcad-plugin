@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import { viewportRuntime } from '../viewport.js'
+import { mm } from '../format.js'
 
 const VIEWS = {
   iso: { dir: [1, -1.25, 0.95], up: [0, 0, 1] },
@@ -56,11 +57,11 @@ function drawSoftware(THREE, ctx, width, height, camera, geometry, color, wirefr
 }
 
 // Builds the scene once the three.js runtime has arrived and returns its teardown.
-function mount({ THREE, OrbitControls }, el, setNote) {
+function mount({ THREE, OrbitControls }, el, { setNote, setMeasure, onCamera }) {
   const {
     BufferAttribute, BufferGeometry, DirectionalLight, EdgesGeometry, GridHelper, Group, HemisphereLight,
-    LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshStandardMaterial, PerspectiveCamera, Scene, Sphere,
-    Vector3, WebGLRenderer,
+    LineBasicMaterial, LineSegments, Matrix4, Mesh, MeshBasicMaterial, MeshStandardMaterial,
+    PerspectiveCamera, Raycaster, Scene, Sphere, Vector2, Vector3, WebGLRenderer,
   } = THREE
   const scene = new Scene()
   const camera = new PerspectiveCamera(35, 1, 0.1, 20000)
@@ -95,9 +96,17 @@ function mount({ THREE, OrbitControls }, el, setNote) {
   scene.add(plate)
   const model = new Group()
   scene.add(model)
+  const markers = new Group()
+  markers.visible = false
+  const markerGeom = new Sphere(1, 10, 8)
+  const markerA = new Mesh(markerGeom, new MeshBasicMaterial({ color: 0xfbbf24, depthTest: false }))
+  const markerB = new Mesh(markerGeom, new MeshBasicMaterial({ color: 0x22d3ee, depthTest: false }))
+  markerA.renderOrder = markerB.renderOrder = 10
+  markers.add(markerA, markerB)
+  scene.add(markers)
 
   const state = { theme: readTheme(THREE.Color), geometry: null, surface: null, lines: null, radius: 60, framed: 60,
-    frame: 0, wireframe: false, edges: true, grid: true }
+    frame: 0, wireframe: false, edges: true, grid: true, measure: false, points: [] }
 
   const render = () => {
     state.frame = 0
@@ -129,6 +138,64 @@ function mount({ THREE, OrbitControls }, el, setNote) {
     plate.add(helper)
   }
 
+  const reportCamera = () => onCamera?.({ position: camera.position.toArray(), target: controls.target.toArray(),
+    up: camera.up.toArray() })
+
+  const setCamera = (saved) => {
+    if (![saved?.position, saved?.target, saved?.up].every((v) => Array.isArray(v) && v.length === 3
+      && v.every((n) => typeof n === 'number' && Number.isFinite(n)))) return
+    const position = new Vector3(...saved.position), target = new Vector3(...saved.target)
+    const distance = position.distanceTo(target)
+    if (distance <= 0) return
+    camera.up.set(...saved.up)
+    camera.position.copy(position)
+    controls.target.copy(target)
+    camera.near = Math.max(0.05, distance / 1000)
+    camera.far = distance * 50
+    camera.updateProjectionMatrix()
+    controls.update()
+    request()
+    reportCamera()
+  }
+
+  const clearMeasure = () => {
+    state.points = []
+    markers.visible = false
+    setMeasure('')
+  }
+
+  const raycaster = new Raycaster()
+  const pointer = new Vector2()
+  let pointerStart = null
+  const onPointerDown = (event) => {
+    if (event.button === 0 && state.measure) pointerStart = [event.clientX, event.clientY]
+  }
+  const onPointerUp = (event) => {
+    if (!pointerStart) return
+    const moved = Math.hypot(event.clientX - pointerStart[0], event.clientY - pointerStart[1])
+    pointerStart = null
+    if (!state.measure || moved > 4 || !state.surface) return
+    const rect = canvas.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    pointer.set((event.clientX - rect.left) / rect.width * 2 - 1,
+      -((event.clientY - rect.top) / rect.height) * 2 + 1)
+    raycaster.setFromCamera(pointer, camera)
+    const hit = raycaster.intersectObject(state.surface, false)[0]
+    if (!hit) { setMeasure('Click a point on the model.'); return }
+    const local = hit.point.clone().sub(state.surface.position)
+    state.points = [...state.points, local].slice(-2)
+    markers.children[state.points.length - 1].position.copy(hit.point)
+    markers.visible = true
+    if (state.points.length === 2) {
+      setMeasure(`${mm(state.points[0].distanceTo(state.points[1]))} mm between picks · click for a new pair`)
+    } else {
+      setMeasure('First point set. Click a second point.')
+    }
+    request()
+  }
+  canvas.addEventListener('pointerdown', onPointerDown)
+  canvas.addEventListener('pointerup', onPointerUp)
+
   // name=null keeps the current viewing direction and only re-frames.
   const setView = (name, radius = state.radius) => {
     const view = VIEWS[name] || VIEWS.iso
@@ -145,6 +212,23 @@ function mount({ THREE, OrbitControls }, el, setNote) {
     camera.updateProjectionMatrix()
     controls.update()
     request()
+    reportCamera()
+  }
+
+  const capture = () => {
+    try {
+      render()
+      const maxSide = 1600
+      const scale = Math.min(1, maxSide / Math.max(canvas.width || 1, canvas.height || 1))
+      if (scale === 1) return canvas.toDataURL('image/png')
+      const out = document.createElement('canvas')
+      out.width = Math.max(1, Math.round(canvas.width * scale))
+      out.height = Math.max(1, Math.round(canvas.height * scale))
+      out.getContext('2d').drawImage(canvas, 0, 0, out.width, out.height)
+      return out.toDataURL('image/png')
+    } catch {
+      return null
+    }
   }
 
   const applyMaterial = () => {
@@ -159,7 +243,7 @@ function mount({ THREE, OrbitControls }, el, setNote) {
     request()
   }
 
-  const setMesh = (data, refit) => {
+  const setMesh = (data, refit, savedCamera) => {
     model.clear()
     state.geometry?.dispose()
     state.lines?.geometry.dispose()
@@ -195,10 +279,13 @@ function mount({ THREE, OrbitControls }, el, setNote) {
     const reframe = refit || radius > state.framed * 1.02 || radius < state.framed * 0.5
     state.radius = radius
     state.center = size.z / 2
+    markers.scale.setScalar(Math.max(1, radius * 0.025))
+    clearMeasure()
     if (reframe) {
       state.framed = radius
       buildPlate()
-      setView(refit ? 'iso' : null, radius)
+      if (refit && savedCamera) setCamera(savedCamera)
+      else setView(refit ? 'iso' : null, radius)
     }
     applyMaterial()
   }
@@ -212,16 +299,21 @@ function mount({ THREE, OrbitControls }, el, setNote) {
   resize()
   buildPlate()
   setView('iso')
+  controls.addEventListener('end', reportCamera)
 
   return {
     api: {
       setMesh,
       setView: (name) => setView(name),
       fit: () => setView('iso'),
+      snapshot: capture,
+      clearMeasure,
       options: (next) => {
         const gridChanged = next.grid !== state.grid
+        const measureChanged = next.measure !== state.measure
         Object.assign(state, next)
         if (gridChanged) buildPlate()
+        if (measureChanged && !state.measure) clearMeasure()
         applyMaterial()
       },
     },
@@ -229,21 +321,31 @@ function mount({ THREE, OrbitControls }, el, setNote) {
       observer.disconnect()
       themeObserver.disconnect()
       canvas.removeEventListener('webglcontextlost', lost)
+      canvas.removeEventListener('pointerdown', onPointerDown)
+      canvas.removeEventListener('pointerup', onPointerUp)
+      controls.removeEventListener('end', reportCamera)
       cancelAnimationFrame(state.frame)
       controls.dispose()
       state.geometry?.dispose()
       state.lines?.geometry.dispose()
+      markerGeom.dispose()
+      markerA.material.dispose()
+      markerB.material.dispose()
       renderer?.dispose()
       canvas.remove()
     },
   }
 }
 
-export const Viewport = forwardRef(function Viewport({ mesh, fitKey, wireframe, edges, grid, dimmed }, ref) {
+export const Viewport = forwardRef(function Viewport({ mesh, fitKey, camera, measure, wireframe, edges, grid, dimmed, onCamera }, ref) {
   const host = useRef(null)
   const api = useRef(null)
-  const latest = useRef({ mesh: null, fitKey: null, options: { wireframe: false, edges: true, grid: true } })
+  const latest = useRef({ mesh: null, fitKey: null, camera: null,
+    options: { wireframe: false, edges: true, grid: true, measure: false } })
   const [note, setNote] = useState('')
+  const [measureText, setMeasureText] = useState('')
+  const onCameraRef = useRef(onCamera)
+  onCameraRef.current = onCamera
 
   useEffect(() => {
     const el = host.current
@@ -252,12 +354,13 @@ export const Viewport = forwardRef(function Viewport({ mesh, fitKey, wireframe, 
     setNote('')
     viewportRuntime().then((runtime) => {
       if (stopped) return
-      const mounted = mount(runtime, el, setNote)
+      const mounted = mount(runtime, el, { setNote, setMeasure: setMeasureText,
+        onCamera: (pose) => onCameraRef.current?.(pose) })
       api.current = mounted.api
       teardown = mounted.dispose
       // The props that arrived while the runtime was loading still apply.
       mounted.api.options(latest.current.options)
-      mounted.api.setMesh(latest.current.mesh, true)
+      mounted.api.setMesh(latest.current.mesh, true, latest.current.camera)
     }, (error) => {
       if (!stopped) setNote(error?.message || 'The 3D preview is unavailable.')
     })
@@ -268,21 +371,24 @@ export const Viewport = forwardRef(function Viewport({ mesh, fitKey, wireframe, 
     }
   }, [])
 
+  useEffect(() => { latest.current.camera = camera }, [camera])
+
   useEffect(() => {
     const refit = latest.current.fitKey !== fitKey
     latest.current.mesh = mesh
     if (mesh) latest.current.fitKey = fitKey
-    api.current?.setMesh(mesh, refit)
+    api.current?.setMesh(mesh, refit, latest.current.camera)
   }, [mesh, fitKey])
 
   useEffect(() => {
-    latest.current.options = { wireframe, edges, grid }
+    latest.current.options = { wireframe, edges, grid, measure }
     api.current?.options(latest.current.options)
-  }, [wireframe, edges, grid])
+  }, [wireframe, edges, grid, measure])
 
   useImperativeHandle(ref, () => ({
     setView: (name) => api.current?.setView(name),
     fit: () => api.current?.fit(),
+    snapshot: () => api.current?.snapshot() || null,
   }), [])
 
   return (
@@ -290,6 +396,7 @@ export const Viewport = forwardRef(function Viewport({ mesh, fitKey, wireframe, 
       aria-label="3D model preview. Drag to rotate, right-drag to pan, scroll to zoom.">
       {/* never render a text node here: React would wipe the imperatively added canvas */}
       {note ? <div className="viewport-note">{note}</div> : null}
+      {measure && measureText ? <div className="viewport-measure" role="status">{measureText}</div> : null}
     </div>
   )
 })

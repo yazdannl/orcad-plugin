@@ -5,6 +5,7 @@ import { activePreset, applyPreset, catalogError, catalogReady, categories, cred
 import { loadSettings, saveSettings } from './storage.js'
 import { rememberKey, savedKeys, toggleKey } from './library.js'
 import { decodeConfig, encodeConfig } from './share.js'
+import { savedCameras } from './camera.js'
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from './sidebar.js'
 import { decodeMesh, meshStats } from './mesh.js'
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js'
@@ -97,7 +98,8 @@ export default function App() {
   const [aiConfigChoice, setAiConfigChoice] = useState(saved.aiConfig || null)
   const [autoRender, setAutoRender] = useState(saved.autoRender === true)
   const [pendingExample, setPendingExample] = useState(null)
-  const [view, setView] = useState({ wireframe: false, edges: saved.edges !== false, grid: saved.grid !== false })
+  const [view, setView] = useState({ wireframe: false, edges: saved.edges !== false, grid: saved.grid !== false, measure: false })
+  const [cameras, setCameras] = useState(() => savedCameras(saved.cameras))
   const [preview, setPreview] = useState(null)
   const [pending, setPending] = useState(null)
   const [ops, setOps] = useState({})
@@ -247,8 +249,8 @@ export default function App() {
 
   // ---- persistence --------------------------------------------------------
   useEffect(() => {
-    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid, aiOpen, aiConfig: aiConfigChoice, sidebarWidth, favorites, recent })
-  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid, aiOpen, aiConfigChoice, sidebarWidth, favorites, recent])
+    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid, aiOpen, aiConfig: aiConfigChoice, sidebarWidth, favorites, recent, cameras })
+  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid, aiOpen, aiConfigChoice, sidebarWidth, favorites, recent, cameras])
 
   // ---- resizable sidebar ---------------------------------------------------
   const dragSidebar = useCallback((event) => {
@@ -356,6 +358,22 @@ export default function App() {
     const untouched = Object.values(EXAMPLES).some((example) => example.code === code)
     if (untouched) loadExample(key)
     else setPendingExample(key)
+  }
+  const saveSnapshot = () => {
+    const data = viewport.current?.snapshot()
+    if (!data) {
+      notify('error', 'The 3D view is not ready yet.')
+      return
+    }
+    const id = nextId.current++
+    opsRef.current[id] = { purpose: 'snapshot', message: 'Saving PNG…' }
+    setOps({ ...opsRef.current })
+    const name = mode === 'library' ? exportName(objectKey, params) : 'openscad-model'
+    if (!bridge.send({ type: 'save_png', id, name, data })) {
+      delete opsRef.current[id]
+      setOps({ ...opsRef.current })
+      notify('error', 'Open this page from the OrcaCAD tab in OrcaSlicer to save a snapshot.')
+    }
   }
   const copyPath = async (file) => {
     const copied = await copyText(file)
@@ -624,8 +642,10 @@ export default function App() {
 
         <section className="stage" aria-label="Preview">
           {preview?.mesh ? (
-            <Viewport ref={viewport} mesh={preview.mesh} fitKey={fitKey} wireframe={view.wireframe}
-              edges={view.edges} grid={view.grid} dimmed={Boolean(error)} />
+            <Viewport ref={viewport} mesh={preview.mesh} fitKey={fitKey} camera={cameras[fitKey]}
+              wireframe={view.wireframe} edges={view.edges} grid={view.grid} measure={view.measure}
+              onCamera={(pose) => setCameras((all) => ({ ...all, [fitKey]: pose }))}
+              dimmed={Boolean(error)} />
           ) : null}
           <div className="stage-toolbar glass" role="toolbar" aria-label="View">
             {VIEW_BUTTONS.map(([key, label]) => (
@@ -635,6 +655,12 @@ export default function App() {
             <button type="button" className="icon-btn" title="Fit model" aria-label="Fit model" onClick={() => viewport.current?.fit()}>
               <Icon name="fit" />
             </button>
+            <span className="toolbar-sep" />
+            <button type="button" className="icon-btn" title="Save a PNG snapshot" aria-label="Save a PNG snapshot"
+              onClick={saveSnapshot}><Icon name="camera" /></button>
+            <button type="button" className={`icon-btn${view.measure ? ' is-on' : ''}`} title="Measure two points on the model"
+              aria-label="Measure two points on the model" aria-pressed={view.measure}
+              onClick={() => setView((v) => ({ ...v, measure: !v.measure }))}><Icon name="ruler" /></button>
             <span className="toolbar-sep" />
             {[['wireframe', 'Wireframe'], ['edges', 'Edges'], ['grid', 'Build plate grid']].map(([key, label]) => (
               <button key={key} type="button" className={`icon-btn${view[key] ? ' is-on' : ''}`} title={label}
