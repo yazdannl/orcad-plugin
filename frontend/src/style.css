@@ -309,6 +309,17 @@ html:root .object-card.is-active {
 html:root .section-head h2 { color: transparent; }
 .section-head p { font-size: .88rem; margin-top: 2px; }
 
+.head-actions { display: flex; flex: none; gap: 6px; }
+.share-block { display: grid; gap: 7px; margin: 2px 0 12px; padding: 10px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--raised); }
+.share-block > .btn { justify-self: start; }
+.share-block label { font-size: .76rem; }
+.share-block textarea {
+  width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid var(--line-strong); border-radius: 8px;
+  background: var(--field); color: var(--text); font: .78rem/1.4 var(--mono); resize: vertical; overflow-wrap: anywhere;
+}
+.share-block textarea:focus { border-color: var(--accent); }
+.share-actions { display: flex; gap: 7px; }
+
 .preset-block { display: grid; gap: 8px; margin: 2px 0 12px; }
 html:root .preset-title { color: var(--muted); }
 .preset-title { font-size: .76rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }

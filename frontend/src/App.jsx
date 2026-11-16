@@ -4,6 +4,7 @@ import { aiReducer, initialAIState } from './ai.js'
 import { activePreset, applyPreset, catalogError, catalogReady, categories, creditFor, defaults, groups, isDisabled, isLoaded, objectKeys, objectMatches, objectMeta, presets, qualityKeys, restoreParams, setParam, setSpec } from './catalog.js'
 import { loadSettings, saveSettings } from './storage.js'
 import { rememberKey, savedKeys, toggleKey } from './library.js'
+import { decodeConfig, encodeConfig } from './share.js'
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from './sidebar.js'
 import { decodeMesh, meshStats } from './mesh.js'
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js'
@@ -86,6 +87,8 @@ export default function App() {
   const [category, setCategory] = useState(ALL)
   const [favorites, setFavorites] = useState(() => savedKeys(saved.favorites, objectMeta))
   const [recent, setRecent] = useState(() => savedKeys(saved.recent, objectMeta))
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareText, setShareText] = useState('')
   const [quality, setQuality] = useState(() => (qualityKeys().includes(saved.quality) ? saved.quality : qualityKeys()[0] || 'balanced'))
   const [format, setFormat] = useState(saved.format === '3mf' ? '3mf' : 'stl')
   const [code, setCode] = useState(typeof saved.code === 'string' && saved.code.trim() ? saved.code : EXAMPLES[DEFAULT_EXAMPLE].code)
@@ -358,6 +361,32 @@ export default function App() {
     const copied = await copyText(file)
     notify(copied ? 'info' : 'error', copied ? 'Path copied to the clipboard.' : 'Could not access the clipboard.')
   }
+  const copyConfig = async () => {
+    if (!params) return
+    const copied = await copyText(encodeConfig(objectKey, params))
+    notify(copied ? 'success' : 'error', copied
+      ? 'Configuration copied. Paste it into OrcaCAD to load these settings.'
+      : 'Could not access the clipboard.')
+  }
+  const loadConfig = () => {
+    const config = decodeConfig(shareText)
+    if (!config || !objectMeta(config.object)) {
+      notify('error', 'That is not a configuration for a model in this version of OrcaCAD.')
+      return
+    }
+    const key = config.object
+    // Seed the saved values too: the full specification may only arrive after
+    // the selection changes, and the loading effect reads them at that point.
+    savedParams.current = { ...savedParams.current, [key]: config.params }
+    setObjectKey(key)
+    setParamsByObject((all) => (all[key] === undefined ? all : { ...all, [key]: restoreParams(key, config.params) }))
+    setRecent((list) => rememberKey(list, key))
+    setQuery('')
+    setCategory(ALL)
+    setShareOpen(false)
+    setShareText('')
+    notify('success', `Loaded settings for ${objectMeta(key).label}.`)
+  }
 
   const renderBlocked = Boolean(error?.fields && Object.keys(error.fields).length) && mode === 'library'
   const exportDisabled = !bridge.available || renderBlocked || (mode === 'library' && !params)
@@ -483,11 +512,32 @@ export default function App() {
                     <h2>{object?.label || 'No model selected'}</h2>
                     <p className="muted">{object?.description}</p>
                   </div>
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={resetParams} title="Restore default values"
-                    disabled={!ready}>
-                    <Icon name="reset" size={15} /><span>Reset</span>
-                  </button>
+                  <div className="head-actions">
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setShareOpen((open) => !open)}
+                      aria-expanded={shareOpen} title="Copy or load model settings">
+                      <Icon name="copy" size={15} /><span>Share</span>
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={resetParams} title="Restore default values"
+                      disabled={!ready}>
+                      <Icon name="reset" size={15} /><span>Reset</span>
+                    </button>
+                  </div>
                 </div>
+                {shareOpen && (
+                  <section className="share-block" aria-label="Share configuration">
+                    <button type="button" className="btn btn-sm" onClick={copyConfig} disabled={!params}>
+                      <Icon name="copy" size={14} /><span>Copy this configuration</span>
+                    </button>
+                    <label htmlFor="share-input" className="muted">Paste a configuration to load its model and settings</label>
+                    <textarea id="share-input" value={shareText} onChange={(event) => setShareText(event.target.value)}
+                      placeholder="orcad1:…" rows={3} spellCheck={false} />
+                    <div className="share-actions">
+                      <button type="button" className="btn btn-primary btn-sm" onClick={loadConfig} disabled={!shareText.trim()}>Load</button>
+                      <button type="button" className="btn btn-ghost btn-sm"
+                        onClick={() => { setShareOpen(false); setShareText('') }}>Cancel</button>
+                    </div>
+                  </section>
+                )}
                 {!ready && (
                   <p className="muted empty-search">{catalogReady()
                     ? (bridge.available ? 'Loading this model\u2019s parameters…' : 'Reconnect from OrcaSlicer to load this model\u2019s parameters.')

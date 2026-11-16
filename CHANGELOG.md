@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **Favorites and recently used models.** Every card has a star, the library has Favorites and Recent chips, and both lists survive a restart (invalid model keys are dropped when the catalog changes).
+- **Shareable configurations.** The model panel’s Share button copies the current model and its parameter values as one short `orcad1:` string; pasting that string loads the same settings, with unknown or invalid values dropped by the catalog's validation.
 
 ## 0.9.27 — Pi detection, code highlighting and Gridfinity vase bins (2026-11-16)
 

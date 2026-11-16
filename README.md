@@ -29,7 +29,8 @@ the build plate with one click.
   so a wide sidebar shows two or three times as many models at once, and the
   width is remembered. The row cut in half is the cue that there is more below.
   Star a card or use the Favorites and Recent chips to find models again; both
-  lists are saved locally.
+  lists are saved locally. **Share** in the model panel copies the chosen model
+  and its parameter values as a short text string; paste it back to load them.
 - **Code:** an OpenSCAD editor with examples, line numbers, error-line
   highlighting and Ctrl+Enter to render. `include <src/...>` loads the bundled
   Gridfinity library, and every other vendored library is on `OPENSCADPATH`
