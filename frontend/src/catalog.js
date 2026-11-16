@@ -99,6 +99,19 @@ export function groups(key) {
   return [...result].map(([name, params]) => ({ name, params }))
 }
 
+// Keeps a group only if it still has parameters matching every word.
+export function filterGroups(list, query = '') {
+  const words = normalize(query).split(' ').filter(Boolean)
+  if (!words.length) return list
+  return list.map((group) => ({
+    ...group,
+    params: group.params.filter((param) => {
+      const text = normalize([param.label, param.variable, param.group, param.description, param.unit].join(' '))
+      return words.every((word) => text.includes(word))
+    }),
+  })).filter((group) => group.params.length > 0)
+}
+
 function normalize(text) {
   return String(text ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
 }
@@ -107,11 +120,11 @@ function normalize(text) {
 export function objectMatches(object, key, query = '', category = 'all') {
   if (normalize(category) && normalize(category) !== 'all'
     && normalize(object.category) !== normalize(category)) return false
-  const needle = normalize(query)
-  if (!needle) return true
+  const words = normalize(query).split(' ').filter(Boolean)
+  if (!words.length) return true
   const tags = Array.isArray(object.tags) ? object.tags : []
-  return [key, object.label, object.category, object.description, ...tags]
-    .some((text) => normalize(text).includes(needle))
+  const fields = [key, object.label, object.category, object.description, ...tags].map(normalize)
+  return words.every((word) => fields.some((text) => text.includes(word)))
 }
 
 export function searchObjects(query = '', category = 'all') {

@@ -67,7 +67,9 @@ of truth for the UI, the validation and the renderer:
   step, unit, group and help text. The renderer passes them as `-D name=value`,
   so what the slider shows is what OpenSCAD gets. Free text parameters (the
   nameplate's text) get a textarea with a character counter; the string is
-  escaped into a quoted `-D` value.
+  escaped into a quoted `-D` value. A parameter search narrows the panels, and
+  each group can be reset on its own. Model search matches every word typed,
+  `/` focuses it, and the arrow keys open the highlighted result.
 - **Presets** are named parameter sets per object ("Desk panel (2x8)",
   "Stack of eight"). Picking one applies it on top of the current values and
   the header shows which preset is active; a manual edit just clears that

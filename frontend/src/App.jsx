@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { bridge } from './bridge.js'
 import { aiReducer, initialAIState } from './ai.js'
-import { activePreset, applyPreset, catalogError, catalogReady, categories, creditFor, defaults, groups, isDisabled, isLoaded, objectKeys, objectMatches, objectMeta, presets, qualityKeys, restoreParams, setParam, setSpec } from './catalog.js'
+import { activePreset, applyPreset, catalogError, catalogReady, categories, creditFor, defaults, filterGroups, groups, isDisabled, isLoaded, objectKeys, objectMatches, objectMeta, presets, qualityKeys, restoreParams, setParam, setSpec } from './catalog.js'
 import { loadSettings, saveSettings } from './storage.js'
 import { rememberKey, savedKeys, toggleKey } from './library.js'
 import { decodeConfig, encodeConfig } from './share.js'
@@ -85,6 +85,7 @@ export default function App() {
   const [paramsByObject, setParamsByObject] = useState({})
   const [catalogTick, setCatalogTick] = useState(0)
   const [query, setQuery] = useState('')
+  const [paramQuery, setParamQuery] = useState('')
   const [category, setCategory] = useState(ALL)
   const [favorites, setFavorites] = useState(() => savedKeys(saved.favorites, objectMeta))
   const [recent, setRecent] = useState(() => savedKeys(saved.recent, objectMeta))
@@ -110,6 +111,7 @@ export default function App() {
   const [toasts, setToasts] = useState([])
   const [attrib, setAttrib] = useState(null) // { key, rect } of the card whose credit popover is open
   const viewport = useRef(null)
+  const searchRef = useRef(null)
   const nextId = useRef(1)
   const latestPreview = useRef(0)
   const opsRef = useRef({})
@@ -129,6 +131,7 @@ export default function App() {
   const visibleObjects = sourceKeys.filter((key) => objectMatches(objectMeta(key), key, query, listMode ? ALL : category))
   const counts = { shown: visibleObjects.length, total: objectKeys().length }
   const objectPresets = presets(objectKey)
+  const visibleGroups = filterGroups(groups(objectKey), paramQuery)
   const activeName = params ? activePreset(objectKey, params) : null
   const chips = [ALL, FAVORITES, RECENT, ...categories()]
 
@@ -167,6 +170,41 @@ export default function App() {
   }, [attrib])
 
   useEffect(() => { setAttrib(null) }, [query, category])
+  useEffect(() => { setParamQuery('') }, [objectKey])
+
+  // / focuses the model search, and the arrow keys walk its results without
+  // taking focus away, so a card can be opened from the keyboard.
+  useEffect(() => {
+    const onKey = (event) => {
+      const target = event.target
+      const typing = target instanceof HTMLElement
+        && (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable)
+      if (event.key === '/' && !typing && mode === 'library') {
+        event.preventDefault()
+        searchRef.current?.focus()
+        return
+      }
+      if (target !== searchRef.current) return
+      if (event.key === 'Escape') { setQuery(''); return }
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        if (!visibleObjects.length) return
+        event.preventDefault()
+        const current = visibleObjects.indexOf(objectKey)
+        const next = event.key === 'ArrowDown'
+          ? current < 0 ? 0 : Math.min(current + 1, visibleObjects.length - 1)
+          : current < 0 ? visibleObjects.length - 1 : Math.max(current - 1, 0)
+        const key = visibleObjects[next]
+        setObjectKey(key)
+        setRecent((list) => rememberKey(list, key))
+        requestAnimationFrame(() => document.querySelector('.object-card.is-active')?.scrollIntoView({ block: 'nearest' }))
+      } else if (event.key === 'Enter' && visibleObjects[0]) {
+        event.preventDefault()
+        setObjectKey(visibleObjects[Math.max(0, visibleObjects.indexOf(objectKey))])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mode, visibleObjects, objectKey])
 
   const notify = useCallback((kind, message) => {
     const id = nextId.current++
@@ -346,6 +384,16 @@ export default function App() {
     setParamsByObject((all) => ({ ...all, [objectKey]: applyPreset(objectKey, all[objectKey], preset) }))
   }
   const resetParams = () => setParamsByObject((all) => ({ ...all, [objectKey]: defaults(objectKey) }))
+  const resetGroup = (name) => {
+    const group = groups(objectKey).find((entry) => entry.name === name)
+    if (!group) return
+    const values = defaults(objectKey)
+    setParamsByObject((all) => {
+      const next = { ...(all[objectKey] || {}) }
+      for (const param of group.params) next[param.variable] = values[param.variable]
+      return { ...all, [objectKey]: next }
+    })
+  }
   const [renderTick, setRenderTick] = useState(0)
   useEffect(() => { if (renderTick) requestPreview() }, [renderTick])
   const loadExample = (key) => {
@@ -463,7 +511,8 @@ export default function App() {
                 <div className="library-head">
                   <label className="search">
                     <Icon name="search" size={16} />
-                    <input type="search" placeholder="Search models" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Search models" />
+                    <input ref={searchRef} type="search" placeholder="Search models (/)" value={query}
+                      onChange={(e) => setQuery(e.target.value)} aria-label="Search models" />
                   </label>
                   <div className="category-chips" role="group" aria-label="Filter models by category">
                     {chips.map((name) => (
@@ -561,7 +610,14 @@ export default function App() {
                     ? (bridge.available ? 'Loading this model\u2019s parameters…' : 'Reconnect from OrcaSlicer to load this model\u2019s parameters.')
                     : missingLibrary()}</p>
                 )}
-                {ready && !!objectPresets.length && (
+                {ready && (
+                  <label className="param-search">
+                    <Icon name="search" size={14} />
+                    <input type="search" placeholder="Find a parameter" value={paramQuery}
+                      onChange={(e) => setParamQuery(e.target.value)} aria-label="Find a parameter" />
+                  </label>
+                )}
+                {ready && !!objectPresets.length && !paramQuery.trim() && (
                   <section className="preset-block" aria-label="Presets">
                     <h3 className="preset-title">Presets</h3>
                     <div className="preset-row">
@@ -576,9 +632,16 @@ export default function App() {
                     </div>
                   </section>
                 )}
-                {ready && groups(objectKey).map((group, index) => (
-                  <details key={`${objectKey}-${group.name}`} className="param-group" open={index < 3}>
-                    <summary><span>{group.name}</span><Icon name="chevron" size={16} /></summary>
+                {ready && visibleGroups.map((group, index) => (
+                  <details key={`${objectKey}-${group.name}`} className="param-group" open={index < 3 || Boolean(paramQuery.trim())}>
+                    <summary>
+                      <span>{group.name}</span>
+                      <span className="group-head-actions">
+                        <button type="button" className="group-reset" title={`Reset ${group.name} to defaults`}
+                          onClick={(event) => { event.preventDefault(); event.stopPropagation(); resetGroup(group.name) }}>Reset</button>
+                        <Icon name="chevron" size={16} />
+                      </span>
+                    </summary>
                     <div className="param-list">
                       {group.params.map((param) => (
                         <ParamField key={param.variable} param={param} value={params[param.variable]}
@@ -590,6 +653,9 @@ export default function App() {
                     </div>
                   </details>
                 ))}
+                {ready && !visibleGroups.length && (
+                  <p className="muted empty-search">No parameters match “{paramQuery.trim()}”.</p>
+                )}
               </div>
             </>
           ) : (

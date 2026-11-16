@@ -332,6 +332,18 @@ html:root .preset {
 html:root .preset:hover { border-color: var(--accent); background: var(--raised-2); }
 html:root .preset.is-active { border-color: transparent; background: var(--soft); color: var(--soft-text); box-shadow: 0 0 0 1px var(--accent); }
 
+html:root .param-search {
+  display: flex; align-items: center; gap: 7px; padding: 0 9px; margin: 4px 0 10px;
+  border: 1px solid var(--line-strong); border-radius: 8px; background: var(--field); color: var(--muted);
+}
+html:root .param-search:focus-within { border-color: var(--accent); }
+html:root .param-search input { flex: 1; width: 100%; padding: 7px 0; color: var(--text); }
+.group-head-actions { display: inline-flex; align-items: center; gap: 8px; }
+html:root .group-reset {
+  padding: 3px 6px; border-radius: 6px; color: var(--muted); font-size: .68rem; letter-spacing: 0;
+  text-transform: none; cursor: pointer;
+}
+html:root .group-reset:hover, html:root .group-reset:focus-visible { color: var(--accent); background: var(--hover); }
 .param-group { border-top: 1px solid var(--line); }
 .param-group summary {
   display: flex; align-items: center; justify-content: space-between; padding: 11px 2px; cursor: pointer; list-style: none;

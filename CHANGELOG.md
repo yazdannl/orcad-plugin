@@ -5,6 +5,7 @@
 - **Favorites and recently used models.** Every card has a star, the library has Favorites and Recent chips, and both lists survive a restart (invalid model keys are dropped when the catalog changes).
 - **Shareable configurations.** The model panel’s Share button copies the current model and its parameter values as one short `orcad1:` string; pasting that string loads the same settings, with unknown or invalid values dropped by the catalog's validation.
 - **Viewer upgrades.** The camera button saves a PNG snapshot to the exports folder, the ruler measures the distance between two clicked points on the model, and the viewing angle is remembered per model across restarts.
+- **Smarter search and parameter editing.** Every word of a model search must match somewhere, `/` focuses the search and the arrow keys open results, a parameter search narrows the panels, and each parameter group has its own Reset.
 
 ## 0.9.27 — Pi detection, code highlighting and Gridfinity vase bins (2026-11-16)
 

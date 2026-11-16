@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { activePreset, applyPreset, catalogError, catalogReady, categories, checkValue, creditFor, defaults, groups, isDisabled, isLoaded, objectKeys, objectMeta, objectMatches, presetList, presetMatches, presets, qualityKeys, restoreParams, resultCounts, searchObjects, setCatalog, setParam, setSpec } from './catalog.js'
+import { activePreset, applyPreset, catalogError, catalogReady, categories, checkValue, creditFor, defaults, filterGroups, groups, isDisabled, isLoaded, objectKeys, objectMeta, objectMatches, presetList, presetMatches, presets, qualityKeys, restoreParams, resultCounts, searchObjects, setCatalog, setParam, setSpec } from './catalog.js'
 
 const CATALOG = JSON.parse(readFileSync(new URL('../../openscad/catalog.json', import.meta.url), 'utf8'))
 
@@ -174,6 +174,25 @@ test('search also matches tags and tolerates case and stray whitespace', () => {
   assert.equal(objectMatches(tagged, 'screw_tray', 'plate'), false)
   assert.equal(objectMatches(tagged, 'screw_tray', ''), true)
   assert.equal(objectMatches({ label: 'Plain', category: 'Workshop' }, 'plain', 'hardware'), false)
+})
+
+test('every word must match somewhere, so searches can combine terms', () => {
+  const item = { label: 'Screw Tray', category: 'Workshop', description: 'Holds M3 screws.', tags: ['hardware'] }
+  assert.equal(objectMatches(item, 'tray', 'm3 screws'), true)
+  assert.equal(objectMatches(item, 'tray', 'm3 absent'), false)
+  assert.equal(objectMatches(item, 'tray', 'hardware workshop'), true)
+})
+
+test('parameter groups are filtered by every word and empty groups disappear', () => {
+  const list = [
+    { name: 'Size', params: [{ label: 'Width', variable: 'width', unit: 'mm', group: 'Size' },
+      { label: 'Height', variable: 'height', unit: 'mm', group: 'Size' }] },
+    { name: 'Finish', params: [{ label: 'Color', variable: 'color', group: 'Finish' }] },
+  ]
+  assert.equal(filterGroups(list, ''), list)
+  assert.deepEqual(filterGroups(list, 'width mm').map((g) => g.name), ['Size'])
+  assert.deepEqual(filterGroups(list, 'width mm')[0].params.map((p) => p.variable), ['width'])
+  assert.deepEqual(filterGroups(list, 'width color'), [])
 })
 
 test('a category chip narrows the list and combines with the query', () => {
