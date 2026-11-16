@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Favorites and recently used models.** Every card has a star, the library has Favorites and Recent chips, and both lists survive a restart (invalid model keys are dropped when the catalog changes).
+
 ## 0.9.27 — Pi detection, code highlighting and Gridfinity vase bins (2026-11-16)
 
 - **Pi reuses an existing Windows global npm install.** OrcaCAD checks npm's per-user package directory and standard Node locations even when the GUI was launched without them on `PATH`, avoiding an unnecessary managed installation.

@@ -8,6 +8,7 @@ const PATHS = {
   code: <><path d="m8 7-5 5 5 5M16 7l5 5-5 5M13.5 4l-3 16" /></>,
   library: <><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></>,
   search: <><circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" /></>,
+  star: <><path d="m12 3.2 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.8l6.2-.9Z" /></>,
   reset: <><path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.6" /><path d="M4 4v4.6h4.6" /></>,
   download: <><path d="M12 4v11m-4.5-4.5L12 15l4.5-4.5M5 20h14" /></>,
   plate: <><path d="M3 15.5 12 11l9 4.5L12 20Z" /><path d="M12 3v6.5m-3-3 3 3 3-3" /></>,

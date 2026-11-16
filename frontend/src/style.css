@@ -626,17 +626,23 @@ html:root .card-title { color: var(--muted); }
    the popover names the source, license, copyright holder and repository. */
 .object-cell { position: relative; display: flex; min-width: 0; }
 .object-cell > .object-card { flex: 1; min-width: 0; }
-html:root .object-attrib {
+html:root .object-attrib,
+html:root .object-star {
   position: absolute; top: 6px; right: 6px; display: grid; place-items: center;
   width: 22px; height: 22px; padding: 0; cursor: pointer; border-radius: 999px;
   border: 1px solid var(--line); background: var(--raised-2); color: var(--muted);
   opacity: .8; transition: opacity .15s, color .15s, border-color .15s;
 }
+html:root .object-star { left: 6px; right: auto; }
 html:root .object-attrib:hover,
 html:root .object-attrib:focus-visible,
-html:root .object-attrib[aria-expanded="true"] {
+html:root .object-attrib[aria-expanded="true"],
+html:root .object-star:hover,
+html:root .object-star:focus-visible,
+html:root .object-star[aria-pressed="true"] {
   opacity: 1; color: var(--accent); border-color: var(--accent); outline: none;
 }
+html:root .object-star[aria-pressed="true"] .icon { fill: currentColor; }
 .attrib-popover {
   position: fixed; z-index: 60; display: grid; gap: 4px; padding: 12px 30px 12px 14px;
   border-radius: var(--radius-sm); border: 1px solid var(--line-strong);

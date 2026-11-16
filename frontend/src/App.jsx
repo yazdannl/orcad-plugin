@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { bridge } from './bridge.js'
 import { aiReducer, initialAIState } from './ai.js'
-import { activePreset, applyPreset, catalogError, catalogReady, categories, creditFor, defaults, groups, isDisabled, isLoaded, objectKeys, objectMeta, presets, qualityKeys, restoreParams, resultCounts, searchObjects, setParam, setSpec } from './catalog.js'
+import { activePreset, applyPreset, catalogError, catalogReady, categories, creditFor, defaults, groups, isDisabled, isLoaded, objectKeys, objectMatches, objectMeta, presets, qualityKeys, restoreParams, setParam, setSpec } from './catalog.js'
 import { loadSettings, saveSettings } from './storage.js'
+import { rememberKey, savedKeys, toggleKey } from './library.js'
 import { SIDEBAR_MAX, SIDEBAR_MIN, clampSidebarWidth } from './sidebar.js'
 import { decodeMesh, meshStats } from './mesh.js'
 import { DEFAULT_EXAMPLE, EXAMPLES } from './examples.js'
@@ -34,6 +35,8 @@ function missingLibrary() {
     : 'The model library is unavailable. Open the OrcaCAD tab inside OrcaSlicer.'
 }
 const ALL = 'all'
+const FAVORITES = 'favorites'
+const RECENT = 'recent'
 const AUTO_RENDER_DELAY = 900
 const VIEW_BUTTONS = [['iso', 'Isometric'], ['front', 'Front'], ['right', 'Right'], ['top', 'Top']]
 
@@ -81,6 +84,8 @@ export default function App() {
   const [catalogTick, setCatalogTick] = useState(0)
   const [query, setQuery] = useState('')
   const [category, setCategory] = useState(ALL)
+  const [favorites, setFavorites] = useState(() => savedKeys(saved.favorites, objectMeta))
+  const [recent, setRecent] = useState(() => savedKeys(saved.recent, objectMeta))
   const [quality, setQuality] = useState(() => (qualityKeys().includes(saved.quality) ? saved.quality : qualityKeys()[0] || 'balanced'))
   const [format, setFormat] = useState(saved.format === '3mf' ? '3mf' : 'stl')
   const [code, setCode] = useState(typeof saved.code === 'string' && saved.code.trim() ? saved.code : EXAMPLES[DEFAULT_EXAMPLE].code)
@@ -112,11 +117,15 @@ export default function App() {
   // materialised the values.
   const ready = params !== null
   const busyOps = Object.values(ops)
-  const visibleObjects = searchObjects(query, category)
-  const counts = resultCounts(query, category)
+  // Favorites and recents are list modes: they keep catalog order unless the
+  // user types a query, and ignore the category chips.
+  const listMode = category === FAVORITES || category === RECENT
+  const sourceKeys = category === FAVORITES ? favorites : category === RECENT ? recent : objectKeys()
+  const visibleObjects = sourceKeys.filter((key) => objectMatches(objectMeta(key), key, query, listMode ? ALL : category))
+  const counts = { shown: visibleObjects.length, total: objectKeys().length }
   const objectPresets = presets(objectKey)
   const activeName = params ? activePreset(objectKey, params) : null
-  const chips = [ALL, ...categories()]
+  const chips = [ALL, FAVORITES, RECENT, ...categories()]
 
   // The parameters of the selected model, fetched once per object, and its values
   // seeded from the saved settings - keeping only values still valid for it.
@@ -235,8 +244,8 @@ export default function App() {
 
   // ---- persistence --------------------------------------------------------
   useEffect(() => {
-    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid, aiOpen, aiConfig: aiConfigChoice, sidebarWidth })
-  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid, aiOpen, aiConfigChoice, sidebarWidth])
+    saveSettings({ mode, objectKey, params: paramsByObject, quality, format, code, autoRender, edges: view.edges, grid: view.grid, aiOpen, aiConfig: aiConfigChoice, sidebarWidth, favorites, recent })
+  }, [mode, objectKey, paramsByObject, quality, format, code, autoRender, view.edges, view.grid, aiOpen, aiConfigChoice, sidebarWidth, favorites, recent])
 
   // ---- resizable sidebar ---------------------------------------------------
   const dragSidebar = useCallback((event) => {
@@ -413,7 +422,7 @@ export default function App() {
                     {chips.map((name) => (
                       <button key={name} type="button" className={`chip${category === name ? ' is-active' : ''}`}
                         aria-pressed={category === name} onClick={() => setCategory(name)}>
-                        {name === ALL ? 'All' : name}
+                        {name === FAVORITES ? '★ Favorites' : name === RECENT ? 'Recent' : name === ALL ? 'All' : name}
                       </button>
                     ))}
                   </div>
@@ -427,7 +436,8 @@ export default function App() {
                       return (
                         <div key={key} className="object-cell">
                           <button type="button" className={`object-card${key === objectKey ? ' is-active' : ''}`}
-                            aria-pressed={key === objectKey} onClick={() => { setObjectKey(key); setAttrib(null) }}
+                            aria-pressed={key === objectKey}
+                            onClick={() => { setObjectKey(key); setRecent((list) => rememberKey(list, key)); setAttrib(null) }}
                             title={`${meta.label} - ${meta.description}`}>
                             <Thumb name={key} />
                             <span className="object-body">
@@ -435,6 +445,13 @@ export default function App() {
                               <span className="object-cat">{meta.category}</span>
                               {meta.description && <span className="object-desc">{meta.description}</span>}
                             </span>
+                          </button>
+                          <button type="button" className="object-star"
+                            aria-pressed={favorites.includes(key)}
+                            aria-label={`${favorites.includes(key) ? 'Remove' : 'Add'} ${meta.label} ${favorites.includes(key) ? 'from' : 'to'} favorites`}
+                            title={favorites.includes(key) ? 'Remove from favorites' : 'Add to favorites'}
+                            onClick={() => setFavorites((list) => toggleKey(list, key))}>
+                            <Icon name="star" size={13} />
                           </button>
                           {credit && (
                             <button type="button" className="object-attrib"
@@ -453,9 +470,9 @@ export default function App() {
                       )
                     })}
                     {!visibleObjects.length && (
-                      <p className="muted empty-search">{catalogReady()
-                        ? <>No models match{query.trim() ? ` “${query.trim()}”` : ` the “${category}” category`}.</>
-                        : missingLibrary()}</p>
+                      <p className="muted empty-search">{!catalogReady() ? missingLibrary()
+                        : category === FAVORITES && !query.trim() ? 'Star a model to keep it here.'
+                          : `No models match${query.trim() ? ` “${query.trim()}”` : ` the “${category}” category`}.`}</p>
                     )}
                   </div>
                 </div>

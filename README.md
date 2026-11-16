@@ -28,6 +28,8 @@ the build plate with one click.
   viewport widens the sidebar: the cards then flow into as many columns as fit,
   so a wide sidebar shows two or three times as many models at once, and the
   width is remembered. The row cut in half is the cue that there is more below.
+  Star a card or use the Favorites and Recent chips to find models again; both
+  lists are saved locally.
 - **Code:** an OpenSCAD editor with examples, line numbers, error-line
   highlighting and Ctrl+Enter to render. `include <src/...>` loads the bundled
   Gridfinity library, and every other vendored library is on `OPENSCADPATH`
