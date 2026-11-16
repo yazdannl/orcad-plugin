@@ -14,7 +14,9 @@ SOURCE_REVISION: str = CATALOG["source"]["revision"]
 QUALITY_PROFILES: dict[str, dict[str, float]] = CATALOG["quality_profiles"]
 # Vendored OpenSCAD libraries, in the order they must appear on OPENSCADPATH.
 # The first entry is the Gridfinity Rebuilt tree, so `include <src/core/...>`
-# written for it keeps resolving. Roots are relative to this directory.
+# written for it keeps resolving; the 1.x tree further down carries its own
+# src/ next to its files, which OpenSCAD searches before OPENSCADPATH.
+# Roots are relative to this directory.
 LIBRARIES: dict[str, dict[str, Any]] = CATALOG.get("libraries", {})
 LIBRARY_DIRS: dict[str, Path] = {name: ROOT / spec["root"] for name, spec in LIBRARIES.items()}
 VENDOR_DIR: Path = ROOT / "vendor"

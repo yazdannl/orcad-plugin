@@ -1,7 +1,7 @@
 Vendored OpenSCAD libraries
 ===========================
 
-Ninety-one upstream OpenSCAD libraries are vendored unmodified under
+Ninety-two upstream OpenSCAD libraries are vendored unmodified under
 `openscad/vendor/`. Each one keeps its upstream LICENSE and a `REVISION` file
 that records the pinned commit, the license, the copyright holder and the
 vendored file list; the same revisions are registered in the `libraries` map
@@ -17,11 +17,28 @@ License:   MIT. Copyright (c) 2023 Kenneth Hodson and Copyright (c) 2023
            vendored LICENSE file.
 Vendored:  openscad/vendor/gridfinity-rebuilt-openscad-910e22d8/ - the nine
            src/core modules, the six src/helpers modules,
-           src/external/threads-scad/threads.scad, the two top-level library
-           files (gridfinity-rebuilt-baseplate.scad, gridfinity-rebuilt-bins.scad),
-           the upstream README.md and LICENSE. Every Gridfinity object in the
-           catalog is rendered from this tree, and code mode's
+           src/external/threads-scad/threads.scad, the three top-level library
+           files (gridfinity-rebuilt-baseplate.scad, gridfinity-rebuilt-bins.scad,
+           gridfinity-spiral-vase.scad), the upstream README.md and LICENSE.
+           Every Gridfinity object in the catalog except the vase-mode bin is
+           rendered from this tree, and code mode's
            `include <src/core/standard.scad>` resolves against it.
+
+gridfinity-rebuilt-openscad-v1 (vase mode)
+------------------------------------------
+Upstream:  https://github.com/kennetek/gridfinity-rebuilt-openscad
+Pinned at: c7dce9f6d595ba23b8bf798dd5069c600709697a
+License:   MIT. Copyright (c) 2023 Kenneth Hodson and Copyright (c) 2023
+           Zachary Freedman and Voidstar Lab LLC; both notices are in the
+           vendored LICENSE file.
+Vendored:  openscad/vendor/gridfinity-rebuilt-openscad-c7dce9f/ - the four
+           top-level library files, the three src/core modules, the
+           src/helpers module, src/external/threads-scad/threads.scad, the
+           upstream README.md and LICENSE. Supplies only the vase-mode bin
+           (gridfinity_vase_bin): 2.0.0 in the tree above no longer draws that
+           bin's side and back walls (upstream issue #340), while this 1.x
+           revision renders it complete and matches the parameter set the
+           Gridfinity Rebuilt web generator exposes for it.
 
 gridfinity_openscad (vector76)
 -----------------------------

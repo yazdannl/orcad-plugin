@@ -1,0 +1,31 @@
+c7dce9f6d595ba23b8bf798dd5069c600709697a
+
+Upstream: https://github.com/kennetek/gridfinity-rebuilt-openscad
+License: MIT
+Copyright: Copyright Kenneth Hodson; portions Copyright Zachary Freedman and Voidstar Lab LLC
+
+Pinned one release family behind vendor/gridfinity-rebuilt-openscad-910e22d8
+(2.0.0) because that release does not draw the side and back walls of its
+spiral-vase bins (upstream issue #340, "Walls not generating in
+gridfinity-spiral-vase.scad", still open; its 2.0.0 migration dropped the
+full-height wall profile that v1's block_wall swept). This revision is the last
+1.x state of the generator, renders a complete vase bin, and matches the
+parameter set the Gridfinity Rebuilt web generator exposes. Only the vase-file
+object (gridfinity_vase_bin) uses this tree; everything else stays on 2.0.0.
+
+All OpenSCAD sources (the four top-level library files, src/core, src/helpers
+and the bundled src/external/threads-scad), the upstream LICENSE and its
+README.md, copied verbatim from the pinned commit.
+
+Files:
+  LICENSE
+  README.md
+  gridfinity-rebuilt-baseplate.scad
+  gridfinity-rebuilt-bins.scad
+  gridfinity-rebuilt-lite.scad
+  gridfinity-spiral-vase.scad
+  src/core/gridfinity-rebuilt-holes.scad
+  src/core/gridfinity-rebuilt-utility.scad
+  src/core/standard.scad
+  src/external/threads-scad/threads.scad
+  src/helpers/generic-helpers.scad

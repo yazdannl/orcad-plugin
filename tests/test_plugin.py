@@ -23,6 +23,8 @@ import orcad
 from test_backend import stl
 
 scad = orcad.scad
+# The embedded backend is the same bundle, so both must hold the live catalog.
+OBJECT_COUNT = len(scad.CATALOG["objects"])
 
 
 class FakeRunner:
@@ -534,7 +536,7 @@ def test_a_cache_directory_that_cannot_be_vouched_for_is_replaced(tmp_path, monk
     result = subprocess.run([sys.executable, "-c", "import orcad; print(len(orcad.scad.CATALOG['objects']))"],
                             cwd=tmp_path, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
-    assert result.stdout.strip() == "350"
+    assert result.stdout.strip() == str(OBJECT_COUNT)
     assert (stale / orcad._BACKEND_MARKER).is_file()
     assert "def credit_for" in (stale / "openscad" / "catalog.py").read_text(encoding="utf-8")
 
@@ -567,7 +569,7 @@ def test_a_half_unpacked_backend_is_noticed_and_unpacked_again(tmp_path, monkeyp
     assert catalog.stat().st_size > 1000
     catalog.write_bytes(b"")  # a truncated write, valid Python, no credit_for
     out = _run_in_install(tmp_path, "import orcad, json; print(json.dumps(len(orcad.scad.CATALOG['objects'])))")
-    assert json.loads(out) == 350, "a short backend file has to be replaced, not imported"
+    assert json.loads(out) == OBJECT_COUNT, "a short backend file has to be replaced, not imported"
     assert catalog.stat().st_size > 1000
     assert (root / orcad._BACKEND_MARKER).is_file()
 
@@ -580,7 +582,7 @@ def test_a_backend_that_imports_badly_is_unpacked_again(tmp_path, monkeypatch):
     catalog.write_text("#" * catalog.stat().st_size)  # valid Python, no credit_for defined
     shutil.rmtree(root / "openscad" / "__pycache__", ignore_errors=True)  # nothing compiled to fall back on
     out = _run_in_install(tmp_path, "import orcad, json; print(json.dumps(len(orcad.scad.CATALOG['objects'])))")
-    assert json.loads(out) == 350
+    assert json.loads(out) == OBJECT_COUNT
     assert "def credit_for" in catalog.read_text(encoding="utf-8")
 
 
@@ -590,7 +592,7 @@ def test_a_tree_without_a_completion_marker_is_unpacked_again(tmp_path, monkeypa
     root = Path(json.loads(_run_in_install(tmp_path, "import orcad, json; print(json.dumps(str(orcad._BACKEND_ROOT)))")))
     (root / orcad._BACKEND_MARKER).unlink()
     out = _run_in_install(tmp_path, "import orcad, json; print(json.dumps(len(orcad.scad.CATALOG['objects'])))")
-    assert json.loads(out) == 350 and (root / orcad._BACKEND_MARKER).is_file()
+    assert json.loads(out) == OBJECT_COUNT and (root / orcad._BACKEND_MARKER).is_file()
 
 
 def test_a_broken_folder_install_falls_back_to_the_embedded_copy(tmp_path, monkeypatch):
@@ -603,7 +605,7 @@ def test_a_broken_folder_install_falls_back_to_the_embedded_copy(tmp_path, monke
     out = _run_in_install(tmp_path, "import orcad, json; print(json.dumps([len(orcad.scad.CATALOG['objects']), "
                                "str(orcad._BACKEND_ROOT)]))")
     objects, root = json.loads(out)
-    assert objects == 350 and Path(root).is_relative_to(orcad._cache_root())
+    assert objects == OBJECT_COUNT and Path(root).is_relative_to(orcad._cache_root())
     assert (beside / "catalog.py").read_text(encoding="utf-8") == "# no credit_for here\n"
 
 

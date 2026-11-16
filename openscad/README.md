@@ -99,6 +99,14 @@ printer-accessory, science and mechanical trees keep upstream's own per-part or
 per-sample directories (`Housings/`, `openscad/`, `src/`, `AuroraSCAD/`,
 `lithophane lamp/`), which is how the authors' own projects consume them.
 
+One upstream project appears twice: `gridfinity-rebuilt-openscad` (2.0.0) and
+`gridfinity-rebuilt-openscad-v1`. 2.0.0 stopped drawing the side and back walls
+of its spiral-vase bins (upstream issue #340), so the vase-mode bin is rendered
+from the last 1.x revision, which is also the revision the Gridfinity Rebuilt
+web generator uses for that model. Both trees sit next to each other on the
+search path; OpenSCAD resolves the v1 file's own `<src/...>` includes next to
+that file, so nothing mixes.
+
 Nothing under `vendor/` is ever edited. Every tree keeps a `REVISION` file
 whose first line is the pinned commit and which also records the upstream URL,
 the license, the copyright holder and the vendored file list, next to the
@@ -108,7 +116,8 @@ from the catalog.
 
 | Catalog key | Vendored files | License | Copyright | Pinned revision |
 | --- | --- | --- | --- | --- |
-| `gridfinity-rebuilt-openscad` | `src/core`, `src/helpers`, `src/external`, the two top-level library files, upstream `README.md` | MIT | Kenneth Hodson; Zachary Freedman and Voidstar Lab LLC | `910e22d8607fd7f5f51ad5e5cbc5287a76810bfd` |
+| `gridfinity-rebuilt-openscad` | `src/core`, `src/helpers`, `src/external`, the three top-level library files, upstream `README.md` | MIT | Kenneth Hodson; Zachary Freedman and Voidstar Lab LLC | `910e22d8607fd7f5f51ad5e5cbc5287a76810bfd` |
+| `gridfinity-rebuilt-openscad-v1` | the four top-level library files, `src/core`, `src/helpers`, `src/external`, upstream `README.md` | MIT | Kenneth Hodson; Zachary Freedman and Voidstar Lab LLC | `c7dce9f6d595ba23b8bf798dd5069c600709697a` |
 | `gridfinity-openscad` | 9 Gridfinity modules (baseplate, basic cup, cup modules, chess, FLSUN Q5 cup, glue stick, modules, silverware, socket holder) | MIT | Jamie (vector76) | `0e7308cd8fc7fb4191aa69d81175a90d10de751c` |
 | `openscad-gridfinity-block` | `gridfinity_block.scad` | Apache-2.0 | wromijn and the Gridfinity Block contributors | `6ef6d644fff81283c810c2b90197901ce6657f84` |
 | `gridfinity-basket-openscad` | `gridfinityBasket.scad` | MIT | LeKoYa and the Gridfinity Block contributors | `549dc4015e4511daeb7b942de96d2531101701db` |

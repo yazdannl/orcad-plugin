@@ -39,8 +39,9 @@ install()
 
 test('the index alone describes every model, before any parameters arrive', () => {
   const keys = objectKeys()
-  assert.equal(keys.length, 350)
+  assert.equal(keys.length, Object.keys(CATALOG.objects).length)
   assert.ok(keys.includes('gridfinity_bin'))
+  assert.ok(keys.includes('gridfinity_vase_bin'))
   assert.ok(qualityKeys().includes('balanced'))
   assert.ok(categories().length >= 32)
   for (const key of keys) {

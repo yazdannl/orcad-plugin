@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.27 — Pi detection, code highlighting and Gridfinity vase bins (2026-11-16)
+
+- **Pi reuses an existing Windows global npm install.** OrcaCAD checks npm's per-user package directory and standard Node locations even when the GUI was launched without them on `PATH`, avoiding an unnecessary managed installation.
+- **OpenSCAD code is syntax-highlighted.** The editor now uses CodeMirror 6 while preserving its run shortcut, Tab indentation, line numbers and error marker.
+- **Gridfinity gains a vase-mode bin and base foot.** The 351-model catalog uses a pinned 1.x source for the vase model because upstream 2.0.0 no longer draws its side and back walls; bins and baseplates also expose missing shared parameters and carry upstream attribution.
+
 ## 0.9.26 — permissions are declared, not chased (2026-11-15)
 
 - **The plugin declares its permissions while OrcaSlicer loads it.** A
