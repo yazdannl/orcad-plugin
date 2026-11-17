@@ -6,6 +6,17 @@ OrcaCAD adds an **OrcaCAD** tab next to Prepare / Preview / Device in OrcaSlicer
 lets you pick a parametric model, tune it with live 3D preview, and put it on
 the build plate with one click.
 
+### Screenshots
+
+![OrcaCAD model library with category chips and preview cards next to a live 3D preview](assets/library-picker.png)
+The library picker shows searchable model cards with rendered previews, category chips and the live 3D preview.
+
+![A selected Gridfinity Bin with parameter sliders and toggles beside the 3D viewport](assets/model-parameters.png)
+Selecting a model opens its editable parameters next to the 3D viewport and the dimensions panel.
+
+![OpenSCAD editor with source code, render controls and a 3D preview](assets/openscad-editor.png)
+The Code tab shows the OpenSCAD editor, its render controls and the same live preview.
+
 - **Library:** 351 parametric models across 32 categories - Gridfinity,
   Organization, Kitchen & bath, Workshop, 3D printing, Cases, Building,
   Cycling, Technic, Mechanical, Fasteners, Computer hardware, Toys & Games,
