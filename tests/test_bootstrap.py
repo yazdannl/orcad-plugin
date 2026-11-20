@@ -105,6 +105,27 @@ def test_zip_install_is_verified_and_reused_without_network(tmp_path, monkeypatc
 
 
 @posix_exec_only
+def test_zip_install_skips_audit_denied_config_files(tmp_path, monkeypatch, no_system_openscad):
+    """OrcaSlicer denies these names even under data_dir(), including on Windows."""
+    payload = zip_with({
+        "OpenSCAD/bin/openscad.exe": version_script(),
+        "OpenSCAD/fonts/05-osx-fonts.conf": b"alias macOS font directory",
+        "OpenSCAD/fonts/10-liberation.conf": b"alias Liberation fonts",
+        "OpenSCAD/settings/openscad.ini": b"[general]",
+        "OpenSCAD/CONF/notes.txt": b"a denied path component",
+    })
+    artifact = use_artifact(monkeypatch, ("win32", "x86_64"), sha256=hashlib.sha256(payload).hexdigest())
+    path, version = bootstrap.ensure_openscad(root=tmp_path, system="win32", machine="x86_64",
+                                              opener=Server({artifact.url: payload}))
+    destination = tmp_path / "win32-x86_64"
+    assert path.is_file() and path.name == "openscad.exe" and version == artifact.version
+    assert (destination / "orcad-install.json").is_file()
+    for name in ("OpenSCAD/fonts/05-osx-fonts.conf", "OpenSCAD/fonts/10-liberation.conf",
+                 "OpenSCAD/settings/openscad.ini", "OpenSCAD/CONF/notes.txt"):
+        assert not (destination / name).exists()
+
+
+@posix_exec_only
 def test_install_never_starts_the_downloaded_binary(tmp_path, monkeypatch, no_system_openscad):
     """One audited command line: installing must not run a `--version` probe.
 

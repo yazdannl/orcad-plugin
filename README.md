@@ -279,9 +279,9 @@ Orca Cloud is already a long path. The AI cache location is listed above.
   network access to `files.openscad.org`. The red pill now leads with the exact
   reason (for example `Network is unreachable`), and the same text is saved to
   `<Orca data dir>/orcad/openscad/setup-error.txt` for support. A dropped
-  connection is retried once. As an alternative, install an OpenSCAD 2023+
-  development snapshot and put it on `PATH`; the Windows installer location is
-  checked even when OrcaSlicer was launched from the desktop.
+  connection is retried once. As an alternative, install OpenSCAD 2023 or newer
+  and put it on `PATH`; the Windows installer location is checked even when
+  OrcaSlicer was launched from the desktop.
 - **AI setup fails:** Install pi needs network access to `nodejs.org` and the
   npm registry. Retry from the AI setup card; Node and Pi versions are pinned.
 - **A render fails:** the message appears over the viewport; the Library
