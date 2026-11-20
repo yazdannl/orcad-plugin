@@ -89,7 +89,7 @@ def artifact_for(system: str | None = None, machine: str | None = None) -> OpenS
     if key not in ARTIFACTS:
         raise BackendError(ErrorCode.UNSUPPORTED_PLATFORM,
                            f"Automatic OpenSCAD setup is unavailable for {system}/{arch}; "
-                           "install an OpenSCAD 2023+ development snapshot and add it to PATH.",
+                           "install OpenSCAD 2023 or newer and add it to PATH.",
                            {"platform": system, "architecture": arch})
     return ARTIFACTS[key]
 
@@ -182,6 +182,17 @@ def _safe_member_path(root: Path, name: str) -> Path:
     return target
 
 
+_AUDIT_DENIED_COMPONENTS = frozenset({
+    "secret", "secrets", "cert", "certs", "certificate", "certificates", "conf", "config",
+})
+
+
+def _audit_denied_member(name: str) -> bool:
+    parts = PurePosixPath(name).parts
+    return (any(part.casefold() in _AUDIT_DENIED_COMPONENTS for part in parts)
+            or parts[-1].casefold().endswith((".conf", ".ini")))
+
+
 def _safe_extract_zip(archive_path: Path, destination: Path) -> None:
     extracted = 0
     with zipfile.ZipFile(archive_path) as archive:
@@ -192,6 +203,11 @@ def _safe_extract_zip(archive_path: Path, destination: Path) -> None:
             target = _safe_member_path(destination, info.filename)
             if stat.S_ISLNK(info.external_attr >> 16):
                 raise ValueError("the OpenSCAD archive contains a symlink")
+            # OrcaSlicer PluginAuditManager::default_denied_path_keywords and
+            # has_denied_config_extension deny these names even under data_dir();
+            # writing them in-process aborts setup on Windows. They are optional.
+            if _audit_denied_member(info.filename):
+                continue
             if info.is_dir():
                 target.mkdir(parents=True, exist_ok=True)
                 continue
@@ -340,10 +356,10 @@ def ensure_openscad(*, root: str | os.PathLike[str] | None = None, system: str |
             shutil.rmtree(destination, ignore_errors=True)
             reason = str(exc)[:200]
             message = (f"Automatic OpenSCAD setup failed: {reason}. "
-                       "Check the network connection and retry, or install an OpenSCAD 2023+ development "
-                       "snapshot and add it to PATH.") if reason else (
-                       "Automatic OpenSCAD setup failed. Check the network connection and retry, or install an "
-                       "OpenSCAD 2023+ development snapshot and add it to PATH.")
+                       "Check the network connection and retry, or install OpenSCAD 2023 or newer "
+                       "and add it to PATH.") if reason else (
+                       "Automatic OpenSCAD setup failed. Check the network connection and retry, or install "
+                       "OpenSCAD 2023 or newer and add it to PATH.")
             raise BackendError(
                 ErrorCode.INSTALL_FAILED, message,
                 {"cause": str(exc)[:500], "version": artifact.version},
