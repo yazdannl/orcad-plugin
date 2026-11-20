@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Fixed renders with a release build of OpenSCAD.** `--enable=textmetrics` is now only passed to development snapshots; official releases (for example 2026.11-RC0) compile the `--enable` option out and every render aborted with `unrecognised option '--enable=textmetrics'`. Renders on the pinned snapshots are unchanged, and 2026.11+ builds no longer need the flag because `textmetrics()` is stable.
+
+- **Fixed the one-time OpenSCAD setup on Windows.** OrcaSlicer's plugin audit denies `.conf`/`.ini` files and paths with a `conf`/`config` component even inside its own data directory, so unpacking the downloaded Windows archive aborted on `fonts/05-osx-fonts.conf`. Setup now skips those optional fontconfig files; the rest of the verified install is unchanged.
+
 - **Fixed automatic OpenSCAD setup failures.** OpenSCAD installed with the standard Windows installer is now found even when OrcaSlicer was launched from the desktop without the shell `PATH`; a dropped network connection is retried once; the aarch64 download can fall back to a newer published snapshot; and a failed setup now shows the underlying reason instead of a generic network hint.
 
 - **Fixed a blank 3D preview.** The measurement markers were created from three.js's `Sphere` math type instead of `SphereGeometry`, which threw while the viewport mounted and left the stage empty even though the render itself succeeded.
