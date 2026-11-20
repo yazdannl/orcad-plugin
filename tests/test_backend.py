@@ -282,6 +282,12 @@ def test_the_command_line_is_the_same_for_every_render():
     assert backend_args("2023.09.11") == ["--enable=textmetrics", "--enable=manifold"]
     assert backend_args("2026.01.01") == ["--enable=textmetrics", "--backend=Manifold"]
     assert backend_args("2021.01") == [] and backend_args(None) == []
+    # Official releases have no --enable option, and textmetrics is stable since 2026.11.
+    assert backend_args("2026.11-RC0") == ["--backend=Manifold"]
+    assert backend_args("2026.11") == ["--backend=Manifold"]
+    assert backend_args("2026.11.05") == ["--backend=Manifold"]
+    release_argv = build_argv("openscad", Path("work/model.scad"), Path("work/out.stl"), "2026.11-RC0")
+    assert not any(argument.startswith("--enable") for argument in release_argv)
 
 
 def test_the_program_carries_the_parameters_the_command_line_used_to():
