@@ -221,13 +221,28 @@ def encode_define(name: str, value: Any) -> str:
     return f"{name}={encoded}"
 
 
+def version_components(version: str | None) -> tuple[int, ...]:
+    """The leading dotted numeric prefix: 2026.11-RC0 -> (2026, 11), not (2026, 11, 0)."""
+    match = re.match(r"(\d+(?:\.\d+)*)", version or "")
+    return tuple(int(part) for part in match.group(1).split(".")) if match else ()
+
+
 def backend_args(version: str | None) -> list[str]:
-    """Prefer the Manifold kernel and enable the text metrics the nameplate measures with."""
-    year = version_tuple(version or "")[0]
-    flags = ["--enable=textmetrics"] if year >= 2023 else []
-    if year >= 2024:
-        return [*flags, "--backend=Manifold"]
-    return [*flags, "--enable=manifold"] if year == 2023 else flags
+    """Prefer Manifold; ask for experimental features only on snapshots that accept them.
+
+    Official releases compile --enable out, and textmetrics() became a stable builtin
+    in 2026.11, so only older development snapshots need those flags.
+    """
+    parts = version_components(version)
+    if len(parts) < 2 or parts[0] < 2023:
+        return []
+    if len(parts) == 2:  # official release, e.g. 2026.11 or 2026.11-RC0
+        return ["--backend=Manifold"]
+    if parts[0] == 2023:  # snapshots of 2023 have no --backend option
+        return ["--enable=textmetrics", "--enable=manifold"]
+    if parts[:2] >= (2026, 11):
+        return ["--backend=Manifold"]
+    return ["--enable=textmetrics", "--backend=Manifold"]
 
 
 def build_argv(executable: str | os.PathLike[str], program: Path, output: Path,

@@ -22,7 +22,9 @@ also embeds it into the single-file plugin.
   errors as `{"fields": [...]}`.
 - `runner.py` probes OpenSCAD (2023 or newer; 2021.01 is rejected) and
   renders with safe argv lists (`-D name=value`, binary STL, the Manifold
-  kernel, `--enable=textmetrics` for the nameplate's text layout). String
+  kernel, plus `--enable=textmetrics` for the nameplate only on development
+  snapshots before 2026.11; 2023 snapshots also get `--enable=manifold`.
+  Official release builds do not accept `--enable` at all). String
   values are escaped into a quoted `-D` value. Each render has a timeout, can be cancelled cooperatively, and runs
   with a scrubbed environment. stderr is captured into readable errors with
   line numbers. Results go into a size-bounded, content-addressed STL cache
