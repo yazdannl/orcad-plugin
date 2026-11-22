@@ -5,7 +5,7 @@
 BACKEND_VERSION = "0.9.27"
 from .bootstrap import (ARTIFACTS, BOOTSTRAP_VERSION, SNAPSHOT_INDEX, artifact_for, cache_root,
                         ensure_openscad, installed_engine, openscad_bootstrap_status,
-                        start_openscad_bootstrap, wait_for_openscad)
+                        setup_processes, start_openscad_bootstrap, wait_for_openscad)
 from .catalog import (CATALOG, LIBRARIES, LIBRARY_DIR, LIBRARY_DIRS, LIBRARY_REVISION, QUALITY_PROFILES,
                       SOURCE_REVISION, credit_for, defaults, index_payload, object_spec, source_path, spec_payload)
 from .errors import BackendError, ErrorCode, ValidationError
@@ -22,6 +22,6 @@ __all__ = [
     "RenderResult", "SOURCE_REVISION", "ValidationError",
     "artifact_for", "backend_args", "build_argv", "cache_root", "child_env", "clean_log", "defaults", "discover_openscad",
     "DEVNULL_IN", "DEVNULL_OUT", "encode_define", "ensure_openscad", "installed_engine", "index_stl", "index_payload", "object_spec", "openscad_bootstrap_status",
-    "probe_openscad", "program", "source_path", "spec_payload", "credit_for", "start_openscad_bootstrap", "triangle_count", "validate_parameters",
+    "probe_openscad", "program", "setup_processes", "source_path", "spec_payload", "credit_for", "start_openscad_bootstrap", "triangle_count", "validate_parameters",
     "wait_for_openscad", "write_3mf",
 ]
