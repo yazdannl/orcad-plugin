@@ -4,6 +4,8 @@
 
 - **Fixed renders with a release build of OpenSCAD.** `--enable=textmetrics` is now only passed to development snapshots; official releases (for example 2026.11-RC0) compile the `--enable` option out and every render aborted with `unrecognised option '--enable=textmetrics'`. Renders on the pinned snapshots are unchanged, and 2026.11+ builds no longer need the flag because `textmetrics()` is stable.
 
+- **Fixed the one-time OpenSCAD setup on macOS.** An interrupted setup could leave the OpenSCAD disk image mounted read-only at `<cache>/darwin-universal/mnt`, after which every retry failed with `[Errno 30] Read-only file system` while clearing the install folder. Setup now mounts the image beside that folder, detaches a leftover image before clearing anything, and reports the exact `hdiutil detach` command if a volume stays busy. `hdiutil` and `ditto` are also declared while the plugin loads, so the first run no longer trips over worker-thread permission prompts.
+
 - **Fixed the one-time OpenSCAD setup on Windows.** OrcaSlicer's plugin audit denies `.conf`/`.ini` files and paths with a `conf`/`config` component even inside its own data directory, so unpacking the downloaded Windows archive aborted on `fonts/05-osx-fonts.conf`. Setup now skips those optional fontconfig files; the rest of the verified install is unchanged.
 
 - **Fixed automatic OpenSCAD setup failures.** OpenSCAD installed with the standard Windows installer is now found even when OrcaSlicer was launched from the desktop without the shell `PATH`; a dropped network connection is retried once; the aarch64 download can fall back to a newer published snapshot; and a failed setup now shows the underlying reason instead of a generic network hint.

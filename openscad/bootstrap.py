@@ -297,10 +297,9 @@ def _install_appimage(archive: Path, destination: Path) -> Path:
 def _install_dmg(archive: Path, destination: Path) -> Path:
     """Copy OpenSCAD.app out of the disk image.
 
-    The mount point is fixed under the cache rather than a fresh temp directory:
-    OrcaSlicer's plugin audit hook remembers a process grant per exact command
-    string, and a random directory in the hdiutil command line would ask for the
-    same permission on every install attempt.
+    The mount point is a fixed path beside the install folder, not a fresh temp
+    directory: an interrupted setup leaves the volume at a path the next
+    attempt can detach, and never inside the folder that attempt has to clear.
     """
     mount = destination.parent / "mnt"
     _release_stale_mounts(destination)
