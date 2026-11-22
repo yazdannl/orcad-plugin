@@ -1,6 +1,7 @@
 """Plugin entry point: message protocol, render queue, exports and handoff."""
 from __future__ import annotations
 
+import ast
 import base64
 import ctypes
 import gzip
@@ -20,6 +21,7 @@ from pathlib import Path
 import pytest
 
 import orcad
+from fakes import fake_command, posix_exec_only
 from test_backend import stl
 
 scad = orcad.scad
@@ -274,6 +276,41 @@ def test_engine_less_permission_declaration_includes_dmg_setup_processes(monkeyp
     assert declared["threading"] is True
     assert declared["network"] == ["https://example.invalid/snapshots/"]
     assert declared["process"] == ["/usr/bin/hdiutil", "/usr/bin/ditto"]
+
+
+@posix_exec_only
+def test_the_declared_render_command_is_the_one_the_runner_executes(tmp_path, monkeypatch):
+    """A load-time process grant only covers the exact command the renderer runs."""
+    exe = fake_command(tmp_path / "bin", "openscad", "print('OpenSCAD version 2026.11-RC0')\n")
+    cache = tmp_path / "cache"
+    monkeypatch.setattr(orcad, "CACHE_DIR", cache)
+    monkeypatch.setattr(scad, "installed_engine", lambda _root: (exe, "2026.11-RC0"))
+
+    declared = {}
+
+    class FakeOrca:
+        @staticmethod
+        def request_permissions(**kwargs):
+            declared.update(kwargs)
+
+    monkeypatch.setattr(orcad, "orca", FakeOrca())
+    orcad._declare_permissions()
+
+    executed = []
+
+    def fake_run(argv, cwd, stderr, timeout, cancel):
+        executed.append(list(argv))
+        Path(argv[argv.index("-o") + 1]).write_bytes(stl())
+        return 0
+
+    runner = importlib.import_module(f"{scad.__name__}.runner")
+    monkeypatch.setattr(runner, "_run", fake_run)
+    scad.OpenSCADRunner(exe, cache_dir=cache, version="2026.11-RC0").render_object("box", {}, "draft")
+
+    assert len(executed) == 1
+    assert executed[0] == ast.literal_eval(declared["process"][0])
+    # 2026.11-RC0 is an official release: the compiled-out --enable flag must not appear.
+    assert "--enable=textmetrics" not in executed[0]
 
 
 def test_large_meshes_switch_to_32_bit_indices(monkeypatch):

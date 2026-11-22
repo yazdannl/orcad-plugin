@@ -307,15 +307,26 @@ def _declare_permissions() -> None:
             request["process"] = setup_processes
     else:
         executable, version = engine
-        request["process"] = [repr(scad.build_argv(Path(executable).resolve(),
-                                                   CACHE_DIR / "work" / "model.scad",
-                                                   CACHE_DIR / "work" / "out.stl", version))]
+        request["process"] = [repr(_render_command(executable, version))]
     try:
         orca.request_permissions(**request)
     except AttributeError:
         pass  # an OrcaSlicer build from before the declaration API; runtime prompts still work
     except Exception:  # a denial aborts the load by design, and must not also raise here
         traceback.print_exc()
+
+
+def _render_command(executable: str | Path, version: str) -> list[str]:
+    """The exact render command, shared with the runner's fixed work files.
+
+    OrcaSlicer remembers a process grant per command string, so the declaration
+    made while loading must name the executable and both work files the renderer
+    will use - hence the runner's own PROGRAM/OUTPUT constants rather than a
+    second copy of the file names.
+    """
+    work = CACHE_DIR / "work"
+    return scad.build_argv(Path(executable).resolve(), work / scad.OpenSCADRunner.PROGRAM,
+                           work / scad.OpenSCADRunner.OUTPUT, version)
 
 
 def _folder_backend_version() -> str | None:
