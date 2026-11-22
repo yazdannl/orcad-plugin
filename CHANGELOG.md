@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.29 — OpenSCAD setup fixes and viewer tools (2026-11-22)
 
 - **Fixed renders with a release build of OpenSCAD.** `--enable=textmetrics` is now only passed to development snapshots; official releases (for example 2026.11-RC0) compile the `--enable` option out and every render aborted with `unrecognised option '--enable=textmetrics'`. Renders on the pinned snapshots are unchanged, and 2026.11+ builds no longer need the flag because `textmetrics()` is stable.
 

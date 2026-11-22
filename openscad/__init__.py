@@ -2,7 +2,7 @@
 # The release this backend belongs to. orcad.py compares it with its own version
 # before using a backend folder that lies beside it: a page from one release and
 # a backend from another cannot import against each other.
-BACKEND_VERSION = "0.9.27"
+BACKEND_VERSION = "0.9.29"
 from .bootstrap import (ARTIFACTS, BOOTSTRAP_VERSION, SNAPSHOT_INDEX, artifact_for, cache_root,
                         ensure_openscad, installed_engine, openscad_bootstrap_status,
                         setup_processes, start_openscad_bootstrap, wait_for_openscad)
