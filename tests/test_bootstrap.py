@@ -64,6 +64,57 @@ class Server:
         return Response(body, url)
 
 
+class FakeDiskImages:
+    """An in-memory mount table plus fake hdiutil/ditto, all files under tmp_path."""
+
+    def __init__(self, tmp_path, *, detach_clears=True, observe=None):
+        self.tmp_path = tmp_path
+        self.detach_clears = detach_clears
+        self.observe = observe or (lambda _event, _path: None)
+        self.mounts = set()
+        self.commands = []
+
+    def mount(self, path):
+        path.mkdir(parents=True, exist_ok=True)
+        self.mounts.add(path)
+
+    def is_mount(self, path):
+        return path in self.mounts
+
+    def run_quiet(self, argv, cwd=None, *, allow_failure=False):
+        self.commands.append(list(argv))
+        tool = Path(argv[0]).name
+        action = argv[1] if tool == "hdiutil" else None
+        if tool == "hdiutil" and action == "attach":
+            mount = Path(argv[argv.index("-mountpoint") + 1])
+            self.observe("attach", mount)
+            (mount / "OpenSCAD.app").mkdir(parents=True, exist_ok=True)
+            self.mount(mount)
+        elif tool == "hdiutil" and action == "detach":
+            path = Path(argv[2])
+            self.observe("detach", path)
+            clears = self.detach_clears(path) if callable(self.detach_clears) else self.detach_clears
+            if clears:
+                self.mounts.discard(path)
+        elif tool == "ditto":
+            target = Path(argv[-1])
+            self.observe("ditto", target)
+            binary = target / "Contents" / "MacOS" / "OpenSCAD"
+            binary.parent.mkdir(parents=True, exist_ok=True)
+            binary.write_bytes(b"fake OpenSCAD")
+        else:
+            raise AssertionError(f"unexpected setup command: {argv}")
+
+
+def fake_dmg_setup(monkeypatch, fake, tmp_path, payload=b"fake dmg"):
+    monkeypatch.setattr(bootstrap, "_is_macos", lambda: True)
+    monkeypatch.setattr(bootstrap, "_is_mount", fake.is_mount)
+    monkeypatch.setattr(bootstrap, "_run_quiet", fake.run_quiet)
+    artifact = use_artifact(monkeypatch, ("darwin", "universal"),
+                            sha256=hashlib.sha256(payload).hexdigest())
+    return artifact, Server({artifact.url: payload})
+
+
 @pytest.fixture
 def no_system_openscad(monkeypatch):
     def missing(*_args, **_kwargs):
@@ -224,6 +275,104 @@ def test_failed_setup_writes_a_diagnostic(tmp_path, monkeypatch):
     with pytest.raises(BackendError, match="offline"):
         bootstrap.wait_for_openscad(timeout=5, root=tmp_path)
     assert "offline" in (tmp_path / "setup-error.txt").read_text(encoding="utf-8")
+
+
+def test_macos_stale_mount_is_detached_before_the_install_folder_is_cleared(
+        tmp_path, monkeypatch, no_system_openscad):
+    legacy_mount = tmp_path / "darwin-universal" / "mnt"
+    sentinel = legacy_mount / "stale.txt"
+    observations = []
+
+    def observe(event, path):
+        observations.append((event, path, sentinel.exists()))
+
+    fake = FakeDiskImages(tmp_path, observe=observe)
+    artifact, server = fake_dmg_setup(monkeypatch, fake, tmp_path)
+    legacy_mount.mkdir(parents=True)
+    (legacy_mount / "OpenSCAD.app").mkdir()
+    sentinel.write_text("left mounted by the previous setup")
+    fake.mount(legacy_mount)
+
+    executable, version = bootstrap.ensure_openscad(
+        root=tmp_path, system="darwin", machine="arm64", opener=server)
+
+    destination = tmp_path / "darwin-universal"
+    assert executable == destination / "OpenSCAD.app" / "Contents" / "MacOS" / "OpenSCAD"
+    assert executable.is_file() and version == artifact.version
+    assert (destination / "orcad-install.json").is_file()
+    detached = ("detach", legacy_mount, True)
+    attached = ("attach", destination.parent / "mnt", False)
+    assert detached in observations, "the stale volume must be detached before rmtree reaches it"
+    assert attached in observations, "the fake attach must see an already cleared install folder"
+    assert observations.index(detached) < observations.index(attached)
+    assert not fake.is_mount(legacy_mount) and not fake.is_mount(destination.parent / "mnt")
+    assert not sentinel.exists()
+
+
+def test_macos_mount_that_never_clears_reports_its_path_and_detach_remedy(
+        tmp_path, monkeypatch, no_system_openscad):
+    fake = FakeDiskImages(tmp_path, detach_clears=False)
+    artifact, server = fake_dmg_setup(monkeypatch, fake, tmp_path)
+    monkeypatch.setattr(bootstrap, "_MOUNT_DETACH_TIMEOUT", 0.05)
+    monkeypatch.setattr(bootstrap, "_MOUNT_DETACH_POLL", 0.01)
+    mount = tmp_path / "darwin-universal" / "mnt"
+    fake.mount(mount)
+
+    with pytest.raises(BackendError) as info:
+        bootstrap.ensure_openscad(root=tmp_path, system="darwin", machine="arm64", opener=server)
+
+    message = f"{info.value.message} {info.value.details}"
+    assert info.value.code == ErrorCode.INSTALL_FAILED
+    assert str(mount) in message
+    assert "hdiutil detach" in message
+    assert ["/usr/bin/hdiutil", "detach", str(mount), "-force"] in fake.commands
+    assert not any(command[:2] == ["/usr/bin/hdiutil", "attach"] for command in fake.commands)
+
+
+def test_macos_dmg_attaches_beside_the_install_folder_not_inside_it(
+        tmp_path, monkeypatch, no_system_openscad):
+    fake = FakeDiskImages(tmp_path)
+    _artifact, server = fake_dmg_setup(monkeypatch, fake, tmp_path)
+
+    bootstrap.ensure_openscad(root=tmp_path, system="darwin", machine="arm64", opener=server)
+
+    attach = next(command for command in fake.commands
+                  if command[:2] == ["/usr/bin/hdiutil", "attach"])
+    assert attach[attach.index("-mountpoint") + 1] == str(tmp_path / "mnt")
+    assert str(tmp_path / "darwin-universal" / "mnt") not in attach
+
+
+def test_macos_cleanup_detaches_current_mount_even_if_a_legacy_volume_is_stuck(
+        tmp_path, monkeypatch, no_system_openscad):
+    legacy = tmp_path / "darwin-universal" / "mnt"
+    current = tmp_path / "mnt"
+    fake = FakeDiskImages(tmp_path, detach_clears=lambda path: path != legacy)
+
+    def observe(event, path):
+        if event == "attach":
+            fake.mount(legacy)  # a leftover volume reappears while this image is mounted
+
+    fake.observe = observe
+    monkeypatch.setattr(bootstrap, "_MOUNT_DETACH_TIMEOUT", 0.05)
+    monkeypatch.setattr(bootstrap, "_MOUNT_DETACH_POLL", 0.01)
+    _artifact, server = fake_dmg_setup(monkeypatch, fake, tmp_path)
+
+    bootstrap.ensure_openscad(root=tmp_path, system="darwin", machine="arm64", opener=server)
+
+    assert ["/usr/bin/hdiutil", "detach", str(current), "-force"] in fake.commands
+    assert ["/usr/bin/hdiutil", "detach", str(legacy), "-force"] in fake.commands
+    assert not fake.is_mount(current), "cleanup must never leave the current image attached"
+    assert fake.is_mount(legacy)
+
+
+@pytest.mark.parametrize("macos, expected", [
+    (True, ["/usr/bin/hdiutil", "/usr/bin/ditto"]),
+    (False, []),
+])
+def test_setup_processes_declares_dmg_tools_only_on_macos(monkeypatch, macos, expected):
+    monkeypatch.setattr(bootstrap, "_is_macos", lambda: macos)
+    assert bootstrap.DMG_TOOLS == ("/usr/bin/hdiutil", "/usr/bin/ditto")
+    assert bootstrap.setup_processes() == expected
 
 
 def test_background_state_reports_failures_and_retries(tmp_path, monkeypatch):

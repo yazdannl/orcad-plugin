@@ -300,6 +300,11 @@ def _declare_permissions() -> None:
     engine = scad.installed_engine(_cache_root() / "openscad")
     if engine is None:
         request["network"] = [scad.SNAPSHOT_INDEX]  # the one-time OpenSCAD download
+        # hdiutil/ditto run from the setup worker, where an undeclared process
+        # event is denied and only posts a dialog.
+        setup_processes = scad.setup_processes()
+        if setup_processes:
+            request["process"] = setup_processes
     else:
         executable, version = engine
         request["process"] = [repr(scad.build_argv(Path(executable).resolve(),

@@ -37,6 +37,9 @@ MAX_DOWNLOAD_BYTES = 250 * 1024 * 1024
 MAX_EXTRACTED_BYTES = 800 * 1024 * 1024
 NETWORK_TIMEOUT = 60.0
 INSTALL_TIMEOUT = 300.0
+DMG_TOOLS = ("/usr/bin/hdiutil", "/usr/bin/ditto")
+_MOUNT_DETACH_TIMEOUT = 10.0
+_MOUNT_DETACH_POLL = 0.1
 
 
 @dataclass(frozen=True)
@@ -233,6 +236,50 @@ def _run_quiet(argv: list[str], cwd: Path | None = None, *, allow_failure: bool 
         raise RuntimeError(f"{Path(argv[0]).name} failed with exit code {result.returncode}")
 
 
+def _is_macos() -> bool:
+    return sys.platform == "darwin"
+
+
+def _is_mount(path: Path) -> bool:
+    return os.path.ismount(path)
+
+
+def _detach_mount(path: Path) -> bool:
+    """Detach one volume without raising; True when the path is no longer mounted."""
+    try:
+        if not _is_mount(path):
+            return True
+        _run_quiet([DMG_TOOLS[0], "detach", str(path), "-force"], allow_failure=True)
+        deadline = time.monotonic() + _MOUNT_DETACH_TIMEOUT
+        while _is_mount(path) and time.monotonic() < deadline:
+            time.sleep(_MOUNT_DETACH_POLL)
+        return not _is_mount(path)
+    except Exception:
+        return False
+
+
+def setup_processes() -> list[str]:
+    """Processes the setup worker may start, declared before OrcaSlicer audits them."""
+    return list(DMG_TOOLS) if _is_macos() else []
+
+
+def _release_stale_mounts(destination: Path) -> None:
+    """Detach disk images left mounted by an earlier DMG setup.
+
+    Both the legacy mount inside the install folder and the current one beside
+    it are checked; a stale volume must be gone before rmtree can touch the
+    directory holding it.
+    """
+    if not _is_macos():
+        return
+    for path in (destination / "mnt", destination.parent / "mnt"):
+        if not _detach_mount(path):
+            raise RuntimeError(
+                f"a mounted OpenSCAD disk image is stuck at {path}; "
+                f"run 'hdiutil detach \"{path}\" -force' and retry"
+            )
+
+
 def _install_appimage(archive: Path, destination: Path) -> Path:
     """Extract instead of mounting: AppImages need FUSE, which many systems lack."""
     image = destination / archive.name
@@ -255,26 +302,34 @@ def _install_dmg(archive: Path, destination: Path) -> Path:
     string, and a random directory in the hdiutil command line would ask for the
     same permission on every install attempt.
     """
-    mount = destination / "mnt"
+    mount = destination.parent / "mnt"
+    _release_stale_mounts(destination)
     shutil.rmtree(mount, ignore_errors=True)
     mount.mkdir(parents=True)
-    _run_quiet(["hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mount), str(archive)])
     try:
+        _run_quiet([DMG_TOOLS[0], "attach", "-nobrowse", "-readonly",
+                    "-mountpoint", str(mount), str(archive)])
         app = next(iter(sorted(mount.glob("*.app"))), None)
         if app is None:
             raise FileNotFoundError("OpenSCAD.app was not found in the disk image")
         # ditto, not a copy: the bundle's signature and extended attributes are
         # what macOS checks before it runs the app.
-        _run_quiet(["ditto", str(app), str(destination / app.name)])
+        _run_quiet([DMG_TOOLS[1], str(app), str(destination / app.name)])
     finally:
-        _run_quiet(["hdiutil", "detach", str(mount), "-force"], allow_failure=True)
-        shutil.rmtree(mount, ignore_errors=True)
+        # Detach this image first: a stuck legacy volume must never leave the
+        # current one mounted, and cleanup must not replace a copy-step error.
+        if _detach_mount(mount):
+            shutil.rmtree(mount, ignore_errors=True)
+        if _is_macos():
+            _detach_mount(destination / "mnt")
     return _find_executable(destination, "OpenSCAD")
 
 
 def _install(artifact: OpenSCADArtifact, archive: Path, destination: Path) -> tuple[Path, str]:
+    _release_stale_mounts(destination)
+    shutil.rmtree(destination, ignore_errors=True)
     if destination.exists():
-        shutil.rmtree(destination)
+        raise RuntimeError(f"the OpenSCAD install directory at {destination} could not be cleared; retry the setup")
     destination.mkdir(parents=True)
     if artifact.kind == "appimage":
         executable = _install_appimage(archive, destination)
@@ -353,7 +408,11 @@ def ensure_openscad(*, root: str | os.PathLike[str] | None = None, system: str |
             finally:
                 archive.unlink(missing_ok=True)
         except Exception as exc:
-            shutil.rmtree(destination, ignore_errors=True)
+            try:
+                if not (_is_macos() and _is_mount(destination / "mnt")):
+                    shutil.rmtree(destination, ignore_errors=True)
+            except Exception:
+                pass
             reason = str(exc)[:200]
             message = (f"Automatic OpenSCAD setup failed: {reason}. "
                        "Check the network connection and retry, or install OpenSCAD 2023 or newer "

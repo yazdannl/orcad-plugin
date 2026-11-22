@@ -254,6 +254,28 @@ def test_engine_setup_progress_is_reported(tmp_path, monkeypatch):
     assert any(m["type"] == "engine" and m["state"] == "ready" for m in posted)
 
 
+def test_engine_less_permission_declaration_includes_dmg_setup_processes(monkeypatch):
+    declared = {}
+
+    class FakeOrca:
+        @staticmethod
+        def request_permissions(**kwargs):
+            declared.update(kwargs)
+
+    monkeypatch.setattr(orcad, "orca", FakeOrca())
+    monkeypatch.setattr(orcad, "scad", types.SimpleNamespace(
+        SNAPSHOT_INDEX="https://example.invalid/snapshots/",
+        installed_engine=lambda _root: None,
+        setup_processes=lambda: ["/usr/bin/hdiutil", "/usr/bin/ditto"],
+    ))
+
+    orcad._declare_permissions()
+
+    assert declared["threading"] is True
+    assert declared["network"] == ["https://example.invalid/snapshots/"]
+    assert declared["process"] == ["/usr/bin/hdiutil", "/usr/bin/ditto"]
+
+
 def test_large_meshes_switch_to_32_bit_indices(monkeypatch):
     mesh = scad.IndexedMesh(array("f", [0.0] * 3 * 70000), array("I", [0, 1, 69999]))
     monkeypatch.setattr(scad, "index_stl", lambda data: mesh)
