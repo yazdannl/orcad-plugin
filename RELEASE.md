@@ -81,17 +81,20 @@ token, so there is no secret in this repository.
 After that, tagging a release publishes both places:
 
 - `ci.yml`'s `release` job creates the GitHub release and then runs
-  `packaging/publish_orcacloud.sh`, which uploads `orcad_any.py` to
-  `https://api.orcaslicer.com/api/v1/plugin-publish/releases`.
+  `packaging/publish_orcacloud.sh`, which uploads `orcad_any.py` to the
+  plugin-specific release URL shown in Edit plugin → GitHub publishing
+  (`https://api.orcaslicer.com/api/v1/plugin-publish/plugins/34116d80-1599-4b6c-a577-28d205457fcf/releases`).
+  A reconnected repository has not published through the generic endpoint yet,
+  so it must use this URL.
 - `publish-orcacloud.yml` does the same for a release published from the GitHub
   UI. It cannot cover tag-push releases, because GitHub does not start workflow
   runs for events created with the built-in `GITHUB_TOKEN`.
 
 The script refuses a tag that disagrees with the plugin's own `version`, and
 fails with a readable reason otherwise: HTTP 401 means the repository is not
-connected to one of your plugins, and a version error means the tag is not
-higher than the published one. On a 401 the run also prints the OIDC token's
-public claims (`sub`, `repository`, `repository_id`, `workflow_ref`) next to the
+connected to this plugin (or the connection was just changed), and a version
+error means the tag is not higher than the published one. On a 401 the run
+also prints the OIDC token's public claims (`sub`, `repository`, `repository_id`, `workflow_ref`) next to the
 portal's **Connected to …** line, so a link that exists but still gets rejected
 can be compared claim by claim instead of guessed at. Orca Cloud requires the uploaded filename to end
 in a supported target OS/arch suffix, hence the `orcad_any.py` copy of

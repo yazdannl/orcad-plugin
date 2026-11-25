@@ -4,7 +4,8 @@ name: Publish to OrcaCloud
 # token signed by GitHub (audience "orcacloud"), so there is no secret to store,
 # copy or rotate. The repository must be connected to exactly one of your
 # Orca Cloud plugins under Edit plugin > GitHub publishing, otherwise the API
-# answers 401.
+# answers 401. Publishing uses the plugin-specific release URL from the
+# portal; the generic endpoint rejects a connection that has not published yet.
 #
 # The workflow name and the job permissions follow the published setup guide,
 # since the OIDC token carries this workflow's name. The tag trigger is what

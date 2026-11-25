@@ -3,14 +3,20 @@
 #
 # Identity is a short-lived OIDC token signed by GitHub (audience "orcacloud"),
 # so there is no secret to store, copy or rotate. The repository must be
-# connected to exactly one of your Orca Cloud plugins under
-# Edit plugin > GitHub publishing, otherwise the API answers 401.
+# connected to this plugin under Edit plugin > GitHub publishing, otherwise the
+# API answers 401.
 #
 #   PLUGIN_FILES="orcad_any.py" bash packaging/publish_orcacloud.sh
 #
 # Files must end in a supported target OS/arch suffix before .py/.whl, e.g.
 # orcad_any.py, orcad_win_x86_64.py, orcad_linux_x86_64.py.
 set -euo pipefail
+
+# The plugin-specific endpoint from Edit plugin > GitHub publishing. The generic
+# /plugin-publish/releases endpoint only works after a connected repo has
+# published successfully once; a reconnected plugin like ours must use this URL.
+PLUGIN_ID="34116d80-1599-4b6c-a577-28d205457fcf"
+RELEASE_URL="https://api.orcaslicer.com/api/v1/plugin-publish/plugins/$PLUGIN_ID/releases"
 
 : "${PLUGIN_FILES:?set PLUGIN_FILES to the files to upload}"
 : "${ACTIONS_ID_TOKEN_REQUEST_URL:?this script only runs inside GitHub Actions}"
@@ -103,7 +109,7 @@ trap 'rm -f "$response"' EXIT
 
 status="$(curl -sS -o "$response" -w '%{http_code}' \
   -H "Authorization: Bearer $oidc_token" "${args[@]}" \
-  https://api.orcaslicer.com/api/v1/plugin-publish/releases)"
+  "$RELEASE_URL")"
 body="$(cat "$response")"
 echo "$body"
 # A 401 means Orca Cloud did not accept the identity, so report the identity it
